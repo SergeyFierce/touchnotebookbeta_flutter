@@ -332,6 +332,7 @@ class _ContactCardState extends State<_ContactCard> {
                       .textTheme
                       .titleLarge
                       ?.copyWith(fontWeight: FontWeight.w600),
+                  style: Theme.of(context).textTheme.titleLarge,
                 ),
                 const SizedBox(height: 4),
                 Text(
@@ -371,6 +372,23 @@ class _ContactCardState extends State<_ContactCard> {
                         ),
                     ],
                   ),
+                Wrap(
+                  spacing: 4,
+                  runSpacing: -8,
+                  children: [
+                    for (final tag in widget.contact.tags)
+                      Chip(
+                        label: Text(tag),
+                        backgroundColor: _tagColor(tag),
+                        labelStyle: Theme.of(context)
+                            .textTheme
+                            .bodySmall
+                            ?.copyWith(color: _tagTextColor(tag)),
+                        visualDensity: VisualDensity.compact,
+                        materialTapTargetSize:
+                            MaterialTapTargetSize.shrinkWrap,
+                      ),
+                  ],
                 ),
               ],
             ),
