@@ -311,7 +311,8 @@ class _ContactCardState extends State<_ContactCard> {
       duration: const Duration(milliseconds: 100),
       child: Material(
         borderRadius: border,
-        color: Theme.of(context).colorScheme.surface,
+        color: Theme.of(context).colorScheme.surfaceVariant,
+        elevation: 2,
         child: InkWell(
           borderRadius: border,
           onTap: () {},
@@ -327,13 +328,23 @@ class _ContactCardState extends State<_ContactCard> {
                   widget.contact.name,
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.titleMedium,
+                  style: Theme.of(context).textTheme.titleLarge,
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  widget.contact.phone,
+                  style: Theme.of(context).textTheme.bodyMedium,
                 ),
                 const SizedBox(height: 8),
                 Chip(
                   label: Text(widget.contact.status),
                   backgroundColor: _statusColor(widget.contact.status),
-                  labelStyle: const TextStyle(color: Colors.white),
+                  labelStyle: Theme.of(context)
+                      .textTheme
+                      .bodySmall
+                      ?.copyWith(color: Colors.white),
+                  visualDensity: VisualDensity.compact,
+                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                 ),
                 const SizedBox(height: 8),
                 Wrap(
@@ -344,7 +355,13 @@ class _ContactCardState extends State<_ContactCard> {
                       Chip(
                         label: Text(tag),
                         backgroundColor: _tagColor(tag),
-                        labelStyle: TextStyle(color: _tagTextColor(tag)),
+                        labelStyle: Theme.of(context)
+                            .textTheme
+                            .bodySmall
+                            ?.copyWith(color: _tagTextColor(tag)),
+                        visualDensity: VisualDensity.compact,
+                        materialTapTargetSize:
+                            MaterialTapTargetSize.shrinkWrap,
                       ),
                   ],
                 ),
