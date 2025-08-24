@@ -23,6 +23,7 @@ class ContactListScreen extends StatefulWidget {
 class _ContactListScreenState extends State<ContactListScreen> {
   final TextEditingController _searchController = TextEditingController();
   Timer? _debounce;
+  Timer? _snackTimer;
   String _query = '';
   SortOption _sort = SortOption.dateDesc;
   Set<String> _statusFilters = {};
@@ -38,12 +39,14 @@ class _ContactListScreenState extends State<ContactListScreen> {
   Future<void> _loadContacts() async {
     final contacts =
     await ContactDatabase.instance.contactsByCategory(widget.category);
+    if (!mounted) return;
     setState(() => _all = contacts);
   }
 
   @override
   void dispose() {
     _debounce?.cancel();
+    _snackTimer?.cancel();
     _searchController.dispose();
     super.dispose();
   }
@@ -200,35 +203,35 @@ class _ContactListScreenState extends State<ContactListScreen> {
     const duration = Duration(seconds: 4);
 
     messenger.clearSnackBars();
-    messenger.showSnackBar(
+    _snackTimer?.cancel();
+    final endTime = DateTime.now().add(duration);
+    final controller = messenger.showSnackBar(
       SnackBar(
-        duration: duration,
-        content: _UndoSnackContent(duration: duration),
+        // Контролируем длительность вручную, чтобы таймер не сбрасывался
+        // при переходах и перестройках.
+        duration: const Duration(days: 1),
+        content: _UndoSnackContent(endTime: endTime, duration: duration),
         action: SnackBarAction(
           label: 'Отменить',
           onPressed: () async {
+            _snackTimer?.cancel();
             // Hide snackbar immediately after pressing undo to avoid it
             // lingering on screen while the contact is restored.
             messenger.hideCurrentSnackBar();
             // Пытаемся вернуть с прежним id.
             try {
-              final newRowId = await ContactDatabase.instance.insert(c);
-              final restored = c.id == null ? c.copyWith(id: newRowId) : c;
-              setState(() {
-                _all.add(restored);
-              });
+              await ContactDatabase.instance.insert(c);
             } catch (_) {
               // На случай конфликта id — вставляем без id (сгенерируется новый)
-              final newId =
               await ContactDatabase.instance.insert(c.copyWith(id: null));
-              setState(() {
-                _all.add(c.copyWith(id: newId));
-              });
             }
+            await _loadContacts();
           },
         ),
       ),
     );
+    _snackTimer =
+        Timer(endTime.difference(DateTime.now()), () => controller.close());
   }
 
   List<Contact> get _filtered {
@@ -572,33 +575,60 @@ class _ContactCardState extends State<_ContactCard> {
 
 /// Контент SnackBar с обратным отсчётом и прогресс-баром,
 /// синхронизированным с duration самого SnackBar.
-class _UndoSnackContent extends StatelessWidget {
+class _UndoSnackContent extends StatefulWidget {
+  final DateTime endTime;
   final Duration duration;
-  const _UndoSnackContent({required this.duration});
+  const _UndoSnackContent({required this.endTime, required this.duration});
+
+  @override
+  State<_UndoSnackContent> createState() => _UndoSnackContentState();
+}
+
+class _UndoSnackContentState extends State<_UndoSnackContent> {
+  late Timer _ticker;
+  double _value = 1.0;
+
+  @override
+  void initState() {
+    super.initState();
+    _ticker = Timer.periodic(const Duration(milliseconds: 100), (timer) {
+      final remaining = widget.endTime.difference(DateTime.now());
+      if (!mounted) return;
+      if (remaining <= Duration.zero) {
+        setState(() => _value = 0);
+        _ticker.cancel();
+      } else {
+        setState(() {
+          _value =
+              remaining.inMilliseconds / widget.duration.inMilliseconds;
+        });
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _ticker.cancel();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
-    return TweenAnimationBuilder<double>(
-      tween: Tween(begin: 1.0, end: 0.0),
-      duration: duration,
-      builder: (context, value, _) {
-        final secondsLeft =
-        ((value * duration.inMilliseconds) / 1000).ceil().clamp(0, 999);
-        return Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
+    final secondsLeft =
+        (_value * widget.duration.inSeconds).ceil().clamp(0, 999);
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
           children: [
-            Row(
-              children: [
-                const Expanded(child: Text('Контакт удалён')),
-                Text('$secondsLeft c'),
-              ],
-            ),
-            const SizedBox(height: 4),
-            LinearProgressIndicator(value: value),
+            const Expanded(child: Text('Контакт удалён')),
+            Text('$secondsLeft c'),
           ],
-        );
-      },
+        ),
+        const SizedBox(height: 4),
+        LinearProgressIndicator(value: _value),
+      ],
     );
   }
 }
