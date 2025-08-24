@@ -39,6 +39,7 @@ class _ContactListScreenState extends State<ContactListScreen> {
   Future<void> _loadContacts() async {
     final contacts =
     await ContactDatabase.instance.contactsByCategory(widget.category);
+    if (!mounted) return;
     setState(() => _all = contacts);
   }
 
@@ -203,11 +204,13 @@ class _ContactListScreenState extends State<ContactListScreen> {
 
     messenger.clearSnackBars();
     _snackTimer?.cancel();
+    final endTime = DateTime.now().add(duration);
     final controller = messenger.showSnackBar(
       SnackBar(
         // Контролируем длительность вручную, чтобы таймер не сбрасывался
         // при переходах и перестройках.
         duration: const Duration(days: 1),
+        content: _UndoSnackContent(endTime: endTime, duration: duration),
         content: _UndoSnackContent(duration: duration),
         action: SnackBarAction(
           label: 'Отменить',
@@ -218,23 +221,23 @@ class _ContactListScreenState extends State<ContactListScreen> {
             messenger.hideCurrentSnackBar();
             // Пытаемся вернуть с прежним id.
             try {
-              final newRowId = await ContactDatabase.instance.insert(c);
-              final restored = c.id == null ? c.copyWith(id: newRowId) : c;
-              setState(() {
-                _all.add(restored);
-              });
+              await ContactDatabase.instance.insert(c);
             } catch (_) {
               // На случай конфликта id — вставляем без id (сгенерируется новый)
+              await ContactDatabase.instance.insert(c.copyWith(id: null));
               final newId =
                   await ContactDatabase.instance.insert(c.copyWith(id: null));
               setState(() {
                 _all.add(c.copyWith(id: newId));
               });
             }
+            await _loadContacts();
           },
         ),
       ),
     );
+    _snackTimer =
+        Timer(endTime.difference(DateTime.now()), () => controller.close());
     _snackTimer = Timer(duration, () => controller.close());
   }
 
@@ -580,8 +583,41 @@ class _ContactCardState extends State<_ContactCard> {
 /// Контент SnackBar с обратным отсчётом и прогресс-баром,
 /// синхронизированным с duration самого SnackBar.
 class _UndoSnackContent extends StatefulWidget {
+  final DateTime endTime;
   final Duration duration;
-  const _UndoSnackContent({required this.duration});
+  const _UndoSnackContent({required this.endTime, required this.duration});
+
+  @override
+  State<_UndoSnackContent> createState() => _UndoSnackContentState();
+}
+
+class _UndoSnackContentState extends State<_UndoSnackContent> {
+  late Timer _ticker;
+  double _value = 1.0;
+
+  @override
+  void initState() {
+    super.initState();
+    _ticker = Timer.periodic(const Duration(milliseconds: 100), (timer) {
+      final remaining = widget.endTime.difference(DateTime.now());
+      if (!mounted) return;
+      if (remaining <= Duration.zero) {
+        setState(() => _value = 0);
+        _ticker.cancel();
+      } else {
+        setState(() {
+          _value =
+              remaining.inMilliseconds / widget.duration.inMilliseconds;
+        });
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _ticker.cancel();
+    super.dispose();
+  }
 
   @override
   State<_UndoSnackContent> createState() => _UndoSnackContentState();
