@@ -311,7 +311,8 @@ class _ContactCardState extends State<_ContactCard> {
       duration: const Duration(milliseconds: 100),
       child: Material(
         borderRadius: border,
-        color: Theme.of(context).colorScheme.surface,
+        color: Theme.of(context).colorScheme.surfaceVariant,
+        elevation: 2,
         child: InkWell(
           borderRadius: border,
           onTap: () {},
