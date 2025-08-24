@@ -37,7 +37,7 @@ class _ContactListScreenState extends State<ContactListScreen> {
 
   Future<void> _loadContacts() async {
     final contacts =
-        await ContactDatabase.instance.contactsByCategory(widget.category);
+    await ContactDatabase.instance.contactsByCategory(widget.category);
     setState(() => _all = contacts);
   }
 
@@ -187,6 +187,7 @@ class _ContactListScreenState extends State<ContactListScreen> {
         return Colors.white;
       case 'Напомнить':
         return Colors.purple;
+    // ignore: dead_code
       case 'VIP':
         return Colors.yellow;
       default:
@@ -236,33 +237,34 @@ class _ContactListScreenState extends State<ContactListScreen> {
           Expanded(
             child: contacts.isEmpty
                 ? Center(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Text('Ничего не найдено'),
-                        if (_statusFilters.isNotEmpty || _query.isNotEmpty)
-                          TextButton(
-                            onPressed: () {
-                              setState(() {
-                                _query = '';
-                                _searchController.clear();
-                                _statusFilters.clear();
-                              });
-                            },
-                            child: const Text('Сбросить фильтры'),
-                          ),
-                      ],
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text('Ничего не найдено'),
+                  if (_statusFilters.isNotEmpty || _query.isNotEmpty)
+                    TextButton(
+                      onPressed: () {
+                        setState(() {
+                          _query = '';
+                          _searchController.clear();
+                          _statusFilters.clear();
+                        });
+                      },
+                      child: const Text('Сбросить фильтры'),
                     ),
-                  )
+                ],
+              ),
+            )
                 : ListView.separated(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                    itemBuilder: (context, index) {
-                      final c = contacts[index];
-                      return _ContactCard(contact: c);
-                    },
-                    separatorBuilder: (_, __) => const SizedBox(height: 8),
-                    itemCount: contacts.length,
-                  ),
+              padding:
+              const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              itemBuilder: (context, index) {
+                final c = contacts[index];
+                return _ContactCard(contact: c);
+              },
+              separatorBuilder: (_, __) => const SizedBox(height: 8),
+              itemCount: contacts.length,
+            ),
           ),
         ],
       ),
@@ -324,71 +326,81 @@ class _ContactCardState extends State<_ContactCard> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  widget.contact.name,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context)
-                      .textTheme
-                      .titleLarge
-                      ?.copyWith(fontWeight: FontWeight.w600),
-                  style: Theme.of(context).textTheme.titleLarge,
+                // 1-я строка: Имя + теги справа
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: Text(
+                        widget.contact.name,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context)
+                            .textTheme
+                            .titleLarge
+                            ?.copyWith(fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 200),
+                      child: Wrap(
+                        spacing: 4,
+                        runSpacing: 4,
+                        children: [
+                          for (final tag in widget.contact.tags)
+                            Chip(
+                              label: Text(
+                                tag,
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .bodySmall
+                                    ?.copyWith(
+                                  fontSize: 10,
+                                  color: _tagTextColor(tag),
+                                ),
+                              ),
+                              backgroundColor: _tagColor(tag),
+                              visualDensity: const VisualDensity(
+                                  horizontal: -4, vertical: -4),
+                              materialTapTargetSize:
+                              MaterialTapTargetSize.shrinkWrap,
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 6, vertical: 0),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(30),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 4),
+                // Телефон
                 Text(
                   widget.contact.phone,
                   style: Theme.of(context).textTheme.bodyMedium,
                 ),
                 const SizedBox(height: 8),
+                // Статус под телефоном (компактный чип)
                 Chip(
-                  label: Text(widget.contact.status),
-                  backgroundColor: _statusColor(widget.contact.status),
-                  labelStyle: Theme.of(context)
-                      .textTheme
-                      .bodySmall
-                      ?.copyWith(color: Colors.white),
-                  visualDensity: VisualDensity.compact,
-                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                ),
-                const SizedBox(height: 8),
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: Wrap(
-                    alignment: WrapAlignment.end,
-                    spacing: 4,
-                    runSpacing: -8,
-                    children: [
-                      for (final tag in widget.contact.tags)
-                        Chip(
-                          label: Text(tag),
-                          backgroundColor: _tagColor(tag),
-                          labelStyle: Theme.of(context)
-                              .textTheme
-                              .bodySmall
-                              ?.copyWith(color: _tagTextColor(tag)),
-                          visualDensity: VisualDensity.compact,
-                          materialTapTargetSize:
-                              MaterialTapTargetSize.shrinkWrap,
-                        ),
-                    ],
+                  label: Text(
+                    widget.contact.status,
+                    style: Theme.of(context)
+                        .textTheme
+                        .bodySmall
+                        ?.copyWith(fontSize: 10, color: Colors.white),
                   ),
-                Wrap(
-                  spacing: 4,
-                  runSpacing: -8,
-                  children: [
-                    for (final tag in widget.contact.tags)
-                      Chip(
-                        label: Text(tag),
-                        backgroundColor: _tagColor(tag),
-                        labelStyle: Theme.of(context)
-                            .textTheme
-                            .bodySmall
-                            ?.copyWith(color: _tagTextColor(tag)),
-                        visualDensity: VisualDensity.compact,
-                        materialTapTargetSize:
-                            MaterialTapTargetSize.shrinkWrap,
-                      ),
-                  ],
+                  backgroundColor: _statusColor(widget.contact.status),
+                  visualDensity:
+                  const VisualDensity(horizontal: -4, vertical: -4),
+                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  padding:
+                  const EdgeInsets.symmetric(horizontal: 6, vertical: 0),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(30),
+                  ),
                 ),
               ],
             ),
