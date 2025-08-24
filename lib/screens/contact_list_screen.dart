@@ -328,6 +328,10 @@ class _ContactCardState extends State<_ContactCard> {
                   widget.contact.name,
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context)
+                      .textTheme
+                      .titleLarge
+                      ?.copyWith(fontWeight: FontWeight.w600),
                   style: Theme.of(context).textTheme.titleLarge,
                 ),
                 const SizedBox(height: 4),
@@ -347,6 +351,27 @@ class _ContactCardState extends State<_ContactCard> {
                   materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                 ),
                 const SizedBox(height: 8),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: Wrap(
+                    alignment: WrapAlignment.end,
+                    spacing: 4,
+                    runSpacing: -8,
+                    children: [
+                      for (final tag in widget.contact.tags)
+                        Chip(
+                          label: Text(tag),
+                          backgroundColor: _tagColor(tag),
+                          labelStyle: Theme.of(context)
+                              .textTheme
+                              .bodySmall
+                              ?.copyWith(color: _tagTextColor(tag)),
+                          visualDensity: VisualDensity.compact,
+                          materialTapTargetSize:
+                              MaterialTapTargetSize.shrinkWrap,
+                        ),
+                    ],
+                  ),
                 Wrap(
                   spacing: 4,
                   runSpacing: -8,
