@@ -207,6 +207,9 @@ class _ContactListScreenState extends State<ContactListScreen> {
         action: SnackBarAction(
           label: 'Отменить',
           onPressed: () async {
+            // Hide snackbar immediately after pressing undo to avoid it
+            // lingering on screen while the contact is restored.
+            messenger.hideCurrentSnackBar();
             // Пытаемся вернуть с прежним id.
             try {
               final newRowId = await ContactDatabase.instance.insert(c);
