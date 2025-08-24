@@ -3,12 +3,18 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../models/contact.dart';
+import '../services/contact_database.dart';
 import 'add_contact_screen.dart';
 
 class ContactListScreen extends StatefulWidget {
-  final String category;
+  final String category; // singular value for DB
+  final String title; // display title
 
-  const ContactListScreen({super.key, required this.category});
+  const ContactListScreen({
+    super.key,
+    required this.category,
+    required this.title,
+  });
 
   @override
   State<ContactListScreen> createState() => _ContactListScreenState();
@@ -21,26 +27,19 @@ class _ContactListScreenState extends State<ContactListScreen> {
   SortOption _sort = SortOption.nameAsc;
   Set<String> _statusFilters = {};
 
-  final List<Contact> _all = [
-    Contact(
-      name: 'Иван Петров',
-      status: 'Активный',
-      tags: ['Новый'],
-      createdAt: DateTime.now().subtract(const Duration(days: 1)),
-    ),
-    Contact(
-      name: 'Сергей Иванов',
-      status: 'Пассивный',
-      tags: ['VIP'],
-      createdAt: DateTime.now().subtract(const Duration(days: 3)),
-    ),
-    Contact(
-      name: 'Мария Сидорова',
-      status: 'Холодный',
-      tags: ['Напомнить'],
-      createdAt: DateTime.now().subtract(const Duration(days: 2)),
-    ),
-  ];
+  List<Contact> _all = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadContacts();
+  }
+
+  Future<void> _loadContacts() async {
+    final contacts =
+        await ContactDatabase.instance.contactsByCategory(widget.category);
+    setState(() => _all = contacts);
+  }
 
   @override
   void dispose() {
@@ -214,7 +213,7 @@ class _ContactListScreenState extends State<ContactListScreen> {
     return Scaffold(
       appBar: AppBar(
         leading: const BackButton(),
-        title: Text(widget.category),
+        title: Text(widget.title),
         actions: [
           IconButton(icon: const Icon(Icons.sort), onPressed: _openSort),
           IconButton(icon: const Icon(Icons.filter_alt), onPressed: _openFilters),
@@ -268,13 +267,21 @@ class _ContactListScreenState extends State<ContactListScreen> {
         ],
       ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () {
-          Navigator.push(
+        onPressed: () async {
+          final saved = await Navigator.push(
             context,
             MaterialPageRoute(
               builder: (context) => AddContactScreen(category: widget.category),
             ),
           );
+          if (saved == true) {
+            await _loadContacts();
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Контакт сохранён')),
+              );
+            }
+          }
         },
         icon: const Icon(Icons.add),
         label: const Text('Добавить'),
