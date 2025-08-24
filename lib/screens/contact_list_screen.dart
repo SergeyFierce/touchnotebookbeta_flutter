@@ -24,7 +24,7 @@ class _ContactListScreenState extends State<ContactListScreen> {
   final TextEditingController _searchController = TextEditingController();
   Timer? _debounce;
   String _query = '';
-  SortOption _sort = SortOption.nameAsc;
+  SortOption _sort = SortOption.dateDesc;
   Set<String> _statusFilters = {};
 
   List<Contact> _all = [];
@@ -138,6 +138,56 @@ class _ContactListScreenState extends State<ContactListScreen> {
     );
     if (result != null) {
       setState(() => _statusFilters = result);
+    }
+  }
+
+  Future<void> _showContactMenu(Contact c) async {
+    final action = await showModalBottomSheet<String>(
+      context: context,
+      builder: (context) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: const Icon(Icons.delete),
+                title: const Text('Удалить'),
+                onTap: () => Navigator.pop(context, 'delete'),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+    if (action == 'delete') {
+      final confirm = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Удалить контакт?'),
+          content: const Text('Это действие нельзя отменить.'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Отмена'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Удалить'),
+            ),
+          ],
+        ),
+      );
+      if (confirm == true && c.id != null) {
+        await ContactDatabase.instance.delete(c.id!);
+        setState(() {
+          _all.removeWhere((e) => e.id == c.id);
+        });
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Контакт удалён')),
+          );
+        }
+      }
     }
   }
 
@@ -256,15 +306,18 @@ class _ContactListScreenState extends State<ContactListScreen> {
               ),
             )
                 : ListView.separated(
-              padding:
-              const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              itemBuilder: (context, index) {
-                final c = contacts[index];
-                return _ContactCard(contact: c);
-              },
-              separatorBuilder: (_, __) => const SizedBox(height: 8),
-              itemCount: contacts.length,
-            ),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    itemBuilder: (context, index) {
+                      final c = contacts[index];
+                      return _ContactCard(
+                        contact: c,
+                        onLongPress: () => _showContactMenu(c),
+                      );
+                    },
+                    separatorBuilder: (_, __) => const SizedBox(height: 8),
+                    itemCount: contacts.length,
+                  ),
           ),
         ],
       ),
@@ -294,7 +347,8 @@ class _ContactListScreenState extends State<ContactListScreen> {
 
 class _ContactCard extends StatefulWidget {
   final Contact contact;
-  const _ContactCard({required this.contact});
+  final VoidCallback? onLongPress;
+  const _ContactCard({required this.contact, this.onLongPress});
 
   @override
   State<_ContactCard> createState() => _ContactCardState();
@@ -318,6 +372,10 @@ class _ContactCardState extends State<_ContactCard> {
         child: InkWell(
           borderRadius: border,
           onTap: () {},
+          onLongPress: () {
+            _set(false);
+            widget.onLongPress?.call();
+          },
           onTapDown: (_) => _set(true),
           onTapCancel: () => _set(false),
           onTapUp: (_) => _set(false),

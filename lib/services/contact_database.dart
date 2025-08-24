@@ -46,9 +46,18 @@ class ContactDatabase {
 
   Future<List<Contact>> contactsByCategory(String category) async {
     final db = await database;
-    final maps =
-        await db.query('contacts', where: 'category = ?', whereArgs: [category]);
+    final maps = await db.query(
+      'contacts',
+      where: 'category = ?',
+      whereArgs: [category],
+      orderBy: 'createdAt DESC',
+    );
     return maps.map((e) => Contact.fromMap(e)).toList();
+  }
+
+  Future<int> delete(int id) async {
+    final db = await database;
+    return await db.delete('contacts', where: 'id = ?', whereArgs: [id]);
   }
 
   Future<int> countByCategory(String category) async {
