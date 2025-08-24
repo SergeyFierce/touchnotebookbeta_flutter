@@ -24,7 +24,7 @@ class _ContactListScreenState extends State<ContactListScreen> {
   final TextEditingController _searchController = TextEditingController();
   Timer? _debounce;
   String _query = '';
-  SortOption _sort = SortOption.nameAsc;
+  SortOption _sort = SortOption.dateDesc;
   Set<String> _statusFilters = {};
 
   List<Contact> _all = [];
@@ -260,7 +260,28 @@ class _ContactListScreenState extends State<ContactListScreen> {
               const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               itemBuilder: (context, index) {
                 final c = contacts[index];
-                return _ContactCard(contact: c);
+                return Dismissible(
+                  key: ValueKey(c.id),
+                  direction: DismissDirection.endToStart,
+                  background: Container(
+                    alignment: Alignment.centerRight,
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    color: Colors.red,
+                    child: const Icon(Icons.delete, color: Colors.white),
+                  ),
+                  onDismissed: (_) async {
+                    if (c.id != null) {
+                      await ContactDatabase.instance.delete(c.id!);
+                      setState(() {
+                        _all.removeWhere((e) => e.id == c.id);
+                      });
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Контакт удалён')),
+                      );
+                    }
+                  },
+                  child: _ContactCard(contact: c),
+                );
               },
               separatorBuilder: (_, __) => const SizedBox(height: 8),
               itemCount: contacts.length,
