@@ -177,18 +177,55 @@ class _ContactListScreenState extends State<ContactListScreen> {
           ],
         ),
       );
-      if (confirm == true && c.id != null) {
-        await ContactDatabase.instance.delete(c.id!);
-        setState(() {
-          _all.removeWhere((e) => e.id == c.id);
-        });
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Контакт удалён')),
-          );
-        }
+      if (confirm == true) {
+        await _deleteWithUndo(c);
       }
     }
+  }
+
+  /// Удаляет контакт и показывает SnackBar с Undo + индикатором и обратным отсчётом.
+  Future<void> _deleteWithUndo(Contact c) async {
+    // 1) Удаляем из БД (если есть id)
+    if (c.id != null) {
+      await ContactDatabase.instance.delete(c.id!);
+    }
+    // 2) Удаляем из списка и перерисовываем
+    setState(() {
+      _all.removeWhere((e) => e.id == c.id);
+    });
+
+    // 3) Показываем snackbar с Undo + таймер
+    if (!mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    const duration = Duration(seconds: 4);
+
+    messenger.clearSnackBars();
+    messenger.showSnackBar(
+      SnackBar(
+        duration: duration,
+        content: _UndoSnackContent(duration: duration),
+        action: SnackBarAction(
+          label: 'Отменить',
+          onPressed: () async {
+            // Пытаемся вернуть с прежним id.
+            try {
+              final newRowId = await ContactDatabase.instance.insert(c);
+              final restored = c.id == null ? c.copyWith(id: newRowId) : c;
+              setState(() {
+                _all.add(restored);
+              });
+            } catch (_) {
+              // На случай конфликта id — вставляем без id (сгенерируется новый)
+              final newId =
+              await ContactDatabase.instance.insert(c.copyWith(id: null));
+              setState(() {
+                _all.add(c.copyWith(id: newId));
+              });
+            }
+          },
+        ),
+      ),
+    );
   }
 
   List<Contact> get _filtered {
@@ -237,7 +274,6 @@ class _ContactListScreenState extends State<ContactListScreen> {
         return Colors.white;
       case 'Напомнить':
         return Colors.purple;
-    // ignore: dead_code
       case 'VIP':
         return Colors.yellow;
       default:
@@ -306,24 +342,13 @@ class _ContactListScreenState extends State<ContactListScreen> {
               ),
             )
                 : ListView.separated(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                    itemBuilder: (context, index) {
-                      final c = contacts[index];
-                      return _ContactCard(
-                        contact: c,
-                        onLongPress: () => _showContactMenu(c),
-                      );
-                    },
-                    separatorBuilder: (_, __) => const SizedBox(height: 8),
-                    itemCount: contacts.length,
-                  ),
               padding:
               const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               itemBuilder: (context, index) {
                 final c = contacts[index];
                 return Dismissible(
-                  key: ValueKey(c.id),
+                  key: ValueKey(c.id ??
+                      '${c.name}_${c.createdAt.millisecondsSinceEpoch}'),
                   direction: DismissDirection.endToStart,
                   background: Container(
                     alignment: Alignment.centerRight,
@@ -331,18 +356,17 @@ class _ContactListScreenState extends State<ContactListScreen> {
                     color: Colors.red,
                     child: const Icon(Icons.delete, color: Colors.white),
                   ),
-                  onDismissed: (_) async {
-                    if (c.id != null) {
-                      await ContactDatabase.instance.delete(c.id!);
-                      setState(() {
-                        _all.removeWhere((e) => e.id == c.id);
-                      });
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Контакт удалён')),
-                      );
-                    }
+                  confirmDismiss: (_) async {
+                    // Можно запросить подтверждение, если хочешь
+                    return true;
                   },
-                  child: _ContactCard(contact: c),
+                  onDismissed: (_) async {
+                    await _deleteWithUndo(c);
+                  },
+                  child: _ContactCard(
+                    contact: c,
+                    onLongPress: () => _showContactMenu(c),
+                  ),
                 );
               },
               separatorBuilder: (_, __) => const SizedBox(height: 8),
@@ -356,7 +380,8 @@ class _ContactListScreenState extends State<ContactListScreen> {
           final saved = await Navigator.push(
             context,
             MaterialPageRoute(
-              builder: (context) => AddContactScreen(category: widget.category),
+              builder: (context) =>
+                  AddContactScreen(category: widget.category),
             ),
           );
           if (saved == true) {
@@ -414,7 +439,7 @@ class _ContactCardState extends State<_ContactCard> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // 1-я строка: Имя + теги справа
+                // Первая строка: Имя + теги справа
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -539,6 +564,39 @@ class _ContactCardState extends State<_ContactCard> {
       default:
         return Colors.black;
     }
+  }
+}
+
+/// Контент SnackBar с обратным отсчётом и прогресс-баром,
+/// синхронизированным с duration самого SnackBar.
+class _UndoSnackContent extends StatelessWidget {
+  final Duration duration;
+  const _UndoSnackContent({required this.duration});
+
+  @override
+  Widget build(BuildContext context) {
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 1.0, end: 0.0),
+      duration: duration,
+      builder: (context, value, _) {
+        final secondsLeft =
+        ((value * duration.inMilliseconds) / 1000).ceil().clamp(0, 999);
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Expanded(child: Text('Контакт удалён')),
+                Text('$secondsLeft c'),
+              ],
+            ),
+            const SizedBox(height: 4),
+            LinearProgressIndicator(value: value),
+          ],
+        );
+      },
+    );
   }
 }
 
