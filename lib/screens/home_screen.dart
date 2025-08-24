@@ -128,6 +128,7 @@ class HomeScreen extends StatelessWidget {
                 ),
               );
             },
+            onTap: () {},
           );
         },
         separatorBuilder: (_, __) => const SizedBox(height: 12),
