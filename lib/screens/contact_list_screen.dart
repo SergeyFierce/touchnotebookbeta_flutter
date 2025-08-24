@@ -211,7 +211,6 @@ class _ContactListScreenState extends State<ContactListScreen> {
         // при переходах и перестройках.
         duration: const Duration(days: 1),
         content: _UndoSnackContent(endTime: endTime, duration: duration),
-        content: _UndoSnackContent(duration: duration),
         action: SnackBarAction(
           label: 'Отменить',
           onPressed: () async {
@@ -591,73 +590,68 @@ class _UndoSnackContent extends StatefulWidget {
   State<_UndoSnackContent> createState() => _UndoSnackContentState();
 }
 
-class _UndoSnackContentState extends State<_UndoSnackContent> {
-  late Timer _ticker;
-  double _value = 1.0;
+
+class _UndoSnackContentState extends State<_UndoSnackContent>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _ctrl;
+
+  double _fractionRemaining(DateTime now) {
+    final total = widget.duration.inMilliseconds;
+    final left = widget.endTime.difference(now).inMilliseconds;
+    if (total <= 0) return 0;
+    return left <= 0 ? 0 : (left / total).clamp(0.0, 1.0);
+  }
+
+  void _syncAndRun() {
+    final now = DateTime.now();
+    final frac = _fractionRemaining(now);               // 0..1
+    final msLeft = (widget.duration.inMilliseconds * frac).round();
+    // Сначала ставим текущее значение БЕЗ анимации — чтобы не было «вспышки»
+    _ctrl.stop();
+    _ctrl.value = frac;
+    if (msLeft > 0) {
+      _ctrl.animateTo(
+        0.0,
+        duration: Duration(milliseconds: msLeft),
+        curve: Curves.linear,
+      );
+    }
+  }
 
   @override
   void initState() {
     super.initState();
-    _ticker = Timer.periodic(const Duration(milliseconds: 100), (timer) {
-      final remaining = widget.endTime.difference(DateTime.now());
-      if (!mounted) return;
-      if (remaining <= Duration.zero) {
-        setState(() => _value = 0);
-        _ticker.cancel();
-      } else {
-        setState(() {
-          _value =
-              remaining.inMilliseconds / widget.duration.inMilliseconds;
-        });
-      }
+    _ctrl = AnimationController(
+      vsync: this,
+      value: 1.0,           // временно, сейчас сразу синхронизируем
+      lowerBound: 0.0,
+      upperBound: 1.0,
+    )..addListener(() {
+      if (mounted) setState(() {});
     });
+    _syncAndRun();
+  }
+
+  @override
+  void didUpdateWidget(covariant _UndoSnackContent oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Если endTime/duration вдруг изменились — пересинхронизируемся
+    if (oldWidget.endTime != widget.endTime ||
+        oldWidget.duration != widget.duration) {
+      _syncAndRun();
+    }
   }
 
   @override
   void dispose() {
-    _ticker.cancel();
-    super.dispose();
-  }
-
-  @override
-  State<_UndoSnackContent> createState() => _UndoSnackContentState();
-}
-
-class _UndoSnackContentState extends State<_UndoSnackContent> {
-  late final DateTime _start;
-  late Timer _ticker;
-  double _value = 1.0;
-
-  @override
-  void initState() {
-    super.initState();
-    _start = DateTime.now();
-    _ticker = Timer.periodic(const Duration(milliseconds: 100), (timer) {
-      final elapsed = DateTime.now().difference(_start);
-      final remaining = widget.duration - elapsed;
-      if (!mounted) return;
-      if (remaining <= Duration.zero) {
-        setState(() => _value = 0);
-        _ticker.cancel();
-      } else {
-        setState(() {
-          _value =
-              remaining.inMilliseconds / widget.duration.inMilliseconds;
-        });
-      }
-    });
-  }
-
-  @override
-  void dispose() {
-    _ticker.cancel();
+    _ctrl.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final secondsLeft =
-        (_value * widget.duration.inSeconds).ceil().clamp(0, 999);
+    final value = _ctrl.value; // 1.0 -> 0.0
+    final secondsLeft = (value * widget.duration.inSeconds).ceil().clamp(0, 999);
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -669,10 +663,12 @@ class _UndoSnackContentState extends State<_UndoSnackContent> {
           ],
         ),
         const SizedBox(height: 4),
-        LinearProgressIndicator(value: _value),
+        LinearProgressIndicator(value: value),
       ],
     );
   }
 }
+
+
 
 enum SortOption { nameAsc, nameDesc, dateAsc, dateDesc }
