@@ -211,6 +211,7 @@ class _ContactListScreenState extends State<ContactListScreen> {
         // при переходах и перестройках.
         duration: const Duration(days: 1),
         content: _UndoSnackContent(endTime: endTime, duration: duration),
+        content: _UndoSnackContent(duration: duration),
         action: SnackBarAction(
           label: 'Отменить',
           onPressed: () async {
@@ -224,6 +225,11 @@ class _ContactListScreenState extends State<ContactListScreen> {
             } catch (_) {
               // На случай конфликта id — вставляем без id (сгенерируется новый)
               await ContactDatabase.instance.insert(c.copyWith(id: null));
+              final newId =
+                  await ContactDatabase.instance.insert(c.copyWith(id: null));
+              setState(() {
+                _all.add(c.copyWith(id: newId));
+              });
             }
             await _loadContacts();
           },
@@ -232,6 +238,7 @@ class _ContactListScreenState extends State<ContactListScreen> {
     );
     _snackTimer =
         Timer(endTime.difference(DateTime.now()), () => controller.close());
+    _snackTimer = Timer(duration, () => controller.close());
   }
 
   List<Contact> get _filtered {
@@ -593,6 +600,41 @@ class _UndoSnackContentState extends State<_UndoSnackContent> {
     super.initState();
     _ticker = Timer.periodic(const Duration(milliseconds: 100), (timer) {
       final remaining = widget.endTime.difference(DateTime.now());
+      if (!mounted) return;
+      if (remaining <= Duration.zero) {
+        setState(() => _value = 0);
+        _ticker.cancel();
+      } else {
+        setState(() {
+          _value =
+              remaining.inMilliseconds / widget.duration.inMilliseconds;
+        });
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _ticker.cancel();
+    super.dispose();
+  }
+
+  @override
+  State<_UndoSnackContent> createState() => _UndoSnackContentState();
+}
+
+class _UndoSnackContentState extends State<_UndoSnackContent> {
+  late final DateTime _start;
+  late Timer _ticker;
+  double _value = 1.0;
+
+  @override
+  void initState() {
+    super.initState();
+    _start = DateTime.now();
+    _ticker = Timer.periodic(const Duration(milliseconds: 100), (timer) {
+      final elapsed = DateTime.now().difference(_start);
+      final remaining = widget.duration - elapsed;
       if (!mounted) return;
       if (remaining <= Duration.zero) {
         setState(() => _value = 0);
