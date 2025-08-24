@@ -216,8 +216,9 @@ class _CategoryCardState extends State<_CategoryCard> {
       scale: _pressed ? 0.98 : 1.0,
       duration: const Duration(milliseconds: 100),
       child: Material(
-        color: Theme.of(context).colorScheme.surface,
+        color: Theme.of(context).colorScheme.surfaceVariant,
         borderRadius: borderRadius,
+        elevation: 2,
         child: InkWell(
           borderRadius: borderRadius,
           onTap: widget.onTap,
