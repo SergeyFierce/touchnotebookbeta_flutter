@@ -78,21 +78,22 @@ class _AddContactScreenState extends State<AddContactScreen> {
   Future<void> _pickBirthOrAge() async {
     final choice = await showModalBottomSheet<String>(
       context: context,
-      builder: (context) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              title: const Text('Выбрать дату рождения'),
-              onTap: () => Navigator.pop(context, 'date'),
+      builder: (context) =>
+          SafeArea(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                ListTile(
+                  title: const Text('Выбрать дату рождения'),
+                  onTap: () => Navigator.pop(context, 'date'),
+                ),
+                ListTile(
+                  title: const Text('Указать возраст'),
+                  onTap: () => Navigator.pop(context, 'age'),
+                ),
+              ],
             ),
-            ListTile(
-              title: const Text('Указать возраст'),
-              onTap: () => Navigator.pop(context, 'age'),
-            ),
-          ],
-        ),
-      ),
+          ),
     );
     if (choice == 'date') {
       final now = DateTime.now();
@@ -107,29 +108,31 @@ class _AddContactScreenState extends State<AddContactScreen> {
         _ageManual = null;
         final age = _calcAge(picked);
         _birthController.text =
-            '${DateFormat('dd.MM.yyyy').format(picked)} ($age лет)';
+        '${DateFormat('dd.MM.yyyy').format(picked)} ($age лет)';
       }
     } else if (choice == 'age') {
       final ctrl = TextEditingController();
       final age = await showDialog<int>(
         context: context,
-        builder: (context) => AlertDialog(
-          title: const Text('Возраст'),
-          content: TextField(
-            controller: ctrl,
-            keyboardType: TextInputType.number,
-            decoration: const InputDecoration(hintText: 'Количество лет'),
-          ),
-          actions: [
-            TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('Отмена')),
-            TextButton(
-              onPressed: () => Navigator.pop(context, int.tryParse(ctrl.text)),
-              child: const Text('OK'),
+        builder: (context) =>
+            AlertDialog(
+              title: const Text('Возраст'),
+              content: TextField(
+                controller: ctrl,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(hintText: 'Количество лет'),
+              ),
+              actions: [
+                TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('Отмена')),
+                TextButton(
+                  onPressed: () =>
+                      Navigator.pop(context, int.tryParse(ctrl.text)),
+                  child: const Text('OK'),
+                ),
+              ],
             ),
-          ],
-        ),
       );
       if (age != null) {
         _ageManual = age;
@@ -143,47 +146,49 @@ class _AddContactScreenState extends State<AddContactScreen> {
   Future<void> _pickSocial() async {
     final result = await showModalBottomSheet<String>(
       context: context,
-      builder: (context) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              title: const Text('Telegram'),
-              onTap: () => Navigator.pop(context, 'Telegram'),
+      builder: (context) =>
+          SafeArea(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                ListTile(
+                  title: const Text('Telegram'),
+                  onTap: () => Navigator.pop(context, 'Telegram'),
+                ),
+                ListTile(
+                  title: const Text('VK'),
+                  onTap: () => Navigator.pop(context, 'VK'),
+                ),
+                ListTile(
+                  title: const Text('Instagram'),
+                  onTap: () => Navigator.pop(context, 'Instagram'),
+                ),
+                ListTile(
+                  title: const Text('Другая'),
+                  onTap: () => Navigator.pop(context, 'Other'),
+                ),
+              ],
             ),
-            ListTile(
-              title: const Text('VK'),
-              onTap: () => Navigator.pop(context, 'VK'),
-            ),
-            ListTile(
-              title: const Text('Instagram'),
-              onTap: () => Navigator.pop(context, 'Instagram'),
-            ),
-            ListTile(
-              title: const Text('Другая'),
-              onTap: () => Navigator.pop(context, 'Other'),
-            ),
-          ],
-        ),
-      ),
+          ),
     );
     if (result != null) {
       if (result == 'Other') {
         final ctrl = TextEditingController();
         final other = await showDialog<String>(
           context: context,
-          builder: (context) => AlertDialog(
-            title: const Text('Другая соцсеть'),
-            content: TextField(controller: ctrl),
-            actions: [
-              TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text('Отмена')),
-              TextButton(
-                  onPressed: () => Navigator.pop(context, ctrl.text),
-                  child: const Text('OK')),
-            ],
-          ),
+          builder: (context) =>
+              AlertDialog(
+                title: const Text('Другая соцсеть'),
+                content: TextField(controller: ctrl),
+                actions: [
+                  TextButton(
+                      onPressed: () => Navigator.pop(context),
+                      child: const Text('Отмена')),
+                  TextButton(
+                      onPressed: () => Navigator.pop(context, ctrl.text),
+                      child: const Text('OK')),
+                ],
+              ),
         );
         if (other != null) {
           _socialType = other;
@@ -199,25 +204,26 @@ class _AddContactScreenState extends State<AddContactScreen> {
   Future<void> _pickCategory() async {
     final result = await showModalBottomSheet<String>(
       context: context,
-      builder: (context) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              title: const Text('Партнёр'),
-              onTap: () => Navigator.pop(context, 'Партнёр'),
+      builder: (context) =>
+          SafeArea(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                ListTile(
+                  title: const Text('Партнёр'),
+                  onTap: () => Navigator.pop(context, 'Партнёр'),
+                ),
+                ListTile(
+                  title: const Text('Клиент'),
+                  onTap: () => Navigator.pop(context, 'Клиент'),
+                ),
+                ListTile(
+                  title: const Text('Потенциальный'),
+                  onTap: () => Navigator.pop(context, 'Потенциальный'),
+                ),
+              ],
             ),
-            ListTile(
-              title: const Text('Клиент'),
-              onTap: () => Navigator.pop(context, 'Клиент'),
-            ),
-            ListTile(
-              title: const Text('Потенциальный'),
-              onTap: () => Navigator.pop(context, 'Потенциальный'),
-            ),
-          ],
-        ),
-      ),
+          ),
     );
     if (result != null) {
       setState(() {
@@ -239,18 +245,19 @@ class _AddContactScreenState extends State<AddContactScreen> {
     final options = map[_category]!;
     final result = await showModalBottomSheet<String>(
       context: context,
-      builder: (context) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            for (final s in options)
-              ListTile(
-                title: Text(s),
-                onTap: () => Navigator.pop(context, s),
-              ),
-          ],
-        ),
-      ),
+      builder: (context) =>
+          SafeArea(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                for (final s in options)
+                  ListTile(
+                    title: Text(s),
+                    onTap: () => Navigator.pop(context, s),
+                  ),
+              ],
+            ),
+          ),
     );
     if (result != null) {
       setState(() {
@@ -311,21 +318,29 @@ class _AddContactScreenState extends State<AddContactScreen> {
       name: _nameController.text.trim(),
       birthDate: _birthDate,
       ageManual: _ageManual,
-      profession: _professionController.text.trim().isEmpty
+      profession: _professionController.text
+          .trim()
+          .isEmpty
           ? null
           : _professionController.text.trim(),
-      city: _cityController.text.trim().isEmpty
+      city: _cityController.text
+          .trim()
+          .isEmpty
           ? null
           : _cityController.text.trim(),
       phone: _phoneController.text.trim(),
-      email: _emailController.text.trim().isEmpty
+      email: _emailController.text
+          .trim()
+          .isEmpty
           ? null
           : _emailController.text.trim(),
       social: _socialType,
       category: _category!,
       status: _status!,
       tags: _tags.toList(),
-      comment: _commentController.text.trim().isEmpty
+      comment: _commentController.text
+          .trim()
+          .isEmpty
           ? null
           : _commentController.text.trim(),
       createdAt: _addedDate,
@@ -358,14 +373,16 @@ class _AddContactScreenState extends State<AddContactScreen> {
               controller: _nameController,
               decoration: const InputDecoration(labelText: 'ФИО*'),
               validator: (v) =>
-                  v == null || v.trim().isEmpty ? 'Введите ФИО' : null,
+              v == null || v
+                  .trim()
+                  .isEmpty ? 'Введите ФИО' : null,
               maxLines: 2,
             ),
             const SizedBox(height: 12),
             TextFormField(
               controller: _birthController,
               decoration:
-                  const InputDecoration(labelText: 'Дата рождения / Возраст'),
+              const InputDecoration(labelText: 'Дата рождения / Возраст'),
               readOnly: true,
               onTap: _pickBirthOrAge,
             ),
@@ -378,7 +395,7 @@ class _AddContactScreenState extends State<AddContactScreen> {
             TextFormField(
               controller: _cityController,
               decoration:
-                  const InputDecoration(labelText: 'Город проживания'),
+              const InputDecoration(labelText: 'Город проживания'),
             ),
             const SizedBox(height: 12),
             TextFormField(
@@ -387,9 +404,11 @@ class _AddContactScreenState extends State<AddContactScreen> {
               keyboardType: TextInputType.phone,
               inputFormatters: [_phoneMask],
               validator: (v) =>
-                  _phoneMask.getUnmaskedText().length == 10
-                      ? null
-                      : 'Введите телефон',
+              _phoneMask
+                  .getUnmaskedText()
+                  .length == 10
+                  ? null
+                  : 'Введите телефон',
             ),
             const SizedBox(height: 12),
             TextFormField(
@@ -420,7 +439,7 @@ class _AddContactScreenState extends State<AddContactScreen> {
               readOnly: true,
               onTap: _pickCategory,
               validator: (v) =>
-                  v == null || v.isEmpty ? 'Выберите категорию' : null,
+              v == null || v.isEmpty ? 'Выберите категорию' : null,
             ),
             const SizedBox(height: 12),
             TextFormField(
@@ -431,13 +450,13 @@ class _AddContactScreenState extends State<AddContactScreen> {
                     ? 'Сначала выберите категорию'
                     : 'Статусы зависят от категории',
                 hintText:
-                    _category == null ? 'Недоступно' : 'Выберите статус',
+                _category == null ? 'Недоступно' : 'Выберите статус',
               ),
               readOnly: true,
               enabled: _category != null,
               onTap: _category != null ? _pickStatus : null,
               validator: (v) =>
-                  v == null || v.isEmpty ? 'Выберите статус' : null,
+              v == null || v.isEmpty ? 'Выберите статус' : null,
             ),
             const SizedBox(height: 12),
             Wrap(
@@ -458,7 +477,7 @@ class _AddContactScreenState extends State<AddContactScreen> {
             TextFormField(
               controller: _addedController,
               decoration:
-                  const InputDecoration(labelText: 'Дата добавления'),
+              const InputDecoration(labelText: 'Дата добавления'),
               readOnly: true,
               onTap: _pickAddedDate,
             ),
@@ -472,3 +491,4 @@ class _AddContactScreenState extends State<AddContactScreen> {
       ),
     );
   }
+}
