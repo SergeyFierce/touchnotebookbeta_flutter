@@ -3,6 +3,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import 'add_contact_screen.dart';
 import 'settings_screen.dart';
+import 'contact_list_screen.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -119,6 +120,14 @@ class HomeScreen extends StatelessWidget {
           return _CategoryCard(
             category: cat,
             subtitle: '${cat.count} ${_plural(cat.count, cat.forms)}',
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => ContactListScreen(category: cat.title),
+                ),
+              );
+            },
             onTap: () {},
           );
         },
