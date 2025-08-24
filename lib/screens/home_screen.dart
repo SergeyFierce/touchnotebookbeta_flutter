@@ -10,8 +10,8 @@ class HomeScreen extends StatelessWidget {
 
   Future<void> _openSupport(BuildContext context) async {
     const group = 'touchnotebook';
-    final tgUri = Uri.parse('tg://resolve?domain=' + group);
-    final webUri = Uri.parse('https://t.me/' + group);
+    final tgUri = Uri.parse('tg://resolve?domain=$group');
+    final webUri = Uri.parse('https://t.me/$group');
     if (await canLaunchUrl(tgUri)) {
       await launchUrl(tgUri, mode: LaunchMode.externalApplication);
     } else {
@@ -64,17 +64,17 @@ class HomeScreen extends StatelessWidget {
           padding: EdgeInsets.zero,
           children: [
             DrawerHeader(
-              decoration:
-                  BoxDecoration(color: Theme.of(context).colorScheme.primary),
+              decoration: BoxDecoration(color: Theme.of(context).colorScheme.primary),
               child: Row(
                 children: [
                   CircleAvatar(
                     radius: 36,
-                    backgroundColor:
-                        Theme.of(context).colorScheme.onPrimary,
-                    child: Icon(Icons.menu_book,
-                        size: 36,
-                        color: Theme.of(context).colorScheme.primary),
+                    backgroundColor: Theme.of(context).colorScheme.onPrimary,
+                    child: Icon(
+                      Icons.menu_book,
+                      size: 36,
+                      color: Theme.of(context).colorScheme.primary,
+                    ),
                   ),
                   const SizedBox(width: 16),
                   const Text(
@@ -128,7 +128,6 @@ class HomeScreen extends StatelessWidget {
                 ),
               );
             },
-            onTap: () {},
           );
         },
         separatorBuilder: (_, __) => const SizedBox(height: 12),
@@ -232,4 +231,3 @@ class _CategoryCardState extends State<_CategoryCard> {
     );
   }
 }
-
