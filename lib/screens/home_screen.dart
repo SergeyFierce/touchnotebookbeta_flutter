@@ -4,9 +4,16 @@ import 'package:url_launcher/url_launcher.dart';
 import 'add_contact_screen.dart';
 import 'settings_screen.dart';
 import 'contact_list_screen.dart';
+import '../services/contact_database.dart';
 
-class HomeScreen extends StatelessWidget {
+class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
+
+  @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _openSupport(BuildContext context) async {
     const group = 'touchnotebook';
@@ -34,24 +41,24 @@ class HomeScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final categories = [
+    final categories = const [
       _Category(
         icon: Icons.handshake,
         title: 'Партнёры',
-        count: 1,
-        forms: const ['партнёр', 'партнёра', 'партнёров'],
+        value: 'Партнёр',
+        forms: ['партнёр', 'партнёра', 'партнёров'],
       ),
       _Category(
         icon: Icons.people,
         title: 'Клиенты',
-        count: 2,
-        forms: const ['клиент', 'клиента', 'клиентов'],
+        value: 'Клиент',
+        forms: ['клиент', 'клиента', 'клиентов'],
       ),
       _Category(
         icon: Icons.person_add_alt_1,
         title: 'Потенциальные',
-        count: 5,
-        forms: const ['потенциальный', 'потенциальных', 'потенциальных'],
+        value: 'Потенциальный',
+        forms: ['потенциальный', 'потенциальных', 'потенциальных'],
       ),
     ];
 
@@ -117,15 +124,24 @@ class HomeScreen extends StatelessWidget {
         padding: const EdgeInsets.all(16),
         itemBuilder: (context, index) {
           final cat = categories[index];
-          return _CategoryCard(
-            category: cat,
-            subtitle: '${cat.count} ${_plural(cat.count, cat.forms)}',
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => ContactListScreen(category: cat.title),
-                ),
+          return FutureBuilder<int>(
+            future: ContactDatabase.instance.countByCategory(cat.value),
+            builder: (context, snapshot) {
+              final count = snapshot.data ?? 0;
+              return _CategoryCard(
+                category: cat,
+                subtitle: '$count ${_plural(count, cat.forms)}',
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => ContactListScreen(
+                        category: cat.value,
+                        title: cat.title,
+                      ),
+                    ),
+                  ).then((_) => setState(() {}));
+                },
               );
             },
           );
@@ -134,13 +150,19 @@ class HomeScreen extends StatelessWidget {
         itemCount: categories.length,
       ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () {
-          Navigator.push(
+        onPressed: () async {
+          final saved = await Navigator.push(
             context,
             MaterialPageRoute(
               builder: (context) => const AddContactScreen(),
             ),
           );
+          if (saved == true && mounted) {
+            setState(() {});
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Контакт сохранён')),
+            );
+          }
         },
         icon: const Icon(Icons.add),
         label: const Text('Добавить контакт'),
@@ -151,14 +173,14 @@ class HomeScreen extends StatelessWidget {
 
 class _Category {
   final IconData icon;
-  final String title;
-  final int count;
+  final String title; // plural title
+  final String value; // singular value for DB
   final List<String> forms;
 
   const _Category({
     required this.icon,
     required this.title,
-    required this.count,
+    required this.value,
     required this.forms,
   });
 }
