@@ -75,6 +75,22 @@ class _AddContactScreenState extends State<AddContactScreen> {
     return age;
   }
 
+  String _formatAge(int age) {
+    final lastTwo = age % 100;
+    final last = age % 10;
+    String suffix;
+    if (lastTwo >= 11 && lastTwo <= 14) {
+      suffix = 'лет';
+    } else if (last == 1) {
+      suffix = 'год';
+    } else if (last >= 2 && last <= 4) {
+      suffix = 'года';
+    } else {
+      suffix = 'лет';
+    }
+    return '$age $suffix';
+  }
+
   Future<void> _pickBirthOrAge() async {
     final choice = await showModalBottomSheet<String>(
       context: context,
@@ -102,13 +118,14 @@ class _AddContactScreenState extends State<AddContactScreen> {
         firstDate: DateTime(1900),
         lastDate: now,
         initialDate: now,
+        locale: const Locale('ru'),
       );
       if (picked != null) {
         _birthDate = picked;
         _ageManual = null;
         final age = _calcAge(picked);
         _birthController.text =
-        '${DateFormat('dd.MM.yyyy').format(picked)} ($age лет)';
+        '${DateFormat('dd.MM.yyyy').format(picked)} (${_formatAge(age)})';
       }
     } else if (choice == 'age') {
       final ctrl = TextEditingController();
@@ -137,7 +154,7 @@ class _AddContactScreenState extends State<AddContactScreen> {
       if (age != null) {
         _ageManual = age;
         _birthDate = null;
-        _birthController.text = 'Возраст: $age';
+        _birthController.text = 'Возраст: ${_formatAge(age)}';
       }
     }
     setState(() {});
@@ -274,6 +291,7 @@ class _AddContactScreenState extends State<AddContactScreen> {
       firstDate: DateTime(1900),
       lastDate: now,
       initialDate: _addedDate,
+      locale: const Locale('ru'),
     );
     if (picked != null) {
       setState(() {
@@ -358,9 +376,11 @@ class _AddContactScreenState extends State<AddContactScreen> {
         leading: const BackButton(),
         title: const Text('Добавить контакт'),
         actions: [
-          TextButton(
+          TextButton.icon(
             onPressed: _save,
-            child: const Text('Сохранить'),
+            icon: const Icon(Icons.check),
+            label: const Text('Сохранить'),
+            style: TextButton.styleFrom(foregroundColor: Colors.white),
           ),
         ],
       ),
@@ -369,51 +389,73 @@ class _AddContactScreenState extends State<AddContactScreen> {
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
+            const Text(
+              'Личная информация',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
             TextFormField(
               controller: _nameController,
-              decoration: const InputDecoration(labelText: 'ФИО*'),
+              decoration: const InputDecoration(
+                labelText: 'ФИО*',
+                prefixIcon: Icon(Icons.person),
+              ),
               validator: (v) =>
-              v == null || v
-                  .trim()
-                  .isEmpty ? 'Введите ФИО' : null,
+                  v == null || v.trim().isEmpty ? 'Введите ФИО' : null,
               maxLines: 2,
             ),
             const SizedBox(height: 12),
             TextFormField(
               controller: _birthController,
-              decoration:
-              const InputDecoration(labelText: 'Дата рождения / Возраст'),
+              decoration: const InputDecoration(
+                labelText: 'Дата рождения / Возраст',
+                prefixIcon: Icon(Icons.cake),
+              ),
               readOnly: true,
               onTap: _pickBirthOrAge,
             ),
             const SizedBox(height: 12),
             TextFormField(
               controller: _professionController,
-              decoration: const InputDecoration(labelText: 'Профессия'),
+              decoration: const InputDecoration(
+                labelText: 'Профессия',
+                prefixIcon: Icon(Icons.work),
+              ),
             ),
             const SizedBox(height: 12),
             TextFormField(
               controller: _cityController,
-              decoration:
-              const InputDecoration(labelText: 'Город проживания'),
+              decoration: const InputDecoration(
+                labelText: 'Город проживания',
+                prefixIcon: Icon(Icons.location_city),
+              ),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 24),
+            const Text(
+              'Контактные данные',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
             TextFormField(
               controller: _phoneController,
-              decoration: const InputDecoration(labelText: 'Телефон*'),
+              decoration: const InputDecoration(
+                labelText: 'Телефон*',
+                prefixIcon: Icon(Icons.phone),
+              ),
               keyboardType: TextInputType.phone,
               inputFormatters: [_phoneMask],
               validator: (v) =>
-              _phoneMask
-                  .getUnmaskedText()
-                  .length == 10
-                  ? null
-                  : 'Введите телефон',
+                  _phoneMask.getUnmaskedText().length == 10
+                      ? null
+                      : 'Введите телефон',
             ),
             const SizedBox(height: 12),
             TextFormField(
               controller: _emailController,
-              decoration: const InputDecoration(labelText: 'Email'),
+              decoration: const InputDecoration(
+                labelText: 'Email',
+                prefixIcon: Icon(Icons.email),
+              ),
               keyboardType: TextInputType.emailAddress,
               validator: (v) {
                 if (v == null || v.isEmpty) return null;
@@ -424,22 +466,31 @@ class _AddContactScreenState extends State<AddContactScreen> {
             const SizedBox(height: 12),
             TextFormField(
               controller: _socialController,
-              decoration: const InputDecoration(labelText: 'Соцсеть'),
+              decoration: const InputDecoration(
+                labelText: 'Соцсеть',
+                prefixIcon: Icon(Icons.link),
+              ),
               readOnly: true,
               onTap: _pickSocial,
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 24),
+            const Text(
+              'Категория и статус',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
             TextFormField(
               controller: _categoryController,
               decoration: const InputDecoration(
                 labelText: 'Категория*',
                 helperText: 'Категория определяет доступные статусы',
                 hintText: 'Выберите категорию',
+                prefixIcon: Icon(Icons.category),
               ),
               readOnly: true,
               onTap: _pickCategory,
               validator: (v) =>
-              v == null || v.isEmpty ? 'Выберите категорию' : null,
+                  v == null || v.isEmpty ? 'Выберите категорию' : null,
             ),
             const SizedBox(height: 12),
             TextFormField(
@@ -450,13 +501,14 @@ class _AddContactScreenState extends State<AddContactScreen> {
                     ? 'Сначала выберите категорию'
                     : 'Статусы зависят от категории',
                 hintText:
-                _category == null ? 'Недоступно' : 'Выберите статус',
+                    _category == null ? 'Недоступно' : 'Выберите статус',
+                prefixIcon: const Icon(Icons.flag),
               ),
               readOnly: true,
               enabled: _category != null,
               onTap: _category != null ? _pickStatus : null,
               validator: (v) =>
-              v == null || v.isEmpty ? 'Выберите статус' : null,
+                  v == null || v.isEmpty ? 'Выберите статус' : null,
             ),
             const SizedBox(height: 12),
             Wrap(
@@ -467,17 +519,27 @@ class _AddContactScreenState extends State<AddContactScreen> {
                 _tagChip('VIP', Colors.yellow, Colors.black),
               ],
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 24),
+            const Text(
+              'Прочее',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
             TextFormField(
               controller: _commentController,
-              decoration: const InputDecoration(labelText: 'Комментарий'),
+              decoration: const InputDecoration(
+                labelText: 'Комментарий',
+                prefixIcon: Icon(Icons.comment),
+              ),
               maxLines: 3,
             ),
             const SizedBox(height: 12),
             TextFormField(
               controller: _addedController,
-              decoration:
-              const InputDecoration(labelText: 'Дата добавления'),
+              decoration: const InputDecoration(
+                labelText: 'Дата добавления',
+                prefixIcon: Icon(Icons.today),
+              ),
               readOnly: true,
               onTap: _pickAddedDate,
             ),
