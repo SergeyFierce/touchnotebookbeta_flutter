@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:mask_text_input_formatter/mask_text_input_formatter.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:characters/characters.dart';
 
 import '../models/contact.dart';
 import '../services/contact_database.dart';
@@ -37,6 +38,16 @@ class _AddContactScreenState extends State<AddContactScreen> {
   final _commentController = TextEditingController();
   final _addedController = TextEditingController();
 
+  // --- key для «Дополнительно» ---
+  final _extraCardKey = GlobalKey();
+
+// Плавный скролл к карточке после анимации раскрытия
+  Future<void> _scrollToCard(GlobalKey key) async {
+    await Future.delayed(const Duration(milliseconds: 240));
+    await _ensureVisible(key);
+  }
+
+
   void _hintSelectCategory() async {
     await _ensureVisible(_categoryKey);
     ScaffoldMessenger.of(context).showSnackBar(
@@ -44,6 +55,187 @@ class _AddContactScreenState extends State<AddContactScreen> {
     );
     FocusScope.of(context).requestFocus(_focusCategory);
   }
+
+  // ==== PREVIEW HELPERS (как в _ContactCard из списка) ====
+
+  Color _avatarBgFor(String seed, ColorScheme scheme) {
+    int h = 0;
+    for (final r in seed.runes) {
+      h = (h * 31 + r) & 0x7fffffff;
+    }
+    final hue = (h % 360).toDouble();
+    final hsl = HSLColor.fromAHSL(1.0, hue, 0.45, 0.55);
+    return hsl.toColor();
+  }
+
+  Color _statusColor(String status) {
+    switch (status) {
+      case 'Активный':   return Colors.green;
+      case 'Пассивный':  return Colors.orange;
+      case 'Потерянный': return Colors.red;
+      case 'Холодный':   return Colors.cyan;
+      case 'Тёплый':     return Colors.pink;
+      default:           return Colors.grey;
+    }
+  }
+
+  Color _tagColor(String tag) {
+    switch (tag) {
+      case 'Новый':     return Colors.white;
+      case 'Напомнить': return Colors.purple;
+      case 'VIP':       return Colors.yellow;
+      default:          return Colors.grey.shade200;
+    }
+  }
+
+  Color _tagTextColor(String tag) {
+    switch (tag) {
+      case 'Новый':     return Colors.black;
+      case 'Напомнить': return Colors.white;
+      case 'VIP':       return Colors.black;
+      default:          return Colors.black;
+    }
+  }
+  Widget _previewCaption(BuildContext context, {String text = 'Предпросмотр карточки'}) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(4, 0, 4, 8),
+      child: Row(
+        children: [
+          Icon(Icons.visibility_outlined, size: 16, color: theme.hintColor),
+          const SizedBox(width: 6),
+          Text(
+            text,
+            style: theme.textTheme.labelMedium?.copyWith(color: theme.hintColor),
+          ),
+        ],
+      ),
+    );
+  }
+
+
+  Widget _buildHeaderPreview(BuildContext context) {
+    const double kStatusReserve = 120; // резерв справа под чип статуса
+    final scheme = Theme.of(context).colorScheme;
+
+    final name  = _nameController.text.trim().isEmpty ? 'Новый контакт' : _nameController.text.trim();
+    final phone = _phoneController.text.trim();
+    final status = (_status ?? _statusController.text).trim();
+    final tags = _tags.toList();
+
+    Widget avatar() {
+      final bg = _avatarBgFor(name, scheme);
+      final initials = _initials(name);
+      return Container(
+        width: 44,
+        height: 44,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          border: Border.all(color: scheme.surface, width: 0),
+        ),
+        child: CircleAvatar(
+          backgroundColor: bg,
+          child: Text(
+            initials.isEmpty ? '?' : initials,
+            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+              color: Colors.white,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Card(
+      elevation: 2,
+      margin: EdgeInsets.zero,
+      color: scheme.surfaceVariant,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Stack(
+          children: [
+            // контент с резервом под статус
+            Padding(
+              padding: const EdgeInsets.only(right: kStatusReserve),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      avatar(),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          name,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context)
+                              .textTheme
+                              .titleLarge
+                              ?.copyWith(fontWeight: FontWeight.w600),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    phone.isEmpty ? '' : phone,
+                    style: Theme.of(context).textTheme.bodyMedium,
+                  ),
+                  const SizedBox(height: 8),
+                  if (tags.isNotEmpty)
+                    Wrap(
+                      spacing: 4,
+                      runSpacing: 4,
+                      children: [
+                        for (final tag in tags)
+                          Chip(
+                            label: Text(
+                              tag,
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .bodySmall
+                                  ?.copyWith(fontSize: 10, color: _tagTextColor(tag)),
+                            ),
+                            backgroundColor: _tagColor(tag),
+                            visualDensity: const VisualDensity(horizontal: -4, vertical: -4),
+                            materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 0),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+                          ),
+                      ],
+                    ),
+                ],
+              ),
+            ),
+            // чип статуса в правом верхнем углу
+            if (status.isNotEmpty)
+              Positioned(
+                top: 0,
+                right: 0,
+                child: Chip(
+                  label: Text(
+                    status,
+                    style: Theme.of(context)
+                        .textTheme
+                        .bodySmall
+                        ?.copyWith(fontSize: 10, color: Colors.white),
+                  ),
+                  backgroundColor: _statusColor(status),
+                  visualDensity: const VisualDensity(horizontal: -4, vertical: -4),
+                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 0),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
 
   // ====== Состояния ======
   DateTime? _birthDate;
@@ -732,38 +924,16 @@ class _AddContactScreenState extends State<AddContactScreen> {
             controller: _scroll,
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 120),
             children: [
-              // ===== Блок: Заголовок =====
-              Card(
-                elevation: 0,
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16)),
-                clipBehavior: Clip.antiAlias,
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Row(
-                    children: [
-                      CircleAvatar(
-                        radius: 28,
-                        child: Text(
-                          initials.isEmpty ? '👤' : initials,
-                          style: const TextStyle(
-                              fontSize: 18, fontWeight: FontWeight.w700),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Text(
-                          _nameController.text.trim().isEmpty
-                              ? 'Новый контакт'
-                              : _nameController.text.trim(),
-                          style: theme.textTheme.titleMedium,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                    ],
+              // ===== Блок: Заголовок (превью карточки) =====
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _previewCaption(context),
+                  KeyedSubtree(
+                    key: const ValueKey('header_preview'),
+                    child: _buildHeaderPreview(context),
                   ),
-                ),
+                ],
               ),
 
               const SizedBox(height: 24),
@@ -780,13 +950,12 @@ class _AddContactScreenState extends State<AddContactScreen> {
                       maxLines: 1,
                       textInputAction: TextInputAction.next,
                       decoration: _outlinedDec(
-                        theme,
+                        Theme.of(context),
                         label: 'ФИО*',
                         prefixIcon: Icons.person_outline,
                         controller: _nameController,
                       ),
-                      validator: (v) =>
-                      v == null || v.trim().isEmpty ? 'Введите ФИО' : null,
+                      validator: (v) => v == null || v.trim().isEmpty ? 'Введите ФИО' : null,
                       onTapOutside: (_) => _defocus(),
                     ),
                   ),
@@ -801,7 +970,7 @@ class _AddContactScreenState extends State<AddContactScreen> {
                       textInputAction: TextInputAction.next,
                       inputFormatters: [_phoneMask],
                       decoration: _outlinedDec(
-                        theme,
+                        Theme.of(context),
                         label: 'Телефон*',
                         prefixIcon: Icons.phone_outlined,
                         controller: _phoneController,
@@ -819,7 +988,7 @@ class _AddContactScreenState extends State<AddContactScreen> {
                 children: [
                   _pickerTile(
                     key: _categoryKey,
-                    icon: Icons.person_outline, // «человечек» как категория
+                    icon: Icons.person_outline,
                     title: 'Категория*',
                     value: _categoryController.text,
                     hint: 'Выберите категорию',
@@ -855,81 +1024,98 @@ class _AddContactScreenState extends State<AddContactScreen> {
                     spacing: 8,
                     runSpacing: 8,
                     children: [
-                      tagChip('Новый'),
-                      tagChip('Напомнить'),
-                      tagChip('VIP'),
+                      for (final label in const ['Новый', 'Напомнить', 'VIP'])
+                        ChoiceChip(
+                          label: Text(label),
+                          selected: _tags.contains(label),
+                          onSelected: (v) {
+                            setState(() {
+                              if (v) {
+                                _tags.add(label);
+                              } else {
+                                _tags.remove(label);
+                              }
+                            });
+                          },
+                        ),
                     ],
                   ),
                 ],
               ),
 
-              // ===== Блок: Дополнительно (сворачиваемый) — ПОД тегами =====
-              _collapsibleSectionCard(
-                title: 'Дополнительно',
-                expanded: _extraExpanded,
-                onChanged: (v) => setState(() => _extraExpanded = v),
-                children: [
-                  _pickerTile(
-                    key: const ValueKey('birth'),
-                    icon: Icons.cake_outlined,
-                    title: 'Дата рождения / возраст',
-                    value: _birthController.text,
-                    hint: 'Указать дату или возраст',
-                    isOpen: _birthOpen,
-                    focusNode: _focusBirth,
-                    onTap: _pickBirthOrAge,
-                  ),
-                  const SizedBox(height: 12),
+              // ===== Блок: Дополнительно (скролл при раскрытии) =====
+              KeyedSubtree(
+                key: _extraCardKey,
+                child: _collapsibleSectionCard(
+                  title: 'Дополнительно',
+                  expanded: _extraExpanded,
+                  onChanged: (v) {
+                    setState(() => _extraExpanded = v);
+                    if (v) _scrollToCard(_extraCardKey);
+                  },
+                  children: [
+                    _pickerTile(
+                      key: const ValueKey('birth'),
+                      icon: Icons.cake_outlined,
+                      title: 'Дата рождения / возраст',
+                      value: _birthController.text,
+                      hint: 'Указать дату или возраст',
+                      isOpen: _birthOpen,
+                      focusNode: _focusBirth,
+                      onTap: _pickBirthOrAge,
+                    ),
+                    const SizedBox(height: 12),
 
-                  // Email — здесь
-                  TextFormField(
-                    controller: _emailController,
-                    keyboardType: TextInputType.emailAddress,
-                    textInputAction: TextInputAction.next,
-                    decoration: _outlinedDec(
-                      theme,
-                      label: 'Email',
-                      prefixIcon: Icons.alternate_email_outlined,
+                    // Email
+                    TextFormField(
                       controller: _emailController,
+                      keyboardType: TextInputType.emailAddress,
+                      textInputAction: TextInputAction.next,
+                      decoration: _outlinedDec(
+                        Theme.of(context),
+                        label: 'Email',
+                        prefixIcon: Icons.alternate_email_outlined,
+                        controller: _emailController,
+                      ),
+                      validator: (v) {
+                        if (v == null || v.isEmpty) return null;
+                        final regex = RegExp(r'.+@.+[.].+');
+                        return regex.hasMatch(v) ? null : 'Некорректный email';
+                      },
+                      onTapOutside: (_) => _defocus(),
                     ),
-                    validator: (v) {
-                      if (v == null || v.isEmpty) return null;
-                      final regex = RegExp(r'.+@.+[.].+');
-                      return regex.hasMatch(v) ? null : 'Некорректный email';
-                    },
-                    onTapOutside: (_) => _defocus(),
-                  ),
-                  const SizedBox(height: 12),
+                    const SizedBox(height: 12),
 
-                  TextFormField(
-                    controller: _professionController,
-                    textInputAction: TextInputAction.next,
-                    decoration: _outlinedDec(
-                      theme,
-                      label: 'Профессия',
-                      prefixIcon: Icons.work_outline,
+                    TextFormField(
                       controller: _professionController,
+                      textInputAction: TextInputAction.next,
+                      decoration: _outlinedDec(
+                        Theme.of(context),
+                        label: 'Профессия',
+                        prefixIcon: Icons.work_outline,
+                        controller: _professionController,
+                      ),
+                      onTapOutside: (_) => _defocus(),
                     ),
-                    onTapOutside: (_) => _defocus(),
-                  ),
-                  const SizedBox(height: 12),
+                    const SizedBox(height: 12),
 
-                  TextFormField(
-                    controller: _cityController,
-                    textInputAction: TextInputAction.next,
-                    decoration: _outlinedDec(
-                      theme,
-                      label: 'Город проживания',
-                      prefixIcon: Icons.location_city_outlined,
+                    TextFormField(
                       controller: _cityController,
+                      textInputAction: TextInputAction.next,
+                      decoration: _outlinedDec(
+                        Theme.of(context),
+                        label: 'Город проживания',
+                        prefixIcon: Icons.location_city_outlined,
+                        controller: _cityController,
+                      ),
+                      onTapOutside: (_) => _defocus(),
                     ),
-                    onTapOutside: (_) => _defocus(),
-                  ),
-                  const SizedBox(height: 12),
+                    const SizedBox(height: 12),
 
-                  // Соцсеть — отдельная плитка с SVG leading
-                  _socialPickerTile(),
-                ],
+                    // Соцсеть
+                    _socialPickerTile(),
+                  ],
+                ),
               ),
 
               // ===== Блок: Комментарий =====
@@ -940,7 +1126,7 @@ class _AddContactScreenState extends State<AddContactScreen> {
                     controller: _commentController,
                     maxLines: 1,
                     decoration: _outlinedDec(
-                      theme,
+                      Theme.of(context),
                       label: 'Комментарий',
                       prefixIcon: Icons.notes_outlined,
                       controller: _commentController,
@@ -966,7 +1152,7 @@ class _AddContactScreenState extends State<AddContactScreen> {
                   const SizedBox(height: 8),
                   Text(
                     'Заметки добавляются на экране Деталей контакта',
-                    style: TextStyle(color: theme.hintColor),
+                    style: TextStyle(color: Theme.of(context).hintColor),
                   ),
                 ],
               ),
@@ -974,6 +1160,7 @@ class _AddContactScreenState extends State<AddContactScreen> {
           ),
         ),
       ),
+
 
       // Кнопка снизу — скрыта, если нельзя сохранять
       bottomNavigationBar: _canSave
