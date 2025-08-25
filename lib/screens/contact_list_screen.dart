@@ -83,7 +83,6 @@ class _ContactListScreenState extends State<ContactListScreen> {
     });
   }
 
-
   Future<void> _loadContacts() async {
     final contacts =
     await ContactDatabase.instance.contactsByCategory(widget.category);
@@ -160,46 +159,87 @@ class _ContactListScreenState extends State<ContactListScreen> {
   }
 
   void _openFilters() async {
-    final statuses = ['Активный', 'Пассивный', 'Потерянный', 'Холодный', 'Тёплый'];
+    // статусы зависят от категории
+    final category = widget.category;
+    final List<String> statuses = (category == 'Потенциальный')
+        ? const ['Холодный', 'Тёплый', 'Потерянный']
+        : const ['Активный', 'Пассивный', 'Потерянный'];
+
     final selected = Set<String>.from(_statusFilters);
+
     final result = await showModalBottomSheet<Set<String>>(
       context: context,
+      isScrollControlled: true,
       builder: (context) {
         return SafeArea(
           child: StatefulBuilder(
             builder: (context, setStateSB) {
-              return Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  for (final s in statuses)
-                    CheckboxListTile(
-                      title: Text(s),
-                      value: selected.contains(s),
-                      onChanged: (v) {
-                        setStateSB(() {
-                          if (v == true) {
-                            selected.add(s);
-                          } else {
-                            selected.remove(s);
-                          }
-                        });
-                      },
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // верхняя панель: слева Сбросить, справа Применить
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      child: Row(
+                        children: [
+                          TextButton(
+                            onPressed: () {
+                              Navigator.pop(context, <String>{}); // вернуть пустой набор => сброс
+                            },
+                            child: const Text('Сбросить'),
+                          ),
+                          const Spacer(),
+                          TextButton(
+                            onPressed: () {
+                              Navigator.pop(context, selected); // применить выбранное
+                            },
+                            child: const Text('Применить'),
+                          ),
+                        ],
+                      ),
                     ),
-                  TextButton(
-                    onPressed: () => Navigator.pop(context, selected),
-                    child: const Text('Применить'),
-                  ),
-                ],
+                    const Divider(height: 1),
+
+                    // список чекбоксов
+                    Flexible(
+                      child: SingleChildScrollView(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            for (final s in statuses)
+                              CheckboxListTile(
+                                title: Text(s),
+                                value: selected.contains(s),
+                                onChanged: (v) {
+                                  setStateSB(() {
+                                    if (v == true) {
+                                      selected.add(s);
+                                    } else {
+                                      selected.remove(s);
+                                    }
+                                  });
+                                },
+                              ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               );
             },
           ),
         );
       },
     );
+
     if (result != null) {
       setState(() => _statusFilters = result);
     }
   }
+
 
   Future<void> _showContactMenu(Contact c) async {
     final action = await showModalBottomSheet<String>(
@@ -416,10 +456,29 @@ class _ContactListScreenState extends State<ContactListScreen> {
             child: TextField(
               controller: _searchController,
               onChanged: _onSearchChanged,
-              decoration: const InputDecoration(
+              decoration: InputDecoration(
                 hintText: 'Поиск',
-                prefixIcon: Icon(Icons.search),
-                border: OutlineInputBorder(),
+                prefixIcon: const Icon(Icons.search),
+                suffixIcon: _searchController.text.isEmpty
+                    ? null
+                    : IconButton(
+                  icon: const Icon(Icons.close),
+                  onPressed: () {
+                    _searchController.clear();
+                    setState(() => _query = '');
+                  },
+                ),
+                filled: true,
+                fillColor: Theme.of(context).colorScheme.surfaceVariant,
+                border: OutlineInputBorder(
+                  borderSide: BorderSide.none,
+                  borderRadius: BorderRadius.circular(28), // капсула
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderSide: BorderSide.none,
+                  borderRadius: BorderRadius.circular(28),
+                ),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
               ),
             ),
           ),
@@ -446,15 +505,18 @@ class _ContactListScreenState extends State<ContactListScreen> {
             )
                 : ListView.separated(
               controller: _scroll,
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              padding:
+              const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               itemBuilder: (context, index) {
                 final c = contacts[index];
                 final wrapperKey = (c.id != null) ? _keyFor(c) : null;
-                final isHighlighted = (c.id != null && c.id == _highlightId);
+                final isHighlighted =
+                (c.id != null && c.id == _highlightId);
 
                 return Dismissible(
                   key: ValueKey(
-                    c.id ?? '${c.name}_${c.createdAt.millisecondsSinceEpoch}',
+                    c.id ??
+                        '${c.name}_${c.createdAt.millisecondsSinceEpoch}',
                   ),
                   direction: DismissDirection.endToStart,
                   background: Container(
@@ -467,12 +529,14 @@ class _ContactListScreenState extends State<ContactListScreen> {
                   onDismissed: (_) async {
                     await _deleteWithUndo(c);
                   },
-                  child: RepaintBoundary( // изолируем перерисовку эффекта
+                  child: RepaintBoundary(
+                    // изолируем перерисовку эффекта
                     key: wrapperKey, // для ensureVisible
                     child: _ContactCard(
                       contact: c,
                       pulse: isHighlighted,
-                      pulseSeed: _pulseSeed,// ← эффект «нажатия без нажатия»
+                      pulseSeed:
+                      _pulseSeed, // ← эффект «нажатия без нажатия»
                       onLongPress: () => _showContactMenu(c),
                     ),
                   ),
@@ -521,7 +585,6 @@ class _ContactCard extends StatefulWidget {
     required this.pulseSeed, // <- NEW (сделаем обязательным)
   });
 
-
   @override
   State<_ContactCard> createState() => _ContactCardState();
 }
@@ -547,11 +610,13 @@ class _ContactCardState extends State<_ContactCard> with TickerProviderStateMixi
     // последовательность: чуть сжаться -> вернуться
     _scaleAnim = TweenSequence<double>([
       TweenSequenceItem(
-        tween: Tween(begin: 1.0, end: 0.965).chain(CurveTween(curve: Curves.easeOutCubic)),
+        tween: Tween(begin: 1.0, end: 0.965)
+            .chain(CurveTween(curve: Curves.easeOutCubic)),
         weight: 40,
       ),
       TweenSequenceItem(
-        tween: Tween(begin: 0.965, end: 1.0).chain(CurveTween(curve: Curves.easeOutBack)),
+        tween: Tween(begin: 0.965, end: 1.0)
+            .chain(CurveTween(curve: Curves.easeOutBack)),
         weight: 60,
       ),
     ]).animate(_pulseCtrl);
@@ -559,11 +624,13 @@ class _ContactCardState extends State<_ContactCard> with TickerProviderStateMixi
     // внутренний «блик» (быстрый всплеск и затухание)
     _glowAnim = TweenSequence<double>([
       TweenSequenceItem(
-        tween: Tween(begin: 0.0, end: 1.0).chain(CurveTween(curve: Curves.easeOutCubic)),
+        tween: Tween(begin: 0.0, end: 1.0)
+            .chain(CurveTween(curve: Curves.easeOutCubic)),
         weight: 35,
       ),
       TweenSequenceItem(
-        tween: Tween(begin: 1.0, end: 0.0).chain(CurveTween(curve: Curves.easeOutQuart)),
+        tween: Tween(begin: 1.0, end: 0.0)
+            .chain(CurveTween(curve: Curves.easeOutQuart)),
         weight: 65,
       ),
     ]).animate(_pulseCtrl);
@@ -591,6 +658,64 @@ class _ContactCardState extends State<_ContactCard> with TickerProviderStateMixi
   void dispose() {
     _pulseCtrl.dispose();
     super.dispose();
+  }
+
+  // ---------- AVATAR HELPERS ----------
+
+  String _initialsFrom(String name) {
+    final cleaned = name.trim();
+    if (cleaned.isEmpty) return '?';
+    final parts = cleaned.split(RegExp(r'\s+'));
+    String first = parts[0];
+    String? second = parts.length > 1 ? parts[1] : null;
+
+    String takeFirstLetter(String s) {
+      if (s.isEmpty) return '';
+      // Берем первый символ (работает и для кириллицы)
+      return s.characters.first.toUpperCase();
+    }
+
+    final a = takeFirstLetter(first);
+    final b = second == null ? '' : takeFirstLetter(second);
+    final res = (a + b);
+    return res.isEmpty ? '?' : res;
+  }
+
+  Color _avatarBgFor(String seed, ColorScheme scheme) {
+    // Детерминированный приятный цвет из имени
+    int h = 0;
+    for (final r in seed.runes) {
+      h = (h * 31 + r) & 0x7fffffff;
+    }
+    final hue = (h % 360).toDouble();
+    final hsl = HSLColor.fromAHSL(1.0, hue, 0.45, 0.55);
+    return hsl.toColor();
+  }
+
+  Widget _buildAvatar(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final initials = _initialsFrom(widget.contact.name);
+    final bg = _avatarBgFor(widget.contact.name, scheme);
+
+    // Обводка в цвете поверхности для M3-стиля
+    return Container(
+      width: 44,
+      height: 44,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        border: Border.all(color: scheme.surface, width: 0),
+      ),
+      child: CircleAvatar(
+        backgroundColor: bg,
+        child: Text(
+          initials,
+          style: Theme.of(context)
+              .textTheme
+              .titleMedium
+              ?.copyWith(color: Colors.white, fontWeight: FontWeight.w700),
+        ),
+      ),
+    );
   }
 
   @override
@@ -647,6 +772,8 @@ class _ContactCardState extends State<_ContactCard> with TickerProviderStateMixi
   }
 
   Widget _buildCard(BuildContext context, BorderRadius border) {
+    const double kStatusReserve = 120; // резерв ширины справа под чип статуса
+
     return Material(
       borderRadius: border,
       color: Theme.of(context).colorScheme.surfaceVariant,
@@ -663,28 +790,42 @@ class _ContactCardState extends State<_ContactCard> with TickerProviderStateMixi
         onTapUp: (_) => _set(false),
         child: Padding(
           padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+          child: Stack(
             children: [
-              // Имя + теги справа
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(
-                    child: Text(
-                      widget.contact.name,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context)
-                          .textTheme
-                          .titleLarge
-                          ?.copyWith(fontWeight: FontWeight.w600),
+              // РЕЗЕРВ справа, чтобы имя/текст не заезжали под статус
+              Padding(
+                padding: const EdgeInsets.only(right: kStatusReserve),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Аватар + Имя (вертикально по центру аватарки)
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        _buildAvatar(context),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            widget.contact.name,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            textAlign: TextAlign.start,
+                            style: Theme.of(context)
+                                .textTheme
+                                .titleLarge
+                                ?.copyWith(fontWeight: FontWeight.w600),
+                          ),
+                        ),
+                      ],
                     ),
-                  ),
-                  const SizedBox(width: 8),
-                  ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 200),
-                    child: Wrap(
+                    const SizedBox(height: 6),
+                    Text(
+                      widget.contact.phone,
+                      style: Theme.of(context).textTheme.bodyMedium,
+                    ),
+                    const SizedBox(height: 8),
+                    // Теги под телефоном
+                    Wrap(
                       spacing: 4,
                       runSpacing: 4,
                       children: [
@@ -698,7 +839,8 @@ class _ContactCardState extends State<_ContactCard> with TickerProviderStateMixi
                                   ?.copyWith(fontSize: 10, color: _tagTextColor(tag)),
                             ),
                             backgroundColor: _tagColor(tag),
-                            visualDensity: const VisualDensity(horizontal: -4, vertical: -4),
+                            visualDensity:
+                            const VisualDensity(horizontal: -4, vertical: -4),
                             materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 0),
                             shape: RoundedRectangleBorder(
@@ -707,22 +849,30 @@ class _ContactCardState extends State<_ContactCard> with TickerProviderStateMixi
                           ),
                       ],
                     ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 4),
-              Text(widget.contact.phone, style: Theme.of(context).textTheme.bodyMedium),
-              const SizedBox(height: 8),
-              Chip(
-                label: Text(
-                  widget.contact.status,
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(fontSize: 10, color: Colors.white),
+                  ],
                 ),
-                backgroundColor: _statusColor(widget.contact.status),
-                visualDensity: const VisualDensity(horizontal: -4, vertical: -4),
-                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 0),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+              ),
+
+              // Статус — фиксированно в правом верхнем углу
+              Positioned(
+                top: 0,
+                right: 0,
+                child: Chip(
+                  label: Text(
+                    widget.contact.status,
+                    style: Theme.of(context)
+                        .textTheme
+                        .bodySmall
+                        ?.copyWith(fontSize: 10, color: Colors.white),
+                  ),
+                  backgroundColor: _statusColor(widget.contact.status),
+                  visualDensity: const VisualDensity(horizontal: -4, vertical: -4),
+                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 0),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(30),
+                  ),
+                ),
               ),
             ],
           ),
@@ -730,6 +880,8 @@ class _ContactCardState extends State<_ContactCard> with TickerProviderStateMixi
       ),
     );
   }
+
+
 
   Color _statusColor(String status) {
     switch (status) {

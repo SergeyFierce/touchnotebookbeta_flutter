@@ -950,7 +950,7 @@ class _AddContactScreenState extends State<AddContactScreen> {
                 ],
               ),
 
-              // ===== Блок: Служебное =====
+              // ===== Блок: Дата добавления =====
               _sectionCard(
                 title: 'Дата добавления',
                 children: [
