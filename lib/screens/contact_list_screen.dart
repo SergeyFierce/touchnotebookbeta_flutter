@@ -251,6 +251,11 @@ class _ContactListScreenState extends State<ContactListScreen> {
             mainAxisSize: MainAxisSize.min,
             children: [
               ListTile(
+                leading: const Icon(Icons.info_outline),
+                title: const Text('Детали контакта'),
+                onTap: () => Navigator.pop(context, 'details'),
+              ),
+              ListTile(
                 leading: const Icon(Icons.delete),
                 title: const Text('Удалить'),
                 onTap: () => Navigator.pop(context, 'delete'),
@@ -260,7 +265,13 @@ class _ContactListScreenState extends State<ContactListScreen> {
         );
       },
     );
-    if (action == 'delete') {
+    if (action == 'details') {
+      await Navigator.push(
+        context,
+        MaterialPageRoute(builder: (context) => ContactDetailsScreen(contact: c)),
+      );
+      await _loadContacts();
+    } else if (action == 'delete') {
       final confirm = await showDialog<bool>(
         context: context,
         builder: (context) => AlertDialog(
