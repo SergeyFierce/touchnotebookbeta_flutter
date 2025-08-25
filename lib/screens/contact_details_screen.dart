@@ -356,6 +356,7 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
   }
 
   Future<void> _addNote() async {
+    
     if (_contact.id == null) return;
     final note = await Navigator.push<Note>(
       context,
@@ -399,6 +400,26 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
         ),
       );
     } else {
+    final controller = TextEditingController();
+    final text = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Новая заметка'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          maxLines: null,
+          decoration: const InputDecoration(labelText: 'Заметка'),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Отмена')),
+          TextButton(onPressed: () => Navigator.pop(context, controller.text.trim()), child: const Text('Сохранить')),
+        ],
+      ),
+    );
+    if (text != null && text.isNotEmpty && _contact.id != null) {
+      await ContactDatabase.instance
+          .insertNote(Note(contactId: _contact.id!, text: text, createdAt: DateTime.now()));
       await _loadNotes();
     }
   }

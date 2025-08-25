@@ -75,6 +75,27 @@ class _NotesListScreenState extends State<NotesListScreen> {
         ),
       );
     } else {
+    final controller = TextEditingController();
+    final text = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Новая заметка'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          maxLines: null,
+          decoration: const InputDecoration(labelText: 'Заметка'),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Отмена')),
+          TextButton(onPressed: () => Navigator.pop(context, controller.text.trim()), child: const Text('Сохранить')),
+        ],
+      ),
+    );
+    if (text != null && text.isNotEmpty && widget.contact.id != null) {
+      await _db.insertNote(
+        Note(contactId: widget.contact.id!, text: text, createdAt: DateTime.now()),
+      );
       await _loadNotes();
     }
   }

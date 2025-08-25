@@ -126,6 +126,7 @@ class ContactDatabase {
     _bumpRevision();
     return rows;
   }
+    }
 
   Future<List<Note>> notesByContact(int contactId) async {
     final db = await database;
