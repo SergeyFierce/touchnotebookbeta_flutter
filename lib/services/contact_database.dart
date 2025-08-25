@@ -3,6 +3,7 @@ import 'package:path/path.dart' as p;
 
 import 'package:flutter/foundation.dart'; // <-- добавили
 import '../models/contact.dart';
+import '../models/note.dart';
 
 class ContactDatabase {
   ContactDatabase._();
@@ -36,6 +37,24 @@ class ContactDatabase {
           status TEXT NOT NULL,
           tags TEXT,
           comment TEXT,
+          createdAt INTEGER NOT NULL
+        )
+        ''');
+        await db.execute('''
+        CREATE TABLE notes(
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          contactId INTEGER NOT NULL,
+          text TEXT NOT NULL,
+          createdAt INTEGER NOT NULL
+        )
+        ''');
+      },
+      onOpen: (db) async {
+        await db.execute('''
+        CREATE TABLE IF NOT EXISTS notes(
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          contactId INTEGER NOT NULL,
+          text TEXT NOT NULL,
           createdAt INTEGER NOT NULL
         )
         ''');
@@ -83,5 +102,37 @@ class ContactDatabase {
       [category],
     );
     return Sqflite.firstIntValue(result) ?? 0;
+  }
+
+  // ===== Notes =====
+
+  Future<int> insertNote(Note note) async {
+    final db = await database;
+    final id = await db.insert('notes', note.toMap());
+    _bumpRevision();
+    return id;
+    }
+
+  Future<List<Note>> notesByContact(int contactId) async {
+    final db = await database;
+    final maps = await db.query(
+      'notes',
+      where: 'contactId = ?',
+      whereArgs: [contactId],
+      orderBy: 'createdAt DESC',
+    );
+    return maps.map((e) => Note.fromMap(e)).toList();
+  }
+
+  Future<List<Note>> lastNotesByContact(int contactId, {int limit = 3}) async {
+    final db = await database;
+    final maps = await db.query(
+      'notes',
+      where: 'contactId = ?',
+      whereArgs: [contactId],
+      orderBy: 'createdAt DESC',
+      limit: limit,
+    );
+    return maps.map((e) => Note.fromMap(e)).toList();
   }
 }
