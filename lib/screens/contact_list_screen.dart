@@ -5,6 +5,7 @@ import '../app.dart'; // для App.navigatorKey
 import '../models/contact.dart';
 import '../services/contact_database.dart';
 import 'add_contact_screen.dart';
+import 'contact_details_screen.dart';
 
 class ContactListScreen extends StatefulWidget {
   final String category; // singular value for DB
@@ -534,6 +535,16 @@ class _ContactListScreenState extends State<ContactListScreen> {
                     key: wrapperKey, // для ensureVisible
                     child: _ContactCard(
                       contact: c,
+                      onTap: () async {
+                        final deleted = await Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (context) => ContactDetailsScreen(contact: c)),
+                        );
+                        await _loadContacts();
+                        if (deleted == true && mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Контакт удалён')));
+                        }
+                      },
                       pulse: isHighlighted,
                       pulseSeed:
                       _pulseSeed, // ← эффект «нажатия без нажатия»
@@ -574,12 +585,14 @@ class _ContactListScreenState extends State<ContactListScreen> {
 
 class _ContactCard extends StatefulWidget {
   final Contact contact;
+  final VoidCallback? onTap;
   final VoidCallback? onLongPress;
   final bool pulse;
   final int pulseSeed; // <- NEW
 
   const _ContactCard({
     required this.contact,
+    this.onTap,
     this.onLongPress,
     this.pulse = false,
     required this.pulseSeed, // <- NEW (сделаем обязательным)
@@ -780,7 +793,7 @@ class _ContactCardState extends State<_ContactCard> with TickerProviderStateMixi
       elevation: 2,
       child: InkWell(
         borderRadius: border,
-        onTap: () {},
+        onTap: () { _set(false); widget.onTap?.call(); },
         onLongPress: () {
           _set(false);
           widget.onLongPress?.call();

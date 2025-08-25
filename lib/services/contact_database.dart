@@ -62,6 +62,13 @@ class ContactDatabase {
     return maps.map((e) => Contact.fromMap(e)).toList();
   }
 
+  Future<int> update(Contact contact) async {
+    final db = await database;
+    final rows = await db.update('contacts', contact.toMap(), where: 'id = ?', whereArgs: [contact.id]);
+    _bumpRevision();
+    return rows;
+  }
+
   Future<int> delete(int id) async {
     final db = await database;
     final rows = await db.delete('contacts', where: 'id = ?', whereArgs: [id]);
