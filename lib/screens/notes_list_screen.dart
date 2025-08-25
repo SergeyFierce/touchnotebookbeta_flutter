@@ -1,0 +1,80 @@
+import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
+
+import '../models/contact.dart';
+import '../models/note.dart';
+import '../services/contact_database.dart';
+
+class NotesListScreen extends StatefulWidget {
+  final Contact contact;
+  const NotesListScreen({super.key, required this.contact});
+
+  @override
+  State<NotesListScreen> createState() => _NotesListScreenState();
+}
+
+class _NotesListScreenState extends State<NotesListScreen> {
+  final _db = ContactDatabase.instance;
+  List<Note> _notes = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadNotes();
+  }
+
+  Future<void> _loadNotes() async {
+    if (widget.contact.id == null) return;
+    final notes = await _db.notesByContact(widget.contact.id!);
+    setState(() => _notes = notes);
+  }
+
+  Future<void> _addNote() async {
+    final controller = TextEditingController();
+    final text = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Новая заметка'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          maxLines: null,
+          decoration: const InputDecoration(labelText: 'Заметка'),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Отмена')),
+          TextButton(onPressed: () => Navigator.pop(context, controller.text.trim()), child: const Text('Сохранить')),
+        ],
+      ),
+    );
+    if (text != null && text.isNotEmpty && widget.contact.id != null) {
+      await _db.insertNote(
+        Note(contactId: widget.contact.id!, text: text, createdAt: DateTime.now()),
+      );
+      await _loadNotes();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Заметки')),
+      body: _notes.isEmpty
+          ? const Center(child: Text('Нет заметок'))
+          : ListView.builder(
+              itemCount: _notes.length,
+              itemBuilder: (context, i) {
+                final n = _notes[i];
+                return ListTile(
+                  title: Text(n.text),
+                  subtitle: Text(DateFormat('dd.MM.yyyy HH:mm').format(n.createdAt)),
+                );
+              },
+            ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: _addNote,
+        child: const Icon(Icons.add),
+      ),
+    );
+  }
+}

@@ -7,8 +7,10 @@ import 'package:characters/characters.dart';
 
 import '../app.dart'; // для App.navigatorKey (SnackBar после pop)
 import '../models/contact.dart';
+import '../models/note.dart';
 import '../services/contact_database.dart';
 import 'contact_list_screen.dart'; // переход к восстановленному контакту
+import 'notes_list_screen.dart';
 
 class ContactDetailsScreen extends StatefulWidget {
   final Contact contact;
@@ -275,6 +277,7 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
 
   bool _extraExpanded = false; // «Дополнительно»
   bool _notesExpanded = false; // «Заметки»
+  List<Note> _notes = [];
 
   // FocusNodes — для подсветки «плиток»
   final FocusNode _focusBirth = FocusNode(skipTraversal: true);
@@ -318,6 +321,7 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
     super.initState();
     _contact = widget.contact;
     _loadFromContact();
+    _loadNotes();
   }
 
   @override
@@ -341,6 +345,37 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
     _focusStatus.dispose();
     _focusAdded.dispose();
     super.dispose();
+  }
+
+  Future<void> _loadNotes() async {
+    if (_contact.id == null) return;
+    final notes = await ContactDatabase.instance.lastNotesByContact(_contact.id!, limit: 3);
+    if (mounted) setState(() => _notes = notes);
+  }
+
+  Future<void> _addNote() async {
+    final controller = TextEditingController();
+    final text = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Новая заметка'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          maxLines: null,
+          decoration: const InputDecoration(labelText: 'Заметка'),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Отмена')),
+          TextButton(onPressed: () => Navigator.pop(context, controller.text.trim()), child: const Text('Сохранить')),
+        ],
+      ),
+    );
+    if (text != null && text.isNotEmpty && _contact.id != null) {
+      await ContactDatabase.instance
+          .insertNote(Note(contactId: _contact.id!, text: text, createdAt: DateTime.now()));
+      await _loadNotes();
+    }
   }
 
   // ==================== helpers ====================
@@ -1221,13 +1256,35 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
                     if (v) _scrollToCard(_notesCardKey);
                   },
                   headerActions: [
-                    TextButton(onPressed: () {/* TODO: добавить заметку */}, child: const Text('Добавить')),
+                    TextButton(onPressed: _addNote, child: const Text('Добавить')),
                     const SizedBox(width: 8),
-                    TextButton(onPressed: () {/* TODO: все заметки */}, child: const Text('Все')),
+                    TextButton(
+                        onPressed: () async {
+                          if (_contact.id == null) return;
+                          await Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                                builder: (_) => NotesListScreen(contact: _contact)),
+                          );
+                          await _loadNotes();
+                        },
+                        child: const Text('Все')),
                   ],
-                  children: const [
-                    Card(elevation: 0, child: ListTile(title: Text('Нет заметок'))),
-                  ],
+                  children: _notes.isEmpty
+                      ? const [
+                          Card(elevation: 0, child: ListTile(title: Text('Нет заметок'))),
+                        ]
+                      : _notes
+                          .map(
+                            (n) => Card(
+                              elevation: 0,
+                              child: ListTile(
+                                title: Text(n.text),
+                                subtitle: Text(DateFormat('dd.MM.yyyy HH:mm').format(n.createdAt)),
+                              ),
+                            ),
+                          )
+                          .toList(),
                 ),
               ),
 
