@@ -111,6 +111,21 @@ class ContactDatabase {
     final id = await db.insert('notes', note.toMap());
     _bumpRevision();
     return id;
+  }
+
+  Future<int> updateNote(Note note) async {
+    final db = await database;
+    final rows = await db.update('notes', note.toMap(), where: 'id = ?', whereArgs: [note.id]);
+    _bumpRevision();
+    return rows;
+  }
+
+  Future<int> deleteNote(int id) async {
+    final db = await database;
+    final rows = await db.delete('notes', where: 'id = ?', whereArgs: [id]);
+    _bumpRevision();
+    return rows;
+  }
     }
 
   Future<List<Note>> notesByContact(int contactId) async {
