@@ -102,6 +102,7 @@ class _AddContactScreenState extends State<AddContactScreen> {
         firstDate: DateTime(1900),
         lastDate: now,
         initialDate: now,
+        locale: const Locale('ru'),
       );
       if (picked != null) {
         _birthDate = picked;
@@ -274,6 +275,7 @@ class _AddContactScreenState extends State<AddContactScreen> {
       firstDate: DateTime(1900),
       lastDate: now,
       initialDate: _addedDate,
+      locale: const Locale('ru'),
     );
     if (picked != null) {
       setState(() {
