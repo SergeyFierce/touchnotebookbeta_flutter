@@ -7,7 +7,6 @@ import '../services/contact_database.dart';
 
 class AddContactScreen extends StatefulWidget {
   final String? category; // preselected category (singular)
-
   const AddContactScreen({super.key, this.category});
 
   @override
@@ -16,6 +15,15 @@ class AddContactScreen extends StatefulWidget {
 
 class _AddContactScreenState extends State<AddContactScreen> {
   final _formKey = GlobalKey<FormState>();
+  final _scroll = ScrollController();
+
+  // Keys для автоскролла к ошибкам
+  final _nameKey = GlobalKey();
+  final _phoneKey = GlobalKey();
+  final _categoryKey = GlobalKey();
+  final _statusKey = GlobalKey();
+
+  // Controllers
   final _nameController = TextEditingController();
   final _birthController = TextEditingController();
   final _professionController = TextEditingController();
@@ -28,6 +36,7 @@ class _AddContactScreenState extends State<AddContactScreen> {
   final _commentController = TextEditingController();
   final _addedController = TextEditingController();
 
+  // State
   DateTime? _birthDate;
   int? _ageManual;
   String? _socialType;
@@ -37,7 +46,8 @@ class _AddContactScreenState extends State<AddContactScreen> {
   final Set<String> _tags = {};
 
   final _phoneMask = MaskTextInputFormatter(
-      mask: '+7 (###) ###-##-##', filter: {'#': RegExp(r'[0-9]')});
+    mask: '+7 (###) ###-##-##', filter: {'#': RegExp(r'[0-9]')},
+  );
 
   @override
   void initState() {
@@ -47,10 +57,15 @@ class _AddContactScreenState extends State<AddContactScreen> {
       _categoryController.text = widget.category!;
     }
     _addedController.text = DateFormat('dd.MM.yyyy').format(_addedDate);
+
+    // обновлять кнопку «Сохранить» и аватарку по мере ввода
+    _nameController.addListener(() => setState(() {}));
+    _phoneController.addListener(() => setState(() {}));
   }
 
   @override
   void dispose() {
+    _scroll.dispose();
     _nameController.dispose();
     _birthController.dispose();
     _professionController.dispose();
@@ -65,6 +80,8 @@ class _AddContactScreenState extends State<AddContactScreen> {
     super.dispose();
   }
 
+  // ==================== helpers ====================
+
   int _calcAge(DateTime birth) {
     final now = DateTime.now();
     var age = now.year - birth.year;
@@ -78,39 +95,58 @@ class _AddContactScreenState extends State<AddContactScreen> {
   String _formatAge(int age) {
     final lastTwo = age % 100;
     final last = age % 10;
-    String suffix;
-    if (lastTwo >= 11 && lastTwo <= 14) {
-      suffix = 'лет';
-    } else if (last == 1) {
-      suffix = 'год';
-    } else if (last >= 2 && last <= 4) {
-      suffix = 'года';
-    } else {
-      suffix = 'лет';
-    }
-    return '$age $suffix';
+    if (lastTwo >= 11 && lastTwo <= 14) return '$age лет';
+    if (last == 1) return '$age год';
+    if (last >= 2 && last <= 4) return '$age года';
+    return '$age лет';
   }
+
+  String _initials(String name) {
+    final parts = name.trim().split(RegExp(r'\s+')).where((e) => e.isNotEmpty).toList();
+    if (parts.isEmpty) return '';
+    if (parts.length == 1) return parts.first.characters.take(2).toString().toUpperCase();
+    return (parts.first.characters.take(1).toString() +
+        parts[1].characters.take(1).toString()).toUpperCase();
+  }
+
+  Future<void> _ensureVisible(GlobalKey key) async {
+    final ctx = key.currentContext;
+    if (ctx != null) {
+      await Scrollable.ensureVisible(
+        ctx, duration: const Duration(milliseconds: 350), curve: Curves.easeOut,
+        alignment: 0.1,
+      );
+    }
+  }
+
+  bool get _phoneValid => _phoneMask.getUnmaskedText().length == 10;
+  bool get _canSave =>
+      _nameController.text.trim().isNotEmpty &&
+          _phoneValid &&
+          _category != null &&
+          _status != null;
+
+  // ==================== pickers ====================
 
   Future<void> _pickBirthOrAge() async {
     final choice = await showModalBottomSheet<String>(
       context: context,
-      builder: (context) =>
-          SafeArea(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                ListTile(
-                  title: const Text('Выбрать дату рождения'),
-                  onTap: () => Navigator.pop(context, 'date'),
-                ),
-                ListTile(
-                  title: const Text('Указать возраст'),
-                  onTap: () => Navigator.pop(context, 'age'),
-                ),
-              ],
-            ),
-          ),
+      showDragHandle: true,
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(leading: Icon(Icons.cake_outlined),
+              title: Text('Выбрать дату рождения'), dense: true,
+            )._value('date'),
+            ListTile(leading: Icon(Icons.numbers),
+              title: Text('Указать возраст'), dense: true,
+            )._value('age'),
+          ],
+        ),
+      ),
     );
+
     if (choice == 'date') {
       final now = DateTime.now();
       final picked = await showDatePicker(
@@ -124,123 +160,105 @@ class _AddContactScreenState extends State<AddContactScreen> {
         _birthDate = picked;
         _ageManual = null;
         final age = _calcAge(picked);
-        _birthController.text =
-        '${DateFormat('dd.MM.yyyy').format(picked)} (${_formatAge(age)})';
+        _birthController.text = '${DateFormat('dd.MM.yyyy').format(picked)} (${_formatAge(age)})';
+        setState(() {});
       }
     } else if (choice == 'age') {
       final ctrl = TextEditingController();
       final age = await showDialog<int>(
         context: context,
-        builder: (context) =>
-            AlertDialog(
-              title: const Text('Возраст'),
-              content: TextField(
-                controller: ctrl,
-                keyboardType: TextInputType.number,
-                decoration: const InputDecoration(hintText: 'Количество лет'),
-              ),
-              actions: [
-                TextButton(
-                    onPressed: () => Navigator.pop(context),
-                    child: const Text('Отмена')),
-                TextButton(
-                  onPressed: () =>
-                      Navigator.pop(context, int.tryParse(ctrl.text)),
-                  child: const Text('OK'),
-                ),
-              ],
+        builder: (context) => AlertDialog(
+          title: const Text('Возраст'),
+          content: TextField(
+            controller: ctrl,
+            keyboardType: TextInputType.number,
+            decoration: const InputDecoration(
+              hintText: 'Количество лет',
+              prefixIcon: Icon(Icons.numbers),
             ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context), child: const Text('Отмена')),
+            FilledButton(onPressed: () => Navigator.pop(context, int.tryParse(ctrl.text)),
+              child: const Text('OK'),
+            ),
+          ],
+        ),
       );
       if (age != null) {
         _ageManual = age;
         _birthDate = null;
         _birthController.text = 'Возраст: ${_formatAge(age)}';
+        setState(() {});
       }
     }
-    setState(() {});
   }
 
   Future<void> _pickSocial() async {
     final result = await showModalBottomSheet<String>(
       context: context,
-      builder: (context) =>
-          SafeArea(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                ListTile(
-                  title: const Text('Telegram'),
-                  onTap: () => Navigator.pop(context, 'Telegram'),
-                ),
-                ListTile(
-                  title: const Text('VK'),
-                  onTap: () => Navigator.pop(context, 'VK'),
-                ),
-                ListTile(
-                  title: const Text('Instagram'),
-                  onTap: () => Navigator.pop(context, 'Instagram'),
-                ),
-                ListTile(
-                  title: const Text('Другая'),
-                  onTap: () => Navigator.pop(context, 'Other'),
-                ),
-              ],
+      showDragHandle: true,
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(leading: Icon(Icons.telegram), title: Text('Telegram'))._value('Telegram'),
+            ListTile(leading: Icon(Icons.groups_2_outlined), title: Text('VK'))._value('VK'),
+            ListTile(leading: Icon(Icons.camera_alt_outlined), title: Text('Instagram'))._value('Instagram'),
+            Divider(height: 0),
+            ListTile(leading: Icon(Icons.more_horiz), title: Text('Другая'))._value('Other'),
+          ],
+        ),
+      ),
+    );
+
+    if (result == null) return;
+
+    if (result == 'Other') {
+      final ctrl = TextEditingController();
+      final other = await showDialog<String>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Другая соцсеть'),
+          content: TextField(
+            controller: ctrl,
+            decoration: const InputDecoration(
+              hintText: 'Название соцсети',
+              prefixIcon: Icon(Icons.alternate_email),
             ),
           ),
-    );
-    if (result != null) {
-      if (result == 'Other') {
-        final ctrl = TextEditingController();
-        final other = await showDialog<String>(
-          context: context,
-          builder: (context) =>
-              AlertDialog(
-                title: const Text('Другая соцсеть'),
-                content: TextField(controller: ctrl),
-                actions: [
-                  TextButton(
-                      onPressed: () => Navigator.pop(context),
-                      child: const Text('Отмена')),
-                  TextButton(
-                      onPressed: () => Navigator.pop(context, ctrl.text),
-                      child: const Text('OK')),
-                ],
-              ),
-        );
-        if (other != null) {
-          _socialType = other;
-          _socialController.text = other;
-        }
-      } else {
-        _socialType = result;
-        _socialController.text = result;
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context), child: const Text('Отмена')),
+            FilledButton(onPressed: () => Navigator.pop(context, ctrl.text.trim()), child: const Text('OK')),
+          ],
+        ),
+      );
+      if (other != null && other.isNotEmpty) {
+        _socialType = other;
+        _socialController.text = other;
+        setState(() {});
       }
+    } else {
+      _socialType = result;
+      _socialController.text = result;
+      setState(() {});
     }
   }
 
   Future<void> _pickCategory() async {
     final result = await showModalBottomSheet<String>(
       context: context,
-      builder: (context) =>
-          SafeArea(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                ListTile(
-                  title: const Text('Партнёр'),
-                  onTap: () => Navigator.pop(context, 'Партнёр'),
-                ),
-                ListTile(
-                  title: const Text('Клиент'),
-                  onTap: () => Navigator.pop(context, 'Клиент'),
-                ),
-                ListTile(
-                  title: const Text('Потенциальный'),
-                  onTap: () => Navigator.pop(context, 'Потенциальный'),
-                ),
-              ],
-            ),
-          ),
+      showDragHandle: true,
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: const [
+            _PickerTile(icon: Icons.handshake, label: 'Партнёр', value: 'Партнёр'),
+            _PickerTile(icon: Icons.people, label: 'Клиент', value: 'Клиент'),
+            _PickerTile(icon: Icons.person_add_alt_1, label: 'Потенциальный', value: 'Потенциальный'),
+          ],
+        ),
+      ),
     );
     if (result != null) {
       setState(() {
@@ -249,6 +267,7 @@ class _AddContactScreenState extends State<AddContactScreen> {
         _categoryController.text = result;
         _statusController.text = '';
       });
+      await _ensureVisible(_statusKey); // удобно — сразу к выбору статуса
     }
   }
 
@@ -262,19 +281,20 @@ class _AddContactScreenState extends State<AddContactScreen> {
     final options = map[_category]!;
     final result = await showModalBottomSheet<String>(
       context: context,
-      builder: (context) =>
-          SafeArea(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                for (final s in options)
-                  ListTile(
-                    title: Text(s),
-                    onTap: () => Navigator.pop(context, s),
-                  ),
-              ],
-            ),
-          ),
+      showDragHandle: true,
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            for (final s in options)
+              ListTile(
+                leading: const Icon(Icons.label_outline),
+                title: Text(s),
+                onTap: () => Navigator.pop(context, s),
+              ),
+          ],
+        ),
+      ),
     );
     if (result != null) {
       setState(() {
@@ -301,255 +321,349 @@ class _AddContactScreenState extends State<AddContactScreen> {
     }
   }
 
-  Widget _tagChip(String label, Color color, Color textColor) {
-    final selected = _tags.contains(label);
-    return FilterChip(
-      label: Text(label),
-      selected: selected,
-      selectedColor: color,
-      labelStyle: TextStyle(color: textColor),
-      onSelected: (v) {
-        setState(() {
-          if (v) {
-            _tags.add(label);
-          } else {
-            _tags.remove(label);
-          }
-        });
-      },
-    );
-  }
+  // ==================== save ====================
 
   Future<void> _save() async {
-    if (_formKey.currentState?.validate() != true) return;
+    FocusScope.of(context).unfocus();
+
+    final valid = _formKey.currentState?.validate() ?? false;
+    if (!valid) {
+      // прокрутка к первому потенциальному полю с ошибкой
+      if (_nameController.text.trim().isEmpty) {
+        await _ensureVisible(_nameKey);
+        return;
+      }
+      if (!_phoneValid) {
+        await _ensureVisible(_phoneKey);
+        return;
+      }
+    }
     if (_category == null) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('Выберите категорию')));
+      await _ensureVisible(_categoryKey);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Выберите категорию')),
+      );
       return;
     }
     if (_status == null) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('Выберите статус')));
+      await _ensureVisible(_statusKey);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Выберите статус')),
+      );
       return;
     }
+
     final contact = Contact(
       name: _nameController.text.trim(),
       birthDate: _birthDate,
       ageManual: _ageManual,
-      profession: _professionController.text
-          .trim()
-          .isEmpty
+      profession: _professionController.text.trim().isEmpty
           ? null
           : _professionController.text.trim(),
-      city: _cityController.text
-          .trim()
-          .isEmpty
+      city: _cityController.text.trim().isEmpty
           ? null
           : _cityController.text.trim(),
       phone: _phoneController.text.trim(),
-      email: _emailController.text
-          .trim()
-          .isEmpty
+      email: _emailController.text.trim().isEmpty
           ? null
           : _emailController.text.trim(),
       social: _socialType,
       category: _category!,
       status: _status!,
       tags: _tags.toList(),
-      comment: _commentController.text
-          .trim()
-          .isEmpty
+      comment: _commentController.text.trim().isEmpty
           ? null
           : _commentController.text.trim(),
       createdAt: _addedDate,
     );
+
     await ContactDatabase.instance.insert(contact);
-    if (mounted) {
-      Navigator.pop(context, true);
-    }
+    if (mounted) Navigator.pop(context, true);
   }
+
+  // ==================== UI ====================
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final initials = _initials(_nameController.text);
+
+    Widget sectionTitle(String text) => Padding(
+      padding: const EdgeInsets.fromLTRB(4, 16, 4, 8),
+      child: Text(
+        text,
+        style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
+      ),
+    );
+
+    InputDecoration inputDec(String label, {IconData? icon, String? hint}) {
+      return InputDecoration(
+        labelText: label,
+        hintText: hint,
+        prefixIcon: icon != null ? Icon(icon) : null,
+        filled: true,
+        fillColor: theme.colorScheme.surfaceVariant,
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: theme.dividerColor),
+        ),
+      );
+    }
+
+    Widget tile({
+      required Key key,
+      required IconData icon,
+      required String title,
+      String? value,
+      String? hint,
+      VoidCallback? onTap,
+    }) {
+      final hasValue = value != null && value.isNotEmpty;
+      return ListTile(
+        key: key,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 12),
+        leading: Icon(icon),
+        title: Text(title),
+        subtitle: hasValue
+            ? Text(value!)
+            : (hint != null ? Text(hint, style: TextStyle(color: theme.hintColor)) : null),
+        trailing: const Icon(Icons.chevron_right),
+        onTap: onTap,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        tileColor: theme.colorScheme.surfaceVariant,
+      );
+    }
+
+    Widget tagChip(String label) {
+      final selected = _tags.contains(label);
+      return ChoiceChip(
+        label: Text(label),
+        selected: selected,
+        onSelected: (v) {
+          setState(() {
+            if (v) {
+              _tags.add(label);
+            } else {
+              _tags.remove(label);
+            }
+          });
+        },
+      );
+    }
+
     return Scaffold(
       appBar: AppBar(
         leading: const BackButton(),
         title: const Text('Добавить контакт'),
-        actions: [
-          TextButton.icon(
-            onPressed: _save,
-            icon: const Icon(Icons.check),
-            label: const Text('Сохранить'),
-            style: TextButton.styleFrom(foregroundColor: Colors.white),
-          ),
-        ],
       ),
-      body: Form(
-        key: _formKey,
-        child: ListView(
-          padding: const EdgeInsets.all(16),
-          children: [
-            const Text(
-              'Личная информация',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 8),
-            TextFormField(
-              controller: _nameController,
-              decoration: const InputDecoration(
-                labelText: 'ФИО*',
-                prefixIcon: Icon(Icons.person),
+      body: SafeArea(
+        child: Form(
+          key: _formKey,
+          child: ListView(
+            controller: _scroll,
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 120),
+            children: [
+              // header с аватаром
+              Card(
+                elevation: 0,
+                color: theme.colorScheme.surfaceVariant,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Row(
+                    children: [
+                      CircleAvatar(
+                        radius: 28,
+                        child: Text(
+                          initials.isEmpty ? '👤' : initials,
+                          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          _nameController.text.trim().isEmpty
+                              ? 'Новый контакт'
+                              : _nameController.text.trim(),
+                          style: theme.textTheme.titleMedium,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               ),
-              validator: (v) =>
-                  v == null || v.trim().isEmpty ? 'Введите ФИО' : null,
-              maxLines: 2,
-            ),
-            const SizedBox(height: 12),
-            TextFormField(
-              controller: _birthController,
-              decoration: const InputDecoration(
-                labelText: 'Дата рождения / Возраст',
-                prefixIcon: Icon(Icons.cake),
+
+              sectionTitle('Основное'),
+              // ФИО
+              KeyedSubtree(
+                key: _nameKey,
+                child: TextFormField(
+                  controller: _nameController,
+                  maxLines: 1,
+                  textInputAction: TextInputAction.next,
+                  decoration: inputDec('ФИО*', icon: Icons.person_outline),
+                  validator: (v) => v == null || v.trim().isEmpty ? 'Введите ФИО' : null,
+                ),
               ),
-              readOnly: true,
-              onTap: _pickBirthOrAge,
-            ),
-            const SizedBox(height: 12),
-            TextFormField(
-              controller: _professionController,
-              decoration: const InputDecoration(
-                labelText: 'Профессия',
-                prefixIcon: Icon(Icons.work),
+              const SizedBox(height: 12),
+              // Телефон
+              KeyedSubtree(
+                key: _phoneKey,
+                child: TextFormField(
+                  controller: _phoneController,
+                  keyboardType: TextInputType.phone,
+                  textInputAction: TextInputAction.next,
+                  inputFormatters: [_phoneMask],
+                  decoration: inputDec('Телефон*', icon: Icons.phone_outlined),
+                  validator: (v) => _phoneValid ? null : 'Введите телефон',
+                ),
               ),
-            ),
-            const SizedBox(height: 12),
-            TextFormField(
-              controller: _cityController,
-              decoration: const InputDecoration(
-                labelText: 'Город проживания',
-                prefixIcon: Icon(Icons.location_city),
+              const SizedBox(height: 12),
+              // Email
+              TextFormField(
+                controller: _emailController,
+                keyboardType: TextInputType.emailAddress,
+                textInputAction: TextInputAction.next,
+                decoration: inputDec('Email', icon: Icons.alternate_email_outlined),
+                validator: (v) {
+                  if (v == null || v.isEmpty) return null;
+                  final regex = RegExp(r'.+@.+[.].+');
+                  return regex.hasMatch(v) ? null : 'Некорректный email';
+                },
               ),
-            ),
-            const SizedBox(height: 24),
-            const Text(
-              'Контактные данные',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 8),
-            TextFormField(
-              controller: _phoneController,
-              decoration: const InputDecoration(
-                labelText: 'Телефон*',
-                prefixIcon: Icon(Icons.phone),
+
+              sectionTitle('Дополнительно'),
+              tile(
+                key: const ValueKey('birth'),
+                icon: Icons.cake_outlined,
+                title: 'Дата рождения / возраст',
+                value: _birthController.text,
+                hint: 'Указать дату или возраст',
+                onTap: _pickBirthOrAge,
               ),
-              keyboardType: TextInputType.phone,
-              inputFormatters: [_phoneMask],
-              validator: (v) =>
-                  _phoneMask.getUnmaskedText().length == 10
-                      ? null
-                      : 'Введите телефон',
-            ),
-            const SizedBox(height: 12),
-            TextFormField(
-              controller: _emailController,
-              decoration: const InputDecoration(
-                labelText: 'Email',
-                prefixIcon: Icon(Icons.email),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: _professionController,
+                textInputAction: TextInputAction.next,
+                decoration: inputDec('Профессия', icon: Icons.work_outline),
               ),
-              keyboardType: TextInputType.emailAddress,
-              validator: (v) {
-                if (v == null || v.isEmpty) return null;
-                final regex = RegExp('.+@.+[.].+');
-                return regex.hasMatch(v) ? null : 'Некорректный email';
-              },
-            ),
-            const SizedBox(height: 12),
-            TextFormField(
-              controller: _socialController,
-              decoration: const InputDecoration(
-                labelText: 'Соцсеть',
-                prefixIcon: Icon(Icons.link),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: _cityController,
+                textInputAction: TextInputAction.next,
+                decoration: inputDec('Город проживания', icon: Icons.location_city_outlined),
               ),
-              readOnly: true,
-              onTap: _pickSocial,
-            ),
-            const SizedBox(height: 24),
-            const Text(
-              'Категория и статус',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 8),
-            TextFormField(
-              controller: _categoryController,
-              decoration: const InputDecoration(
-                labelText: 'Категория*',
-                helperText: 'Категория определяет доступные статусы',
-                hintText: 'Выберите категорию',
-                prefixIcon: Icon(Icons.category),
+              const SizedBox(height: 12),
+              tile(
+                key: const ValueKey('social'),
+                icon: Icons.alternate_email,
+                title: 'Соцсеть',
+                value: _socialController.text,
+                hint: 'Выбрать соцсеть',
+                onTap: _pickSocial,
               ),
-              readOnly: true,
-              onTap: _pickCategory,
-              validator: (v) =>
-                  v == null || v.isEmpty ? 'Выберите категорию' : null,
-            ),
-            const SizedBox(height: 12),
-            TextFormField(
-              controller: _statusController,
-              decoration: InputDecoration(
-                labelText: 'Статус*',
-                helperText: _category == null
-                    ? 'Сначала выберите категорию'
-                    : 'Статусы зависят от категории',
-                hintText:
-                    _category == null ? 'Недоступно' : 'Выберите статус',
-                prefixIcon: const Icon(Icons.flag),
+
+              sectionTitle('Категория и статус'),
+              tile(
+                key: _categoryKey,
+                icon: Icons.category_outlined,
+                title: 'Категория*',
+                value: _categoryController.text,
+                hint: 'Выберите категорию',
+                onTap: _pickCategory,
               ),
-              readOnly: true,
-              enabled: _category != null,
-              onTap: _category != null ? _pickStatus : null,
-              validator: (v) =>
-                  v == null || v.isEmpty ? 'Выберите статус' : null,
-            ),
-            const SizedBox(height: 12),
-            Wrap(
-              spacing: 8,
-              children: [
-                _tagChip('Новый', Colors.white, Colors.black),
-                _tagChip('Напомнить', Colors.purple, Colors.white),
-                _tagChip('VIP', Colors.yellow, Colors.black),
-              ],
-            ),
-            const SizedBox(height: 24),
-            const Text(
-              'Прочее',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 8),
-            TextFormField(
-              controller: _commentController,
-              decoration: const InputDecoration(
-                labelText: 'Комментарий',
-                prefixIcon: Icon(Icons.comment),
+              const SizedBox(height: 12),
+              tile(
+                key: _statusKey,
+                icon: Icons.flag_outlined,
+                title: 'Статус*',
+                value: _statusController.text,
+                hint: _category == null ? 'Сначала выберите категорию' : 'Выберите статус',
+                onTap: _category != null ? _pickStatus : null,
               ),
-              maxLines: 3,
-            ),
-            const SizedBox(height: 12),
-            TextFormField(
-              controller: _addedController,
-              decoration: const InputDecoration(
-                labelText: 'Дата добавления',
-                prefixIcon: Icon(Icons.today),
+
+              sectionTitle('Теги'),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  tagChip('Новый'),
+                  tagChip('Напомнить'),
+                  tagChip('VIP'),
+                ],
               ),
-              readOnly: true,
-              onTap: _pickAddedDate,
-            ),
-            const SizedBox(height: 16),
-            const Text(
-              'Заметки добавляются на экране Деталей контакта',
-              style: TextStyle(color: Colors.grey),
-            ),
-          ],
+
+              sectionTitle('Комментарий'),
+              TextFormField(
+                controller: _commentController,
+                maxLines: 3,
+                decoration: inputDec('Комментарий', icon: Icons.notes_outlined),
+              ),
+
+              sectionTitle('Служебное'),
+              tile(
+                key: const ValueKey('added'),
+                icon: Icons.event_outlined,
+                title: 'Дата добавления',
+                value: _addedController.text,
+                onTap: _pickAddedDate,
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Заметки добавляются на экране Деталей контакта',
+                style: TextStyle(color: theme.hintColor),
+              ),
+            ],
+          ),
         ),
+      ),
+
+      // Кнопка снизу
+      bottomNavigationBar: SafeArea(
+        minimum: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+        child: FilledButton.icon(
+          onPressed: _canSave ? _save : null,
+          icon: const Icon(Icons.save_outlined),
+          label: const Padding(
+            padding: EdgeInsets.symmetric(vertical: 12),
+            child: Text('Сохранить контакт'),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ===== вспомогательные виджеты/расширения =====
+
+class _PickerTile extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final String value;
+  const _PickerTile({required this.icon, required this.label, required this.value});
+
+  @override
+  Widget build(BuildContext context) {
+    return ListTile(
+      leading: Icon(icon),
+      title: Text(label),
+      onTap: () => Navigator.pop(context, value),
+    );
+  }
+}
+
+// Позволяет коротко указывать возвращаемое value у ListTile в bottom sheet
+extension on ListTile {
+  Widget _value(String v) {
+    return Builder(
+      builder: (context) => ListTile(
+        leading: leading,
+        title: title,
+        dense: dense,
+        onTap: () => Navigator.pop(context, v),
       ),
     );
   }
