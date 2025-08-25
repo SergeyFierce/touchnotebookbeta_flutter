@@ -120,34 +120,39 @@ class _HomeScreenState extends State<HomeScreen> {
           ],
         ),
       ),
-      body: ListView.separated(
-        padding: const EdgeInsets.all(16),
-        itemBuilder: (context, index) {
-          final cat = categories[index];
-          return FutureBuilder<int>(
-            future: ContactDatabase.instance.countByCategory(cat.value),
-            builder: (context, snapshot) {
-              final count = snapshot.data ?? 0;
-              return _CategoryCard(
-                category: cat,
-                subtitle: '$count ${_plural(count, cat.forms)}',
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => ContactListScreen(
-                        category: cat.value,
-                        title: cat.title,
-                      ),
-                    ),
-                  ).then((_) => setState(() {}));
+      body: ValueListenableBuilder<int>(
+        valueListenable: ContactDatabase.instance.revision,
+        builder: (context, _rev, _) {
+          return ListView.separated(
+            padding: const EdgeInsets.all(16),
+            itemBuilder: (context, index) {
+              final cat = categories[index];
+              return FutureBuilder<int>(
+                future: ContactDatabase.instance.countByCategory(cat.value),
+                builder: (context, snapshot) {
+                  final count = snapshot.data ?? 0;
+                  return _CategoryCard(
+                    category: cat,
+                    subtitle: '$count ${_plural(count, cat.forms)}',
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => ContactListScreen(
+                            category: cat.value,
+                            title: cat.title,
+                          ),
+                        ),
+                      ).then((_) => setState(() {}));
+                    },
+                  );
                 },
               );
             },
+            separatorBuilder: (_, __) => const SizedBox(height: 12),
+            itemCount: categories.length,
           );
         },
-        separatorBuilder: (_, __) => const SizedBox(height: 12),
-        itemCount: categories.length,
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () async {

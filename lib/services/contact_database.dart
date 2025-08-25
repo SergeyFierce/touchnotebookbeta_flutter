@@ -1,12 +1,17 @@
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart' as p;
 
+import 'package:flutter/foundation.dart'; // <-- добавили
 import '../models/contact.dart';
 
 class ContactDatabase {
   ContactDatabase._();
   static final ContactDatabase instance = ContactDatabase._();
   Database? _db;
+
+  // <-- НОВОЕ: ревизия БД, на неё подпишется главный экран
+  final ValueNotifier<int> revision = ValueNotifier<int>(0);
+  void _bumpRevision() => revision.value++;
 
   Future<Database> get database async {
     if (_db != null) return _db!;
@@ -41,7 +46,9 @@ class ContactDatabase {
 
   Future<int> insert(Contact contact) async {
     final db = await database;
-    return await db.insert('contacts', contact.toMap());
+    final id = await db.insert('contacts', contact.toMap());
+    _bumpRevision(); // <-- сообщаем подписчикам
+    return id;
   }
 
   Future<List<Contact>> contactsByCategory(String category) async {
@@ -57,13 +64,17 @@ class ContactDatabase {
 
   Future<int> delete(int id) async {
     final db = await database;
-    return await db.delete('contacts', where: 'id = ?', whereArgs: [id]);
+    final rows = await db.delete('contacts', where: 'id = ?', whereArgs: [id]);
+    _bumpRevision(); // <-- и тут тоже
+    return rows;
   }
 
   Future<int> countByCategory(String category) async {
     final db = await database;
     final result = await db.rawQuery(
-        'SELECT COUNT(*) as c FROM contacts WHERE category = ?', [category]);
+      'SELECT COUNT(*) as c FROM contacts WHERE category = ?',
+      [category],
+    );
     return Sqflite.firstIntValue(result) ?? 0;
   }
 }

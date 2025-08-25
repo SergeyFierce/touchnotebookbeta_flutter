@@ -1,19 +1,21 @@
 import 'dart:async';
-
 import 'package:flutter/material.dart';
 
+import '../app.dart'; // для App.navigatorKey
 import '../models/contact.dart';
 import '../services/contact_database.dart';
 import 'add_contact_screen.dart';
 
 class ContactListScreen extends StatefulWidget {
   final String category; // singular value for DB
-  final String title; // display title
+  final String title;    // display title
+  final int? scrollToId; // к какому id проскроллить/подсветить при открытии
 
   const ContactListScreen({
     super.key,
     required this.category,
     required this.title,
+    this.scrollToId,
   });
 
   @override
@@ -22,8 +24,19 @@ class ContactListScreen extends StatefulWidget {
 
 class _ContactListScreenState extends State<ContactListScreen> {
   final TextEditingController _searchController = TextEditingController();
+  final ScrollController _scroll = ScrollController();
+  int _pulseSeed = 0; // триггер импульса для карточек
+
+  // ключи карточек по id для ensureVisible
+  final Map<int, GlobalKey> _itemKeys = {};
+
   Timer? _debounce;
   Timer? _snackTimer;
+
+  // подсветка восстановленного контакта
+  int? _highlightId;
+  Timer? _highlightTimer;
+
   String _query = '';
   SortOption _sort = SortOption.dateDesc;
   Set<String> _statusFilters = {};
@@ -36,18 +49,62 @@ class _ContactListScreenState extends State<ContactListScreen> {
     _loadContacts();
   }
 
+  GlobalKey _keyFor(Contact c) {
+    final id = c.id;
+    if (id == null) return GlobalKey();
+    return _itemKeys[id] ??= GlobalKey(debugLabel: 'contact_$id');
+  }
+
+  Future<void> _maybeScrollTo(int id) async {
+    await Future.delayed(Duration.zero); // дождаться построения
+    final key = _itemKeys[id];
+    final ctx = key?.currentContext;
+    if (ctx != null) {
+      await Scrollable.ensureVisible(
+        ctx,
+        alignment: 0.1,
+        duration: const Duration(milliseconds: 400),
+        curve: Curves.easeOut,
+      );
+    }
+  }
+
+  void _flashHighlight(int id) {
+    _highlightTimer?.cancel();
+    setState(() {
+      _highlightId = id;
+      _pulseSeed++; // <- новый триггер для импульса
+    });
+
+    _highlightTimer = Timer(const Duration(milliseconds: 1800), () {
+      if (mounted && _highlightId == id) {
+        setState(() => _highlightId = null);
+      }
+    });
+  }
+
+
   Future<void> _loadContacts() async {
     final contacts =
     await ContactDatabase.instance.contactsByCategory(widget.category);
     if (!mounted) return;
     setState(() => _all = contacts);
+
+    // автоскролл/подсветка при открытии по scrollToId
+    if (widget.scrollToId != null && _all.any((e) => e.id == widget.scrollToId)) {
+      final id = widget.scrollToId!;
+      await _maybeScrollTo(id);
+      _flashHighlight(id);
+    }
   }
 
   @override
   void dispose() {
     _debounce?.cancel();
     _snackTimer?.cancel();
+    _highlightTimer?.cancel();
     _searchController.dispose();
+    _scroll.dispose();
     super.dispose();
   }
 
@@ -186,6 +243,42 @@ class _ContactListScreenState extends State<ContactListScreen> {
     }
   }
 
+  /// Переходит к нужной категории (если надо) и подсвечивает восстановленный контакт.
+  Future<void> _goToRestored(Contact restored, int restoredId) async {
+    // уже на нужной категории
+    if (mounted && widget.category == restored.category) {
+      await _loadContacts();
+      await _maybeScrollTo(restoredId);
+      _flashHighlight(restoredId);
+      return;
+    }
+
+    // пушим новую страницу категории, она сама проскроллит и подсветит по scrollToId
+    final String title = _titleForCategory(restored.category);
+    App.navigatorKey.currentState?.push(
+      MaterialPageRoute(
+        builder: (_) => ContactListScreen(
+          category: restored.category,
+          title: title,
+          scrollToId: restoredId,
+        ),
+      ),
+    );
+  }
+
+  String _titleForCategory(String cat) {
+    switch (cat) {
+      case 'Партнёр':
+        return 'Партнёры';
+      case 'Клиент':
+        return 'Клиенты';
+      case 'Потенциальный':
+        return 'Потенциальные';
+      default:
+        return cat;
+    }
+  }
+
   /// Удаляет контакт и показывает SnackBar с Undo + индикатором и обратным отсчётом.
   Future<void> _deleteWithUndo(Contact c) async {
     // 1) Удаляем из БД (если есть id)
@@ -197,47 +290,45 @@ class _ContactListScreenState extends State<ContactListScreen> {
       _all.removeWhere((e) => e.id == c.id);
     });
 
-    // 3) Показываем snackbar с Undo + таймер
+    // 3) Snackbar с ручным таймером + Undo
     if (!mounted) return;
     final messenger = ScaffoldMessenger.of(context);
     const duration = Duration(seconds: 4);
 
     messenger.clearSnackBars();
     _snackTimer?.cancel();
+
     final endTime = DateTime.now().add(duration);
     final controller = messenger.showSnackBar(
       SnackBar(
-        // Контролируем длительность вручную, чтобы таймер не сбрасывался
-        // при переходах и перестройках.
-        duration: const Duration(days: 1),
+        duration: const Duration(days: 1), // закроем вручную таймером
         content: _UndoSnackContent(endTime: endTime, duration: duration),
         action: SnackBarAction(
           label: 'Отменить',
           onPressed: () async {
             _snackTimer?.cancel();
-            // Hide snackbar immediately after pressing undo to avoid it
-            // lingering on screen while the contact is restored.
             messenger.hideCurrentSnackBar();
-            // Пытаемся вернуть с прежним id.
+
+            int? restoredId;
             try {
-              await ContactDatabase.instance.insert(c);
+              // восстановить с тем же id
+              restoredId = await ContactDatabase.instance.insert(c);
             } catch (_) {
-              // На случай конфликта id — вставляем без id (сгенерируется новый)
+              // конфликт id — вставим без id
+              restoredId =
               await ContactDatabase.instance.insert(c.copyWith(id: null));
-              final newId =
-                  await ContactDatabase.instance.insert(c.copyWith(id: null));
-              setState(() {
-                _all.add(c.copyWith(id: newId));
-              });
             }
-            await _loadContacts();
+
+            await _goToRestored(c, restoredId!);
           },
         ),
       ),
     );
-    _snackTimer =
-        Timer(endTime.difference(DateTime.now()), () => controller.close());
-    _snackTimer = Timer(duration, () => controller.close());
+
+    _snackTimer = Timer(
+      endTime.difference(DateTime.now()),
+          () => controller.close(),
+    );
   }
 
   List<Contact> get _filtered {
@@ -354,13 +445,17 @@ class _ContactListScreenState extends State<ContactListScreen> {
               ),
             )
                 : ListView.separated(
-              padding:
-              const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              controller: _scroll,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               itemBuilder: (context, index) {
                 final c = contacts[index];
+                final wrapperKey = (c.id != null) ? _keyFor(c) : null;
+                final isHighlighted = (c.id != null && c.id == _highlightId);
+
                 return Dismissible(
-                  key: ValueKey(c.id ??
-                      '${c.name}_${c.createdAt.millisecondsSinceEpoch}'),
+                  key: ValueKey(
+                    c.id ?? '${c.name}_${c.createdAt.millisecondsSinceEpoch}',
+                  ),
                   direction: DismissDirection.endToStart,
                   background: Container(
                     alignment: Alignment.centerRight,
@@ -368,16 +463,18 @@ class _ContactListScreenState extends State<ContactListScreen> {
                     color: Colors.red,
                     child: const Icon(Icons.delete, color: Colors.white),
                   ),
-                  confirmDismiss: (_) async {
-                    // Можно запросить подтверждение, если хочешь
-                    return true;
-                  },
+                  confirmDismiss: (_) async => true,
                   onDismissed: (_) async {
                     await _deleteWithUndo(c);
                   },
-                  child: _ContactCard(
-                    contact: c,
-                    onLongPress: () => _showContactMenu(c),
+                  child: RepaintBoundary( // изолируем перерисовку эффекта
+                    key: wrapperKey, // для ensureVisible
+                    child: _ContactCard(
+                      contact: c,
+                      pulse: isHighlighted,
+                      pulseSeed: _pulseSeed,// ← эффект «нажатия без нажатия»
+                      onLongPress: () => _showContactMenu(c),
+                    ),
                   ),
                 );
               },
@@ -392,8 +489,7 @@ class _ContactListScreenState extends State<ContactListScreen> {
           final saved = await Navigator.push(
             context,
             MaterialPageRoute(
-              builder: (context) =>
-                  AddContactScreen(category: widget.category),
+              builder: (context) => AddContactScreen(category: widget.category),
             ),
           );
           if (saved == true) {
@@ -415,120 +511,220 @@ class _ContactListScreenState extends State<ContactListScreen> {
 class _ContactCard extends StatefulWidget {
   final Contact contact;
   final VoidCallback? onLongPress;
-  const _ContactCard({required this.contact, this.onLongPress});
+  final bool pulse;
+  final int pulseSeed; // <- NEW
+
+  const _ContactCard({
+    required this.contact,
+    this.onLongPress,
+    this.pulse = false,
+    required this.pulseSeed, // <- NEW (сделаем обязательным)
+  });
+
 
   @override
   State<_ContactCard> createState() => _ContactCardState();
 }
 
-class _ContactCardState extends State<_ContactCard> {
+class _ContactCardState extends State<_ContactCard> with TickerProviderStateMixin {
   bool _pressed = false;
+
+  late final AnimationController _pulseCtrl;
+  late final Animation<double> _scaleAnim;
+  late final Animation<double> _glowAnim; // для внутреннего мягкого свечения
 
   void _set(bool v) => setState(() => _pressed = v);
 
   @override
+  void initState() {
+    super.initState();
+
+    _pulseCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 3250),
+    );
+
+    // последовательность: чуть сжаться -> вернуться
+    _scaleAnim = TweenSequence<double>([
+      TweenSequenceItem(
+        tween: Tween(begin: 1.0, end: 0.965).chain(CurveTween(curve: Curves.easeOutCubic)),
+        weight: 40,
+      ),
+      TweenSequenceItem(
+        tween: Tween(begin: 0.965, end: 1.0).chain(CurveTween(curve: Curves.easeOutBack)),
+        weight: 60,
+      ),
+    ]).animate(_pulseCtrl);
+
+    // внутренний «блик» (быстрый всплеск и затухание)
+    _glowAnim = TweenSequence<double>([
+      TweenSequenceItem(
+        tween: Tween(begin: 0.0, end: 1.0).chain(CurveTween(curve: Curves.easeOutCubic)),
+        weight: 35,
+      ),
+      TweenSequenceItem(
+        tween: Tween(begin: 1.0, end: 0.0).chain(CurveTween(curve: Curves.easeOutQuart)),
+        weight: 65,
+      ),
+    ]).animate(_pulseCtrl);
+
+    // если уже пришли в состоянии подсветки (напр. при автоскролле) — сыграем сразу
+    if (widget.pulse) {
+      _pulseCtrl.forward(from: 0);
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant _ContactCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // 1) флаг стал true -> запуск
+    if (!oldWidget.pulse && widget.pulse) {
+      _pulseCtrl.forward(from: 0);
+    }
+    // 2) сменился seed при pulse=true -> гарантированный перезапуск
+    if (widget.pulse && oldWidget.pulseSeed != widget.pulseSeed) {
+      _pulseCtrl.forward(from: 0);
+    }
+  }
+
+  @override
+  void dispose() {
+    _pulseCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final border = BorderRadius.circular(12);
-    return AnimatedScale(
-      scale: _pressed ? 0.98 : 1,
-      duration: const Duration(milliseconds: 100),
-      child: Material(
-        borderRadius: border,
-        color: Theme.of(context).colorScheme.surfaceVariant,
-        elevation: 2,
-        child: InkWell(
-          borderRadius: border,
-          onTap: () {},
-          onLongPress: () {
-            _set(false);
-            widget.onLongPress?.call();
-          },
-          onTapDown: (_) => _set(true),
-          onTapCancel: () => _set(false),
-          onTapUp: (_) => _set(false),
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Первая строка: Имя + теги справа
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(
-                      child: Text(
-                        widget.contact.name,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context)
-                            .textTheme
-                            .titleLarge
-                            ?.copyWith(fontWeight: FontWeight.w600),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    ConstrainedBox(
-                      constraints: const BoxConstraints(maxWidth: 200),
-                      child: Wrap(
-                        spacing: 4,
-                        runSpacing: 4,
-                        children: [
-                          for (final tag in widget.contact.tags)
-                            Chip(
-                              label: Text(
-                                tag,
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .bodySmall
-                                    ?.copyWith(
-                                  fontSize: 10,
-                                  color: _tagTextColor(tag),
-                                ),
-                              ),
-                              backgroundColor: _tagColor(tag),
-                              visualDensity: const VisualDensity(
-                                  horizontal: -4, vertical: -4),
-                              materialTapTargetSize:
-                              MaterialTapTargetSize.shrinkWrap,
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 6, vertical: 0),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(30),
-                              ),
-                            ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 4),
-                // Телефон
-                Text(
-                  widget.contact.phone,
-                  style: Theme.of(context).textTheme.bodyMedium,
-                ),
-                const SizedBox(height: 8),
-                // Статус под телефоном (компактный чип)
-                Chip(
-                  label: Text(
-                    widget.contact.status,
-                    style: Theme.of(context)
-                        .textTheme
-                        .bodySmall
-                        ?.copyWith(fontSize: 10, color: Colors.white),
-                  ),
-                  backgroundColor: _statusColor(widget.contact.status),
-                  visualDensity:
-                  const VisualDensity(horizontal: -4, vertical: -4),
-                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  padding:
-                  const EdgeInsets.symmetric(horizontal: 6, vertical: 0),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(30),
-                  ),
+    final scheme = Theme.of(context).colorScheme;
+
+    return AnimatedBuilder(
+      animation: _pulseCtrl,
+      builder: (context, child) {
+        // мягкий внутренний «блик»
+        final glow = scheme.primary.withOpacity(0.14 * _glowAnim.value);
+        final shadowColor = scheme.primary.withOpacity(0.20 * _glowAnim.value);
+        final blur = 24 * _glowAnim.value + 0.0;
+
+        return Transform.scale(
+          scale: _scaleAnim.value, // эффект «как при тапе»
+          child: Container(
+            decoration: BoxDecoration(
+              borderRadius: border,
+              // тонкая подсветка изнутри
+              boxShadow: _glowAnim.value == 0
+                  ? null
+                  : [
+                BoxShadow(
+                  color: shadowColor,
+                  blurRadius: blur,
+                  spreadRadius: 1.5 * _glowAnim.value,
                 ),
               ],
             ),
+            child: Stack(
+              children: [
+                // сама карточка
+                _buildCard(context, border),
+                // тонкий внутренний слой, «заливающий» фон на миг
+                if (_glowAnim.value > 0)
+                  Positioned.fill(
+                    child: IgnorePointer(
+                      child: Container(
+                        decoration: BoxDecoration(
+                          borderRadius: border,
+                          color: glow,
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildCard(BuildContext context, BorderRadius border) {
+    return Material(
+      borderRadius: border,
+      color: Theme.of(context).colorScheme.surfaceVariant,
+      elevation: 2,
+      child: InkWell(
+        borderRadius: border,
+        onTap: () {},
+        onLongPress: () {
+          _set(false);
+          widget.onLongPress?.call();
+        },
+        onTapDown: (_) => _set(true),
+        onTapCancel: () => _set(false),
+        onTapUp: (_) => _set(false),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Имя + теги справа
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Text(
+                      widget.contact.name,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context)
+                          .textTheme
+                          .titleLarge
+                          ?.copyWith(fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 200),
+                    child: Wrap(
+                      spacing: 4,
+                      runSpacing: 4,
+                      children: [
+                        for (final tag in widget.contact.tags)
+                          Chip(
+                            label: Text(
+                              tag,
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .bodySmall
+                                  ?.copyWith(fontSize: 10, color: _tagTextColor(tag)),
+                            ),
+                            backgroundColor: _tagColor(tag),
+                            visualDensity: const VisualDensity(horizontal: -4, vertical: -4),
+                            materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 0),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(30),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 4),
+              Text(widget.contact.phone, style: Theme.of(context).textTheme.bodyMedium),
+              const SizedBox(height: 8),
+              Chip(
+                label: Text(
+                  widget.contact.status,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(fontSize: 10, color: Colors.white),
+                ),
+                backgroundColor: _statusColor(widget.contact.status),
+                visualDensity: const VisualDensity(horizontal: -4, vertical: -4),
+                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 0),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+              ),
+            ],
           ),
         ),
       ),
@@ -579,8 +775,7 @@ class _ContactCardState extends State<_ContactCard> {
   }
 }
 
-/// Контент SnackBar с обратным отсчётом и прогресс-баром,
-/// синхронизированным с duration самого SnackBar.
+/// Контент SnackBar с обратным отсчётом и прогресс-баром.
 class _UndoSnackContent extends StatefulWidget {
   final DateTime endTime;
   final Duration duration;
@@ -589,7 +784,6 @@ class _UndoSnackContent extends StatefulWidget {
   @override
   State<_UndoSnackContent> createState() => _UndoSnackContentState();
 }
-
 
 class _UndoSnackContentState extends State<_UndoSnackContent>
     with SingleTickerProviderStateMixin {
@@ -604,11 +798,11 @@ class _UndoSnackContentState extends State<_UndoSnackContent>
 
   void _syncAndRun() {
     final now = DateTime.now();
-    final frac = _fractionRemaining(now);               // 0..1
+    final frac = _fractionRemaining(now); // 0..1
     final msLeft = (widget.duration.inMilliseconds * frac).round();
-    // Сначала ставим текущее значение БЕЗ анимации — чтобы не было «вспышки»
+
     _ctrl.stop();
-    _ctrl.value = frac;
+    _ctrl.value = frac; // мгновенно, без «вспышки»
     if (msLeft > 0) {
       _ctrl.animateTo(
         0.0,
@@ -623,7 +817,7 @@ class _UndoSnackContentState extends State<_UndoSnackContent>
     super.initState();
     _ctrl = AnimationController(
       vsync: this,
-      value: 1.0,           // временно, сейчас сразу синхронизируем
+      value: 1.0,
       lowerBound: 0.0,
       upperBound: 1.0,
     )..addListener(() {
@@ -635,7 +829,6 @@ class _UndoSnackContentState extends State<_UndoSnackContent>
   @override
   void didUpdateWidget(covariant _UndoSnackContent oldWidget) {
     super.didUpdateWidget(oldWidget);
-    // Если endTime/duration вдруг изменились — пересинхронизируемся
     if (oldWidget.endTime != widget.endTime ||
         oldWidget.duration != widget.duration) {
       _syncAndRun();
@@ -651,7 +844,8 @@ class _UndoSnackContentState extends State<_UndoSnackContent>
   @override
   Widget build(BuildContext context) {
     final value = _ctrl.value; // 1.0 -> 0.0
-    final secondsLeft = (value * widget.duration.inSeconds).ceil().clamp(0, 999);
+    final secondsLeft =
+    (value * widget.duration.inSeconds).ceil().clamp(0, 999);
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -668,7 +862,5 @@ class _UndoSnackContentState extends State<_UndoSnackContent>
     );
   }
 }
-
-
 
 enum SortOption { nameAsc, nameDesc, dateAsc, dateDesc }
