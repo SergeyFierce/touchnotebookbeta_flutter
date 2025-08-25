@@ -75,6 +75,22 @@ class _AddContactScreenState extends State<AddContactScreen> {
     return age;
   }
 
+  String _formatAge(int age) {
+    final lastTwo = age % 100;
+    final last = age % 10;
+    String suffix;
+    if (lastTwo >= 11 && lastTwo <= 14) {
+      suffix = 'лет';
+    } else if (last == 1) {
+      suffix = 'год';
+    } else if (last >= 2 && last <= 4) {
+      suffix = 'года';
+    } else {
+      suffix = 'лет';
+    }
+    return '$age $suffix';
+  }
+
   Future<void> _pickBirthOrAge() async {
     final choice = await showModalBottomSheet<String>(
       context: context,
@@ -109,7 +125,7 @@ class _AddContactScreenState extends State<AddContactScreen> {
         _ageManual = null;
         final age = _calcAge(picked);
         _birthController.text =
-        '${DateFormat('dd.MM.yyyy').format(picked)} ($age лет)';
+        '${DateFormat('dd.MM.yyyy').format(picked)} (${_formatAge(age)})';
       }
     } else if (choice == 'age') {
       final ctrl = TextEditingController();
@@ -138,7 +154,7 @@ class _AddContactScreenState extends State<AddContactScreen> {
       if (age != null) {
         _ageManual = age;
         _birthDate = null;
-        _birthController.text = 'Возраст: $age';
+        _birthController.text = 'Возраст: ${_formatAge(age)}';
       }
     }
     setState(() {});
