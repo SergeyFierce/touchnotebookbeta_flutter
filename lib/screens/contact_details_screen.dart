@@ -773,20 +773,17 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
   Timer? _snackTimer;
 
   Future<void> _deleteWithUndo(Contact c) async {
-    if (c.id != null) {
-      await ContactDatabase.instance.delete(c.id!);
-    }
+    if (c.id == null) return;
 
-    final ctx = App.navigatorKey.currentContext;
-    if (ctx == null) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Контакт удалён')));
-        Navigator.pop(context, true);
-      }
-      return;
-    }
+    final db = ContactDatabase.instance;
 
+    // 1) Снимок заметок + удаление контакта
+    final notesSnapshot = await db.deleteContactWithSnapshot(c.id!);
+
+    // 2) Показываем Snackbar через root-контекст (чтобы не пропал при pop)
+    final ctx = App.navigatorKey.currentContext ?? context;
     final messenger = ScaffoldMessenger.of(ctx);
+
     const duration = Duration(seconds: 4);
     messenger.clearSnackBars();
     _snackTimer?.cancel();
@@ -802,13 +799,11 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
             _snackTimer?.cancel();
             messenger.hideCurrentSnackBar();
 
-            int? restoredId;
-            try {
-              restoredId = await ContactDatabase.instance.insert(c);
-            } catch (_) {
-              restoredId = await ContactDatabase.instance.insert(c.copyWith(id: null));
-            }
-            await _goToRestored(c, restoredId!);
+            // 3) Восстановить контакт + заметки (новый id)
+            final newId = await db.restoreContactWithNotes(c.copyWith(id: null), notesSnapshot);
+
+            // 4) Уйти в нужную категорию и подсветить восстановленного
+            await _goToRestored(c, newId);
           },
         ),
       ),
@@ -816,8 +811,10 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
 
     _snackTimer = Timer(endTime.difference(DateTime.now()), () => controller.close());
 
+    // 5) Закрыть экран деталей, вернуть флаг «удалён»
     if (mounted) Navigator.pop(context, true);
   }
+
 
   String _titleForCategory(String cat) {
     switch (cat) {

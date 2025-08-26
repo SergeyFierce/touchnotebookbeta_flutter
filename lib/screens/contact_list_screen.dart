@@ -333,16 +333,17 @@ class _ContactListScreenState extends State<ContactListScreen> {
 
   /// Удаляет контакт и показывает SnackBar с Undo + индикатором и обратным отсчётом.
   Future<void> _deleteWithUndo(Contact c) async {
-    // 1) Удаляем из БД (если есть id)
-    if (c.id != null) {
-      await ContactDatabase.instance.delete(c.id!);
-    }
-    // 2) Удаляем из списка и перерисовываем
-    setState(() {
-      _all.removeWhere((e) => e.id == c.id);
-    });
+    if (c.id == null) return;
 
-    // 3) Snackbar с ручным таймером + Undo
+    final db = ContactDatabase.instance;
+
+    // 1) Снимок заметок + удаление контакта (каскад снесёт заметки)
+    final notesSnapshot = await db.deleteContactWithSnapshot(c.id!);
+
+    // 2) Убираем из локального списка
+    setState(() => _all.removeWhere((e) => e.id == c.id));
+
+    // 3) Snackbar с Undo
     if (!mounted) return;
     final messenger = ScaffoldMessenger.of(context);
     const duration = Duration(seconds: 4);
@@ -353,7 +354,7 @@ class _ContactListScreenState extends State<ContactListScreen> {
     final endTime = DateTime.now().add(duration);
     final controller = messenger.showSnackBar(
       SnackBar(
-        duration: const Duration(days: 1), // закроем вручную таймером
+        duration: const Duration(days: 1),
         content: _UndoSnackContent(endTime: endTime, duration: duration),
         action: SnackBarAction(
           label: 'Отменить',
@@ -361,27 +362,19 @@ class _ContactListScreenState extends State<ContactListScreen> {
             _snackTimer?.cancel();
             messenger.hideCurrentSnackBar();
 
-            int? restoredId;
-            try {
-              // восстановить с тем же id
-              restoredId = await ContactDatabase.instance.insert(c);
-            } catch (_) {
-              // конфликт id — вставим без id
-              restoredId =
-              await ContactDatabase.instance.insert(c.copyWith(id: null));
-            }
+            // 4) Восстанавливаем контакт + все его заметки (контакт получит НОВЫЙ id)
+            final newId = await db.restoreContactWithNotes(c.copyWith(id: null), notesSnapshot);
 
-            await _goToRestored(c, restoredId!);
+            // 5) Прокрутить/подсветить восстановленного
+            await _goToRestored(c, newId);
           },
         ),
       ),
     );
 
-    _snackTimer = Timer(
-      endTime.difference(DateTime.now()),
-          () => controller.close(),
-    );
+    _snackTimer = Timer(endTime.difference(DateTime.now()), () => controller.close());
   }
+
 
   List<Contact> get _filtered {
     var list = _all.where((c) => c.name.toLowerCase().contains(_query));
