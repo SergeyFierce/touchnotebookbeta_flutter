@@ -278,7 +278,7 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
   bool _addedOpen = false;
 
   bool _extraExpanded = false; // «Дополнительно»
-  bool _notesExpanded = false; // «Заметки»
+  bool _notesExpanded = true; // «Заметки» открыто
   List<Note> _notes = [];
 
   // FocusNodes — для подсветки «плиток»
@@ -377,6 +377,7 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
       context,
       MaterialPageRoute(builder: (_) => NoteDetailsScreen(note: note)),
     );
+
     if (result is Map && result['deleted'] is Note) {
       final deleted = result['deleted'] as Note;
       await _loadNotes();
@@ -399,30 +400,11 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
           ),
         ),
       );
-    } else {
-    final controller = TextEditingController();
-    final text = await showDialog<String>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Новая заметка'),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          maxLines: null,
-          decoration: const InputDecoration(labelText: 'Заметка'),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Отмена')),
-          TextButton(onPressed: () => Navigator.pop(context, controller.text.trim()), child: const Text('Сохранить')),
-        ],
-      ),
-    );
-    if (text != null && text.isNotEmpty && _contact.id != null) {
-      await ContactDatabase.instance
-          .insertNote(Note(contactId: _contact.id!, text: text, createdAt: DateTime.now()));
-      await _loadNotes();
     }
+
+    // Больше НИЧЕГО – никакого else и диалога «Новая заметка».
   }
+
 
   // ==================== helpers ====================
 
@@ -955,7 +937,7 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
     required bool expanded,
     required ValueChanged<bool> onChanged,
     required List<Widget> children,
-    List<Widget> headerActions = const [], // кнопки справа от заголовка
+    List<Widget> headerActions = const [],
   }) {
     return Card(
       elevation: 0,
@@ -966,17 +948,30 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
         data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
         child: ExpansionTile(
           initiallyExpanded: expanded,
-          tilePadding: const EdgeInsets.symmetric(horizontal: 16),
-          childrenPadding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+          tilePadding: const EdgeInsets.only(left: 16, right: 0), // <<< убрали правый паддинг
+          childrenPadding: const EdgeInsets.fromLTRB(24, 0, 16, 16),
           onExpansionChanged: onChanged,
           maintainState: true,
+          trailing: const SizedBox.shrink(),
           title: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween, // <<< кнопка уйдёт вправо
             children: [
-              Expanded(
-                child: Text(
-                  title,
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
-                ),
+              Row(
+                children: [
+                  Text(
+                    title,
+                    style: Theme.of(context)
+                        .textTheme
+                        .titleMedium
+                        ?.copyWith(fontWeight: FontWeight.w700),
+                  ),
+                  const SizedBox(width: 8),
+                  AnimatedRotation(
+                    turns: expanded ? 0.5 : 0.0,
+                    duration: const Duration(milliseconds: 200),
+                    child: const Icon(Icons.expand_more),
+                  ),
+                ],
               ),
               ...headerActions,
             ],
@@ -986,6 +981,10 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
       ),
     );
   }
+
+
+
+
 
   Widget _pickerTile({
     required Key key,
@@ -1063,7 +1062,7 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
             } else {
               _tags.remove(label);
             }
-            _updateEditingFromDirty(); // изменение тегов = правка
+            _updateEditingFromDirty();
           });
         },
       );
@@ -1074,7 +1073,7 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
         leading: _isEditing
             ? IconButton(
           tooltip: 'Отмена',
-          icon: const Icon(Icons.close), // крестик
+          icon: const Icon(Icons.close),
           onPressed: () {
             _loadFromContact();
             setState(() => _isEditing = false);
@@ -1086,7 +1085,7 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
           if (_isEditing)
             IconButton(
               tooltip: 'Сохранить',
-              icon: const Icon(Icons.check), // галочка
+              icon: const Icon(Icons.check),
               onPressed: (_isDirty && _canSave) ? _save : null,
             ),
         ],
@@ -1302,36 +1301,42 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
                     if (v) _scrollToCard(_notesCardKey);
                   },
                   headerActions: [
-                    TextButton(onPressed: _addNote, child: const Text('Добавить')),
-                    const SizedBox(width: 8),
+                    const Spacer(), // уводим вправо
                     TextButton(
-                        onPressed: () async {
-                          if (_contact.id == null) return;
-                          await Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                                builder: (_) => NotesListScreen(contact: _contact)),
-                          );
-                          await _loadNotes();
-                        },
-                        child: const Text('Все')),
+                      onPressed: () async {
+                        if (_contact.id == null) return;
+                        await Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => NotesListScreen(contact: _contact),
+                          ),
+                        );
+                        await _loadNotes();
+                      },
+                      child: const Text('Все заметки'),
+                    ),
                   ],
+
                   children: _notes.isEmpty
                       ? const [
-                          Card(elevation: 0, child: ListTile(title: Text('Нет заметок'))),
-                        ]
-                      : _notes
-                          .map(
-                            (n) => Card(
-                              elevation: 0,
-                              child: ListTile(
-                                title: Text(n.text),
-                                subtitle: Text(DateFormat('dd.MM.yyyy HH:mm').format(n.createdAt)),
-                                onTap: () => _openNote(n),
-                              ),
-                            ),
-                          )
-                          .toList(),
+                    Card(elevation: 0, child: ListTile(title: Text('Нет заметок'))),
+                  ]
+                      : [
+                    // <<< CHANGED >>>: разделители + дата без времени
+                    Card(
+                      elevation: 0,
+                      child: Column(
+                        children: ListTile.divideTiles(
+                          context: context,
+                          tiles: _notes.map((n) => ListTile(
+                            title: Text(n.text, maxLines: 2, overflow: TextOverflow.ellipsis),
+                            subtitle: Text(DateFormat('dd.MM.yyyy').format(n.createdAt)),
+                            onTap: () => _openNote(n),
+                          )),
+                        ).toList(),
+                      ),
+                    ),
+                  ],
                 ),
               ),
 
@@ -1368,10 +1373,6 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
                     onTap: _pickAddedDate,
                   ),
                   const SizedBox(height: 8),
-                  Text(
-                    'Заметки добавляются на экране Деталей контакта',
-                    style: TextStyle(color: Theme.of(context).hintColor),
-                  ),
                 ],
               ),
             ],

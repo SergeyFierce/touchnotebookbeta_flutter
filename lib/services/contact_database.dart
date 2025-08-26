@@ -126,7 +126,6 @@ class ContactDatabase {
     _bumpRevision();
     return rows;
   }
-    }
 
   Future<List<Note>> notesByContact(int contactId) async {
     final db = await database;
@@ -151,3 +150,4 @@ class ContactDatabase {
     return maps.map((e) => Note.fromMap(e)).toList();
   }
 }
+

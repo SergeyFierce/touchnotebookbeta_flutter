@@ -796,18 +796,31 @@ class _AddContactScreenState extends State<AddContactScreen> {
           childrenPadding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
           onExpansionChanged: onChanged,
           maintainState: true,
-          title: Text(
-            title,
-            style: Theme.of(context)
-                .textTheme
-                .titleMedium
-                ?.copyWith(fontWeight: FontWeight.w700),
+          trailing: const SizedBox.shrink(),
+          title: Row(
+            children: [
+              Text(
+                title,
+                style: Theme.of(context)
+                    .textTheme
+                    .titleMedium
+                    ?.copyWith(fontWeight: FontWeight.w700),
+              ),
+              const SizedBox(width: 8),
+              AnimatedRotation(
+                turns: expanded ? 0.5 : 0.0,
+                duration: const Duration(milliseconds: 200),
+                child: const Icon(Icons.expand_more),
+              ),
+              const Spacer(),
+            ],
           ),
           children: children,
         ),
       ),
     );
   }
+
 
   Widget _pickerTile({
     required Key key,
