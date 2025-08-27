@@ -703,21 +703,25 @@ class _AddContactScreenState extends State<AddContactScreen> {
         IconData? prefixIcon,
         String? hint,
         required TextEditingController controller,
+        Widget? suffixIcon,
+        bool showClear = true,
       }) {
-    return InputDecoration(
-      labelText: label,
-      hintText: hint,
-      prefixIcon: prefixIcon != null ? Icon(prefixIcon) : null,
-      suffixIcon: controller.text.isEmpty
-          ? null
-          : IconButton(
+    Widget? suffix = suffixIcon;
+    if (showClear && controller.text.isNotEmpty) {
+      suffix = IconButton(
         tooltip: 'Очистить',
         icon: const Icon(Icons.close),
         onPressed: () {
           controller.clear();
           setState(() {}); // обновить видимость и валидность
         },
-      ),
+      );
+    }
+    return InputDecoration(
+      labelText: label,
+      hintText: hint,
+      prefixIcon: prefixIcon != null ? Icon(prefixIcon) : null,
+      suffixIcon: suffix,
       border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
@@ -727,26 +731,6 @@ class _AddContactScreenState extends State<AddContactScreen> {
       isDense: true,
       contentPadding:
       const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
-    );
-  }
-
-  // Обёртка с бордером и клипом для picker-полей — чтобы риппл не выходил за скругления
-  Widget _borderedTile({required Widget child}) {
-    final theme = Theme.of(context);
-    final shape =
-    RoundedRectangleBorder(borderRadius: BorderRadius.circular(12));
-    return Material(
-      type: MaterialType.card,
-      color: Colors.transparent,
-      shape: shape,
-      clipBehavior: Clip.antiAlias,
-      child: Container(
-        decoration: BoxDecoration(
-          border: Border.all(color: theme.dividerColor),
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: child,
-      ),
     );
   }
 
@@ -822,74 +806,60 @@ class _AddContactScreenState extends State<AddContactScreen> {
   }
 
 
-  Widget _pickerTile({
+  Widget _pickerField({
     required Key key,
     required IconData icon,
     required String title,
-    required String? value,
+    required TextEditingController controller,
     String? hint,
     required bool isOpen,
     required FocusNode focusNode,
     required VoidCallback onTap,
   }) {
-    final theme = Theme.of(context);
-    final hasValue = (value ?? '').isNotEmpty;
-
-    return Focus(
+    return TextFormField(
+      key: key,
+      controller: controller,
+      readOnly: true,
       focusNode: focusNode,
-      canRequestFocus: true,
-      child: _borderedTile(
-        child: ListTile(
-          key: key,
-          contentPadding: const EdgeInsets.symmetric(horizontal: 12),
-          leading: Icon(icon),
-          title: Text(title),
-          subtitle: hasValue
-              ? Text(value!)
-              : (hint != null
-              ? Text(hint, style: TextStyle(color: theme.hintColor))
-              : null),
-          trailing: Icon(isOpen ? Icons.arrow_drop_up : Icons.arrow_drop_down),
-          onTap: () {
-            FocusScope.of(context).requestFocus(focusNode);
-            onTap();
-          },
-          shape:
-          RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        ),
+      decoration: _outlinedDec(
+        Theme.of(context),
+        label: title,
+        hint: hint,
+        prefixIcon: icon,
+        controller: controller,
+        suffixIcon: Icon(isOpen ? Icons.arrow_drop_up : Icons.arrow_drop_down),
+        showClear: false,
       ),
+      onTap: () {
+        FocusScope.of(context).requestFocus(focusNode);
+        onTap();
+      },
     );
   }
 
   // Плитка «Соцсеть» — отдельная, чтобы показывать SVG leading
-  Widget _socialPickerTile() {
-    final theme = Theme.of(context);
+  Widget _socialPickerField() {
     final value = _socialController.text;
-    final hasValue = value.isNotEmpty;
     final t = (_socialType ?? value).trim();
-
-    return Focus(
+    return TextFormField(
+      key: const ValueKey('social'),
+      controller: _socialController,
+      readOnly: true,
       focusNode: _focusSocial,
-      canRequestFocus: true,
-      child: _borderedTile(
-        child: ListTile(
-          key: const ValueKey('social'),
-          contentPadding: const EdgeInsets.symmetric(horizontal: 12),
-          leading: t.isEmpty ? const Icon(Icons.public) : _brandIcon(t),
-          title: const Text('Соцсеть'),
-          subtitle: hasValue
-              ? Text(value)
-              : Text('Выбрать соцсеть',
-              style: TextStyle(color: theme.hintColor)),
-          trailing: Icon(_socialOpen ? Icons.arrow_drop_up : Icons.arrow_drop_down),
-          onTap: () {
-            FocusScope.of(context).requestFocus(_focusSocial);
-            _pickSocial();
-          },
-          shape:
-          RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        ),
+      decoration: _outlinedDec(
+        Theme.of(context),
+        label: 'Соцсеть',
+        hint: 'Выбрать соцсеть',
+        controller: _socialController,
+        suffixIcon: Icon(_socialOpen ? Icons.arrow_drop_up : Icons.arrow_drop_down),
+        showClear: false,
+      ).copyWith(
+        prefixIcon: t.isEmpty ? const Icon(Icons.public) : _brandIcon(t),
       ),
+      onTap: () {
+        FocusScope.of(context).requestFocus(_focusSocial);
+        _pickSocial();
+      },
     );
   }
 
@@ -999,22 +969,22 @@ class _AddContactScreenState extends State<AddContactScreen> {
               _sectionCard(
                 title: 'Категория и статус',
                 children: [
-                  _pickerTile(
+                  _pickerField(
                     key: _categoryKey,
                     icon: Icons.person_outline,
                     title: 'Категория*',
-                    value: _categoryController.text,
+                    controller: _categoryController,
                     hint: 'Выберите категорию',
                     isOpen: _categoryOpen,
                     focusNode: _focusCategory,
                     onTap: _pickCategory,
                   ),
                   const SizedBox(height: 12),
-                  _pickerTile(
+                  _pickerField(
                     key: _statusKey,
                     icon: Icons.how_to_reg,
                     title: 'Статус*',
-                    value: _statusController.text,
+                    controller: _statusController,
                     hint: _category == null ? 'Сначала выберите категорию' : 'Выберите статус',
                     isOpen: _statusOpen,
                     focusNode: _focusStatus,
@@ -1067,11 +1037,11 @@ class _AddContactScreenState extends State<AddContactScreen> {
                     if (v) _scrollToCard(_extraCardKey);
                   },
                   children: [
-                    _pickerTile(
+                    _pickerField(
                       key: const ValueKey('birth'),
                       icon: Icons.cake_outlined,
                       title: 'Дата рождения / возраст',
-                      value: _birthController.text,
+                      controller: _birthController,
                       hint: 'Указать дату или возраст',
                       isOpen: _birthOpen,
                       focusNode: _focusBirth,
@@ -1126,7 +1096,7 @@ class _AddContactScreenState extends State<AddContactScreen> {
                     const SizedBox(height: 12),
 
                     // Соцсеть
-                    _socialPickerTile(),
+                    _socialPickerField(),
                   ],
                 ),
               ),
@@ -1153,11 +1123,11 @@ class _AddContactScreenState extends State<AddContactScreen> {
               _sectionCard(
                 title: 'Дата добавления',
                 children: [
-                  _pickerTile(
+                  _pickerField(
                     key: const ValueKey('added'),
                     icon: Icons.event_outlined,
                     title: 'Дата добавления',
-                    value: _addedController.text,
+                    controller: _addedController,
                     isOpen: _addedOpen,
                     focusNode: _focusAdded,
                     onTap: _pickAddedDate,

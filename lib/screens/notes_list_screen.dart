@@ -22,6 +22,11 @@ class _NotesListScreenState extends State<NotesListScreen> {
   final _db = ContactDatabase.instance;
   List<Note> _notes = [];
 
+  static const int _pageSize = 20;
+  int _page = 0;
+  bool _isLoading = false;
+  bool _hasMore = true;
+
   // --- сортировка ---
   SortNotesOption _sort = SortNotesOption.dateDesc;
 
@@ -35,20 +40,50 @@ class _NotesListScreenState extends State<NotesListScreen> {
   @override
   void initState() {
     super.initState();
-    _loadNotes();
+    _loadNotes(reset: true);
+    _scroll.addListener(_onScroll);
   }
 
   @override
   void dispose() {
+    _scroll.removeListener(_onScroll);
     _scroll.dispose();
     _snackTimer?.cancel();
     super.dispose();
   }
 
-  Future<void> _loadNotes() async {
-    if (widget.contact.id == null) return;
-    final notes = await _db.notesByContact(widget.contact.id!);
-    setState(() => _notes = notes);
+  Future<void> _loadNotes({bool reset = false}) async {
+    if (reset) {
+      _notes.clear();
+      _page = 0;
+      _hasMore = true;
+    }
+    await _loadMoreNotes();
+  }
+
+  void _onScroll() {
+    if (_scroll.position.pixels >=
+        _scroll.position.maxScrollExtent - 200) {
+      _loadMoreNotes();
+    }
+  }
+
+  Future<void> _loadMoreNotes() async {
+    if (widget.contact.id == null || _isLoading || !_hasMore) return;
+    setState(() => _isLoading = true);
+    final notes = await _db.notesByContactPaged(
+      widget.contact.id!,
+      limit: _pageSize,
+      offset: _page * _pageSize,
+    );
+    setState(() {
+      _notes.addAll(notes);
+      _isLoading = false;
+      _page++;
+      if (notes.length < _pageSize) {
+        _hasMore = false;
+      }
+    });
   }
 
   // ----- сортировка -----
@@ -153,7 +188,7 @@ class _NotesListScreenState extends State<NotesListScreen> {
       ),
     );
     if (note != null) {
-      await _loadNotes();
+      await _loadNotes(reset: true);
       if (!mounted) return;
       ScaffoldMessenger.of(context)
           .showSnackBar(const SnackBar(content: Text('Заметка добавлена')));
@@ -174,18 +209,18 @@ class _NotesListScreenState extends State<NotesListScreen> {
     // поддержка трёх сценариев: удалено, восстановлено, обновлено
     if (result is Map && result.isNotEmpty) {
       if (result['deleted'] is Note) {
-        await _loadNotes();
+        await _loadNotes(reset: true);
         if (!mounted) return;
       } else if (result['restored'] is Note) {
         final restored = result['restored'] as Note;
-        await _loadNotes();
+        await _loadNotes(reset: true);
         if (!mounted) return;
         if (restored.id != null) {
           await _maybeScrollTo(restored.id!);
           _flashHighlight(restored.id!);
         }
       } else if (result['updated'] == true) {
-        await _loadNotes();
+        await _loadNotes(reset: true);
       }
     }
   }
@@ -215,7 +250,7 @@ class _NotesListScreenState extends State<NotesListScreen> {
             messenger.hideCurrentSnackBar();
 
             final id = await _db.insertNote(n.copyWith(id: null));
-            await _loadNotes();
+            await _loadNotes(reset: true);
             if (!mounted) return;
 
             await _maybeScrollTo(id);
@@ -267,9 +302,15 @@ class _NotesListScreenState extends State<NotesListScreen> {
         : ListView.separated(
       controller: _scroll,
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-      itemCount: data.length,
+      itemCount: data.length + (_hasMore ? 1 : 0),
       separatorBuilder: (_, __) => const SizedBox(height: 8),
       itemBuilder: (context, i) {
+        if (i >= data.length) {
+          return const Padding(
+            padding: EdgeInsets.symmetric(vertical: 16),
+            child: Center(child: CircularProgressIndicator()),
+          );
+        }
         final n = data[i];
         final k = (n.id != null) ? _keyFor(n) : null;
         final isHighlighted = (n.id != null && n.id == _highlightId);

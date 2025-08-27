@@ -136,6 +136,23 @@ class ContactDatabase {
     return maps.map(Contact.fromMap).toList();
   }
 
+  Future<List<Contact>> contactsByCategoryPaged(
+    String category, {
+    int limit = 20,
+    int offset = 0,
+  }) async {
+    final db = await database;
+    final maps = await db.query(
+      'contacts',
+      where: 'category = ?',
+      whereArgs: [category],
+      orderBy: 'createdAt DESC',
+      limit: limit,
+      offset: offset,
+    );
+    return maps.map(Contact.fromMap).toList();
+  }
+
   Future<int> update(Contact contact) async {
     final db = await database;
     final rows = await db.update(
@@ -199,6 +216,23 @@ class ContactDatabase {
       where: 'contactId = ?',
       whereArgs: [contactId],
       orderBy: 'createdAt DESC',
+    );
+    return maps.map(Note.fromMap).toList();
+  }
+
+  Future<List<Note>> notesByContactPaged(
+    int contactId, {
+    int limit = 20,
+    int offset = 0,
+  }) async {
+    final db = await database;
+    final maps = await db.query(
+      'notes',
+      where: 'contactId = ?',
+      whereArgs: [contactId],
+      orderBy: 'createdAt DESC',
+      limit: limit,
+      offset: offset,
     );
     return maps.map(Note.fromMap).toList();
   }
