@@ -854,7 +854,12 @@ class _AddContactScreenState extends State<AddContactScreen> {
         suffixIcon: Icon(_socialOpen ? Icons.arrow_drop_up : Icons.arrow_drop_down),
         showClear: false,
       ).copyWith(
-        prefixIcon: t.isEmpty ? const Icon(Icons.public) : _brandIcon(t),
+        prefixIcon: Padding(
+          padding: const EdgeInsets.all(10), // уменьшаем отступы
+          child: t.isEmpty
+              ? const Icon(Icons.public, size: 20) // стандартная иконка
+              : _brandIcon(t, size: 20),          // svg-иконка меньшего размера
+        ),
       ),
       onTap: () {
         FocusScope.of(context).requestFocus(_focusSocial);

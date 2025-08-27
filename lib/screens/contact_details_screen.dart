@@ -52,13 +52,11 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
   final _extraCardKey = GlobalKey();
   final _notesCardKey = GlobalKey();
 
-// Плавный скролл к карточке после анимации раскрытия
+  // Плавный скролл к карточке после анимации раскрытия
   Future<void> _scrollToCard(GlobalKey key) async {
-    // Чуть подождать, чтобы ExpansionTile успел развернуть контент
     await Future.delayed(const Duration(milliseconds: 240));
     await _ensureVisible(key);
   }
-
 
   Widget _previewCaption(BuildContext context, {String text = 'Предпросмотр карточки'}) {
     final theme = Theme.of(context);
@@ -77,7 +75,6 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
     );
   }
 
-
   // ==== PREVIEW HELPERS (совпадают с _ContactCard) ====
 
   String _initialsFrom(String name) {
@@ -89,7 +86,7 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
 
     String takeFirstLetter(String s) {
       if (s.isEmpty) return '';
-      return s.characters.first.toUpperCase(); // кириллица ок
+      return s.characters.first.toUpperCase();
     }
 
     final a = takeFirstLetter(first);
@@ -177,13 +174,11 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
         padding: const EdgeInsets.all(16),
         child: Stack(
           children: [
-            // Резерв справа под чип статуса
             Padding(
               padding: const EdgeInsets.only(right: kStatusReserve),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Аватар + имя
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
@@ -208,7 +203,6 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
                     style: Theme.of(context).textTheme.bodyMedium,
                   ),
                   const SizedBox(height: 8),
-                  // Теги
                   if (tags.isNotEmpty)
                     Wrap(
                       spacing: 4,
@@ -234,7 +228,6 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
                 ],
               ),
             ),
-            // Чип статуса в правом верхнем углу (если есть)
             if (status.isNotEmpty)
               Positioned(
                 top: 0,
@@ -260,7 +253,6 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
     );
   }
 
-
   // ====== Состояния, соответствующие полям ======
   DateTime? _birthDate;
   int? _ageManual;
@@ -281,7 +273,7 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
   bool _notesExpanded = true; // «Заметки» открыто
   List<Note> _notes = [];
 
-  // FocusNodes — для подсветки «плиток»
+  // FocusNodes — для подсветки/навигации
   final FocusNode _focusBirth = FocusNode(skipTraversal: true);
   final FocusNode _focusSocial = FocusNode(skipTraversal: true);
   final FocusNode _focusCategory = FocusNode(skipTraversal: true);
@@ -356,7 +348,6 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
   }
 
   Future<void> _addNote() async {
-    
     if (_contact.id == null) return;
     final note = await Navigator.push<Note>(
       context,
@@ -401,16 +392,12 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
         ),
       );
     }
-
-    // Больше НИЧЕГО – никакого else и диалога «Новая заметка».
   }
-
 
   // ==================== helpers ====================
 
   void _defocus() => FocusScope.of(context).unfocus();
 
-  // Снап текущего UI-состояния в «модель» (для сравнения/dirty)
   Contact _snapshot() => Contact(
     id: _contact.id,
     name: _nameController.text.trim(),
@@ -419,12 +406,12 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
     profession: _professionController.text.trim().isEmpty ? null : _professionController.text.trim(),
     city: _cityController.text.trim().isEmpty ? null : _cityController.text.trim(),
     phone: _phoneController.text.trim(),
-    email: _emailController.text.trim().isEmpty ? null : _emailController.text.trim(),
+    email: _emailController.text.trim().isNotEmpty ? _emailController.text.trim() : null,
     social: _socialType,
     category: _category ?? _categoryController.text.trim(),
     status: _status ?? _statusController.text.trim(),
     tags: _tags.toList(),
-    comment: _commentController.text.trim().isEmpty ? null : _commentController.text.trim(),
+    comment: _commentController.text.trim().isNotEmpty ? _commentController.text.trim() : null,
     createdAt: _addedDate,
   );
 
@@ -440,7 +427,6 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
     final cur = _snapshot();
     final old = _contact;
 
-    // Сравниваем поля по смыслу
     if (cur.name != old.name) return true;
     if (cur.phone != old.phone) return true;
     if (cur.email != old.email) return true;
@@ -507,7 +493,6 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
 
   String _digitsOnly(String s) => s.replaceAll(RegExp(r'\D'), '');
 
-  // Нормализуем телефон к маске и прогоняем через formatter
   void _setPhoneFromModel(String raw) {
     final d = _digitsOnly(raw);
     String masked = '';
@@ -663,7 +648,6 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
         _status = null;
         _statusController.text = '';
       });
-      // сразу подсказываем выбрать статус
       await _ensureVisible(_statusKey);
       await _pickStatus();
       _updateEditingFromDirty();
@@ -763,7 +747,7 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
     await ContactDatabase.instance.update(updated);
     if (!mounted) return;
     setState(() {
-      _contact = updated;   // обновили сохранённый снимок
+      _contact = updated;
       _isEditing = false;
     });
     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Изменения сохранены')));
@@ -777,10 +761,8 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
 
     final db = ContactDatabase.instance;
 
-    // 1) Снимок заметок + удаление контакта
     final notesSnapshot = await db.deleteContactWithSnapshot(c.id!);
 
-    // 2) Показываем Snackbar через root-контекст (чтобы не пропал при pop)
     final ctx = App.navigatorKey.currentContext ?? context;
     final messenger = ScaffoldMessenger.of(ctx);
 
@@ -799,10 +781,8 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
             _snackTimer?.cancel();
             messenger.hideCurrentSnackBar();
 
-            // 3) Восстановить контакт + заметки (новый id)
             final newId = await db.restoreContactWithNotes(c.copyWith(id: null), notesSnapshot);
 
-            // 4) Уйти в нужную категорию и подсветить восстановленного
             await _goToRestored(c, newId);
           },
         ),
@@ -811,10 +791,8 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
 
     _snackTimer = Timer(endTime.difference(DateTime.now()), () => controller.close());
 
-    // 5) Закрыть экран деталей, вернуть флаг «удалён»
     if (mounted) Navigator.pop(context, true);
   }
-
 
   String _titleForCategory(String cat) {
     switch (cat) {
@@ -865,21 +843,24 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
         IconData? prefixIcon,
         String? hint,
         required TextEditingController controller,
+        Widget? suffixIcon,
+        bool showClear = true,
       }) {
     return InputDecoration(
       labelText: label,
       hintText: hint,
       prefixIcon: prefixIcon != null ? Icon(prefixIcon) : null,
-      suffixIcon: controller.text.isEmpty
-          ? null
-          : IconButton(
-        tooltip: 'Очистить',
-        icon: const Icon(Icons.close),
-        onPressed: () {
-          controller.clear();
-          setState(_updateEditingFromDirty);
-        },
-      ),
+      suffixIcon: suffixIcon ??
+          (showClear && controller.text.isNotEmpty
+              ? IconButton(
+            tooltip: 'Очистить',
+            icon: const Icon(Icons.close),
+            onPressed: () {
+              controller.clear();
+              setState(_updateEditingFromDirty);
+            },
+          )
+              : null),
       border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
@@ -945,13 +926,13 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
         data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
         child: ExpansionTile(
           initiallyExpanded: expanded,
-          tilePadding: const EdgeInsets.only(left: 16, right: 0), // <<< убрали правый паддинг
+          tilePadding: const EdgeInsets.only(left: 16, right: 0),
           childrenPadding: const EdgeInsets.fromLTRB(24, 0, 16, 16),
           onExpansionChanged: onChanged,
           maintainState: true,
           trailing: const SizedBox.shrink(),
           title: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween, // <<< кнопка уйдёт вправо
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Row(
                 children: [
@@ -979,64 +960,65 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
     );
   }
 
+  // ===== Новые «поля-пикеры» как в AddContact =====
 
-
-
-
-  Widget _pickerTile({
+  Widget _pickerField({
     required Key key,
     required IconData icon,
     required String title,
-    required String? value,
+    required TextEditingController controller,
     String? hint,
     required bool isOpen,
     required FocusNode focusNode,
     required VoidCallback onTap,
   }) {
-    final theme = Theme.of(context);
-    final hasValue = (value ?? '').isNotEmpty;
-
-    return Focus(
+    return TextFormField(
+      key: key,
+      controller: controller,
+      readOnly: true,
       focusNode: focusNode,
-      canRequestFocus: true,
-      child: _borderedTile(
-        child: ListTile(
-          key: key,
-          contentPadding: const EdgeInsets.symmetric(horizontal: 12),
-          leading: Icon(icon),
-          title: Text(title),
-          subtitle: hasValue ? Text(value!) : (hint != null ? Text(hint, style: TextStyle(color: theme.hintColor)) : null),
-          trailing: Icon(isOpen ? Icons.arrow_drop_up : Icons.arrow_drop_down),
-          onTap: () {
-            FocusScope.of(context).requestFocus(focusNode);
-            onTap(); // _isEditing пересчитается после выбора
-          },
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        ),
+      decoration: _outlinedDec(
+        Theme.of(context),
+        label: title,
+        hint: hint,
+        prefixIcon: icon,
+        controller: controller,
+        suffixIcon: Icon(isOpen ? Icons.arrow_drop_up : Icons.arrow_drop_down),
+        showClear: false,
       ),
+      onTap: () {
+        FocusScope.of(context).requestFocus(focusNode);
+        onTap();
+      },
     );
   }
 
-  Widget _socialPickerTile() {
+  Widget _socialPickerField() {
     final value = _socialController.text;
-    final hasValue = value.isNotEmpty;
     final t = (_socialType ?? value).trim();
-
-    return Focus(
+    return TextFormField(
+      key: const ValueKey('social'),
+      controller: _socialController,
+      readOnly: true,
       focusNode: _focusSocial,
-      canRequestFocus: true,
-      child: _borderedTile(
-        child: ListTile(
-          key: const ValueKey('social'),
-          contentPadding: const EdgeInsets.symmetric(horizontal: 12),
-          leading: t.isEmpty ? const Icon(Icons.public) : _brandIcon(t),
-          title: const Text('Соцсеть'),
-          subtitle: hasValue ? Text(value) : const Text('Выбрать соцсеть'),
-          trailing: Icon(_socialOpen ? Icons.arrow_drop_up : Icons.arrow_drop_down),
-          onTap: _pickSocial,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      decoration: _outlinedDec(
+        Theme.of(context),
+        label: 'Соцсеть',
+        hint: 'Выбрать соцсеть',
+        controller: _socialController,
+        suffixIcon: Icon(_socialOpen ? Icons.arrow_drop_up : Icons.arrow_drop_down),
+        showClear: false,
+      ).copyWith(
+        // компактная иконка бренда слева
+        prefixIcon: Padding(
+          padding: const EdgeInsets.all(10),
+          child: t.isEmpty ? const Icon(Icons.public, size: 20) : _brandIcon(t, size: 20),
         ),
       ),
+      onTap: () {
+        FocusScope.of(context).requestFocus(_focusSocial);
+        _pickSocial();
+      },
     );
   }
 
@@ -1159,22 +1141,22 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
               _sectionCard(
                 title: 'Категория и статус',
                 children: [
-                  _pickerTile(
+                  _pickerField(
                     key: _categoryKey,
                     icon: Icons.person_outline,
                     title: 'Категория*',
-                    value: _categoryController.text,
+                    controller: _categoryController,
                     hint: 'Выберите категорию',
                     isOpen: _categoryOpen,
                     focusNode: _focusCategory,
                     onTap: _pickCategory,
                   ),
                   const SizedBox(height: 12),
-                  _pickerTile(
+                  _pickerField(
                     key: _statusKey,
                     icon: Icons.how_to_reg,
                     title: 'Статус*',
-                    value: _statusController.text,
+                    controller: _statusController,
                     hint: (_category ?? '').isEmpty ? 'Сначала выберите категорию' : 'Выберите статус',
                     isOpen: _statusOpen,
                     focusNode: _focusStatus,
@@ -1211,7 +1193,7 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
                 ],
               ),
 
-              // ===== Блок: Дополнительно (скролл при раскрытии) =====
+              // ===== Блок: Дополнительно =====
               KeyedSubtree(
                 key: _extraCardKey,
                 child: _collapsibleSectionCard(
@@ -1222,11 +1204,11 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
                     if (v) _scrollToCard(_extraCardKey);
                   },
                   children: [
-                    _pickerTile(
+                    _pickerField(
                       key: const ValueKey('birth'),
                       icon: Icons.cake_outlined,
                       title: 'Дата рождения / возраст',
-                      value: _birthController.text,
+                      controller: _birthController,
                       hint: 'Указать дату или возраст',
                       isOpen: _birthOpen,
                       focusNode: _focusBirth,
@@ -1282,12 +1264,13 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
                     ),
                     const SizedBox(height: 12),
 
-                    _socialPickerTile(),
+                    // Соцсеть — как в AddContact (однострочное поле-пикер)
+                    _socialPickerField(),
                   ],
                 ),
               ),
 
-              // ===== Блок: Заметки (скролл при раскрытии, кнопки в заголовке) =====
+              // ===== Блок: Заметки =====
               KeyedSubtree(
                 key: _notesCardKey,
                 child: _collapsibleSectionCard(
@@ -1298,7 +1281,7 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
                     if (v) _scrollToCard(_notesCardKey);
                   },
                   headerActions: [
-                    const Spacer(), // уводим вправо
+                    const Spacer(),
                     TextButton(
                       onPressed: () async {
                         if (_contact.id == null) return;
@@ -1313,13 +1296,11 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
                       child: const Text('Все заметки'),
                     ),
                   ],
-
                   children: _notes.isEmpty
                       ? const [
                     Card(elevation: 0, child: ListTile(title: Text('Нет заметок'))),
                   ]
                       : [
-                    // <<< CHANGED >>>: разделители + дата без времени
                     Card(
                       elevation: 0,
                       child: Column(
@@ -1360,11 +1341,12 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
               _sectionCard(
                 title: 'Дата добавления',
                 children: [
-                  _pickerTile(
+                  // Оставил плиткой; можно тоже сделать _pickerField по желанию
+                  _pickerField(
                     key: const ValueKey('added'),
                     icon: Icons.event_outlined,
                     title: 'Дата добавления',
-                    value: _addedController.text,
+                    controller: _addedController,
                     isOpen: _addedOpen,
                     focusNode: _focusAdded,
                     onTap: _pickAddedDate,
@@ -1376,7 +1358,6 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
           ),
         ),
       ),
-
 
       bottomNavigationBar: Padding(
         padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
@@ -1399,11 +1380,12 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
     if (c.birthDate != null) {
       _birthDate = c.birthDate;
       _ageManual = null;
-      _birthController.text = DateFormat('dd.MM.yyyy').format(c.birthDate!);
+      final age = _calcAge(c.birthDate!);
+      _birthController.text = '${DateFormat('dd.MM.yyyy').format(c.birthDate!)} (${_formatAge(age)})';
     } else if (c.ageManual != null) {
       _ageManual = c.ageManual;
       _birthDate = null;
-      _birthController.text = c.ageManual.toString();
+      _birthController.text = 'Возраст: ${_formatAge(c.ageManual!)}';
     } else {
       _birthDate = null;
       _ageManual = null;
