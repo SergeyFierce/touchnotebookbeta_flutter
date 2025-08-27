@@ -44,10 +44,16 @@ class _ContactListScreenState extends State<ContactListScreen> {
 
   List<Contact> _all = [];
 
+  static const int _pageSize = 20;
+  int _page = 0;
+  bool _isLoading = false;
+  bool _hasMore = true;
+
   @override
   void initState() {
     super.initState();
-    _loadContacts();
+    _loadContacts(reset: true);
+    _scroll.addListener(_onScroll);
   }
 
   GlobalKey _keyFor(Contact c) {
@@ -84,14 +90,42 @@ class _ContactListScreenState extends State<ContactListScreen> {
     });
   }
 
-  Future<void> _loadContacts() async {
-    final contacts =
-    await ContactDatabase.instance.contactsByCategory(widget.category);
-    if (!mounted) return;
-    setState(() => _all = contacts);
+  void _onScroll() {
+    if (_scroll.position.pixels >=
+        _scroll.position.maxScrollExtent - 200) {
+      _loadMoreContacts();
+    }
+  }
 
-    // автоскролл/подсветка при открытии по scrollToId
-    if (widget.scrollToId != null && _all.any((e) => e.id == widget.scrollToId)) {
+  Future<void> _loadContacts({bool reset = false}) async {
+    if (reset) {
+      _all.clear();
+      _page = 0;
+      _hasMore = true;
+    }
+    await _loadMoreContacts();
+  }
+
+  Future<void> _loadMoreContacts() async {
+    if (_isLoading || !_hasMore) return;
+    setState(() => _isLoading = true);
+    final contacts = await ContactDatabase.instance.contactsByCategoryPaged(
+      widget.category,
+      limit: _pageSize,
+      offset: _page * _pageSize,
+    );
+    if (!mounted) return;
+    setState(() {
+      _all.addAll(contacts);
+      _isLoading = false;
+      _page++;
+      if (contacts.length < _pageSize) {
+        _hasMore = false;
+      }
+    });
+
+    if (widget.scrollToId != null &&
+        _all.any((e) => e.id == widget.scrollToId)) {
       final id = widget.scrollToId!;
       await _maybeScrollTo(id);
       _flashHighlight(id);
@@ -104,6 +138,7 @@ class _ContactListScreenState extends State<ContactListScreen> {
     _snackTimer?.cancel();
     _highlightTimer?.cancel();
     _searchController.dispose();
+    _scroll.removeListener(_onScroll);
     _scroll.dispose();
     super.dispose();
   }
@@ -270,7 +305,7 @@ class _ContactListScreenState extends State<ContactListScreen> {
         context,
         MaterialPageRoute(builder: (context) => ContactDetailsScreen(contact: c)),
       );
-      await _loadContacts();
+      await _loadContacts(reset: true);
     } else if (action == 'delete') {
       final confirm = await showDialog<bool>(
         context: context,
@@ -299,7 +334,7 @@ class _ContactListScreenState extends State<ContactListScreen> {
   Future<void> _goToRestored(Contact restored, int restoredId) async {
     // уже на нужной категории
     if (mounted && widget.category == restored.category) {
-      await _loadContacts();
+      await _loadContacts(reset: true);
       await _maybeScrollTo(restoredId);
       _flashHighlight(restoredId);
       return;
@@ -512,7 +547,14 @@ class _ContactListScreenState extends State<ContactListScreen> {
               controller: _scroll,
               padding:
               const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              itemCount: contacts.length + (_hasMore ? 1 : 0),
               itemBuilder: (context, index) {
+                if (index >= contacts.length) {
+                  return const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 16),
+                    child: Center(child: CircularProgressIndicator()),
+                  );
+                }
                 final c = contacts[index];
                 final wrapperKey = (c.id != null) ? _keyFor(c) : null;
                 final isHighlighted =
@@ -544,7 +586,7 @@ class _ContactListScreenState extends State<ContactListScreen> {
                           context,
                           MaterialPageRoute(builder: (context) => ContactDetailsScreen(contact: c)),
                         );
-                        await _loadContacts();
+                        await _loadContacts(reset: true);
                         if (deleted == true && mounted) {
                           ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Контакт удалён')));
                         }
@@ -558,7 +600,6 @@ class _ContactListScreenState extends State<ContactListScreen> {
                 );
               },
               separatorBuilder: (_, __) => const SizedBox(height: 8),
-              itemCount: contacts.length,
             ),
           ),
         ],
@@ -572,7 +613,7 @@ class _ContactListScreenState extends State<ContactListScreen> {
             ),
           );
           if (saved == true) {
-            await _loadContacts();
+            await _loadContacts(reset: true);
             if (mounted) {
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(content: Text('Контакт сохранён')),
