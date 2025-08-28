@@ -838,14 +838,15 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
   // ==================== UI helpers ====================
 
   InputDecoration _outlinedDec(
-      ThemeData theme, {
-        required String label,
-        IconData? prefixIcon,
-        String? hint,
-        required TextEditingController controller,
-        Widget? suffixIcon,
-        bool showClear = true,
-      }) {
+    ThemeData theme, {
+    required String label,
+    IconData? prefixIcon,
+    String? hint,
+    required TextEditingController controller,
+    Widget? suffixIcon,
+    bool showClear = true,
+    bool requiredField = false,
+  }) {
     return InputDecoration(
       labelText: label,
       hintText: hint,
@@ -853,14 +854,15 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
       suffixIcon: suffixIcon ??
           (showClear && controller.text.isNotEmpty
               ? IconButton(
-            tooltip: 'Очистить',
-            icon: const Icon(Icons.close),
-            onPressed: () {
-              controller.clear();
-              setState(_updateEditingFromDirty);
-            },
-          )
+                  tooltip: 'Очистить',
+                  icon: const Icon(Icons.close),
+                  onPressed: () {
+                    controller.clear();
+                    setState(_updateEditingFromDirty);
+                  },
+                )
               : null),
+      helperText: requiredField ? 'Обязательное поле' : 'Необязательное поле',
       border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
@@ -971,6 +973,7 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
     required bool isOpen,
     required FocusNode focusNode,
     required VoidCallback onTap,
+    bool requiredField = false,
   }) {
     return TextFormField(
       key: key,
@@ -985,6 +988,7 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
         controller: controller,
         suffixIcon: Icon(isOpen ? Icons.arrow_drop_up : Icons.arrow_drop_down),
         showClear: false,
+        requiredField: requiredField,
       ),
       onTap: () {
         FocusScope.of(context).requestFocus(focusNode);
@@ -1107,6 +1111,7 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
                         label: 'ФИО*',
                         prefixIcon: Icons.person_outline,
                         controller: _nameController,
+                        requiredField: true,
                       ),
                       validator: (v) => v == null || v.trim().isEmpty ? 'Введите ФИО' : null,
                       onTapOutside: (_) => _defocus(),
@@ -1128,6 +1133,7 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
                         label: 'Телефон*',
                         prefixIcon: Icons.phone_outlined,
                         controller: _phoneController,
+                        requiredField: true,
                       ),
                       validator: (v) => _phoneValid ? null : 'Введите телефон',
                       onTapOutside: (_) => _defocus(),
@@ -1150,6 +1156,7 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
                     isOpen: _categoryOpen,
                     focusNode: _focusCategory,
                     onTap: _pickCategory,
+                    requiredField: true,
                   ),
                   const SizedBox(height: 12),
                   _pickerField(
@@ -1161,6 +1168,7 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
                     isOpen: _statusOpen,
                     focusNode: _focusStatus,
                     onTap: _pickStatus,
+                    requiredField: true,
                   ),
                 ],
               ),
@@ -1298,23 +1306,34 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
                   ],
                   children: _notes.isEmpty
                       ? const [
-                    Card(elevation: 0, child: ListTile(title: Text('Нет заметок'))),
-                  ]
+                          Card(
+                            elevation: 0,
+                            child: ListTile(
+                              leading: Icon(Icons.sticky_note_2_outlined),
+                              title: Text('Нет заметок'),
+                            ),
+                          ),
+                        ]
                       : [
-                    Card(
-                      elevation: 0,
-                      child: Column(
-                        children: ListTile.divideTiles(
-                          context: context,
-                          tiles: _notes.map((n) => ListTile(
-                            title: Text(n.text, maxLines: 2, overflow: TextOverflow.ellipsis),
-                            subtitle: Text(DateFormat('dd.MM.yyyy').format(n.createdAt)),
-                            onTap: () => _openNote(n),
-                          )),
-                        ).toList(),
-                      ),
-                    ),
-                  ],
+                          Card(
+                            elevation: 0,
+                            child: Column(
+                              children: ListTile.divideTiles(
+                                context: context,
+                                tiles: _notes.map((n) => ListTile(
+                                      leading:
+                                          const Icon(Icons.sticky_note_2_outlined),
+                                      title: Text(n.text,
+                                          maxLines: 2,
+                                          overflow: TextOverflow.ellipsis),
+                                      subtitle: Text(DateFormat('dd.MM.yyyy')
+                                          .format(n.createdAt)),
+                                      onTap: () => _openNote(n),
+                                    )),
+                              ).toList(),
+                            ),
+                          ),
+                        ],
                 ),
               ),
 
