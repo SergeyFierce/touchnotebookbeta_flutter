@@ -955,6 +955,7 @@ class _ContactCardState extends State<_ContactCard> with TickerProviderStateMixi
             ],
           ),
         ),
+       ),
       ),
     );
   }
