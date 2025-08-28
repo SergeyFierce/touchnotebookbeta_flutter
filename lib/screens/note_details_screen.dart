@@ -238,12 +238,6 @@ class _NoteDetailsScreenState extends State<NoteDetailsScreen>
               tooltip: 'Сохранить',
               icon: const Icon(Icons.check),
               onPressed: _canSave ? _save : null,
-            )
-          else
-            IconButton(
-              tooltip: 'Удалить',
-              icon: const Icon(Icons.delete_outline),
-              onPressed: _delete,
             ),
         ],
       ),
@@ -257,6 +251,7 @@ class _NoteDetailsScreenState extends State<NoteDetailsScreen>
               key: _formKey,
               autovalidateMode: AutovalidateMode.onUserInteraction,
               child: ListView(
+                physics: const BouncingScrollPhysics(),
                 children: [
                   _sectionCard(
                     title: 'Текст',
@@ -298,20 +293,17 @@ class _NoteDetailsScreenState extends State<NoteDetailsScreen>
           ),
         ),
       ),
-      // 🔻 нижняя кнопка теперь ТОЛЬКО в режиме редактирования
-      bottomNavigationBar: _isEditing
-          ? Padding(
+      bottomNavigationBar: Padding(
         padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-        child: FilledButton.icon(
-          onPressed: _canSave ? _save : null,
-          icon: const Icon(Icons.check),
-          label: const Text('Сохранить'),
-          style: FilledButton.styleFrom(
-            padding: const EdgeInsets.symmetric(vertical: 14),
+        child: ElevatedButton(
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Colors.red,
+            foregroundColor: Colors.white,
           ),
+          onPressed: _delete,
+          child: const Text('Удалить заметку'),
         ),
-      )
-          : null,
+      ),
 
     );
   }

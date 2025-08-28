@@ -34,6 +34,7 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
   final _phoneKey = GlobalKey();
   final _categoryKey = GlobalKey();
   final _statusKey = GlobalKey();
+  final _addedKey = GlobalKey();
 
   // Controllers
   final _nameController = TextEditingController();
@@ -513,7 +514,8 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
       _nameController.text.trim().isNotEmpty &&
           _phoneValid &&
           (_category ?? _categoryController.text.trim()).isNotEmpty &&
-          (_status ?? _statusController.text.trim()).isNotEmpty;
+          (_status ?? _statusController.text.trim()).isNotEmpty &&
+          _addedController.text.trim().isNotEmpty;
 
   // ==================== pickers ====================
 
@@ -737,8 +739,16 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
       }
     }
     if (!_canSave) {
-      if ((_category ?? '').isEmpty) await _ensureVisible(_categoryKey);
-      else await _ensureVisible(_statusKey);
+      if ((_category ?? '').isEmpty) {
+        await _ensureVisible(_categoryKey);
+      } else if ((_status ?? '').isEmpty) {
+        await _ensureVisible(_statusKey);
+      } else {
+        await _ensureVisible(_addedKey);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Укажите дату добавления')),
+        );
+      }
       return;
     }
 
@@ -838,14 +848,15 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
   // ==================== UI helpers ====================
 
   InputDecoration _outlinedDec(
-      ThemeData theme, {
-        required String label,
-        IconData? prefixIcon,
-        String? hint,
-        required TextEditingController controller,
-        Widget? suffixIcon,
-        bool showClear = true,
-      }) {
+    ThemeData theme, {
+    required String label,
+    IconData? prefixIcon,
+    String? hint,
+    required TextEditingController controller,
+    Widget? suffixIcon,
+    bool showClear = true,
+    bool requiredField = false,
+  }) {
     return InputDecoration(
       labelText: label,
       hintText: hint,
@@ -853,14 +864,15 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
       suffixIcon: suffixIcon ??
           (showClear && controller.text.isNotEmpty
               ? IconButton(
-            tooltip: 'Очистить',
-            icon: const Icon(Icons.close),
-            onPressed: () {
-              controller.clear();
-              setState(_updateEditingFromDirty);
-            },
-          )
+                  tooltip: 'Очистить',
+                  icon: const Icon(Icons.close),
+                  onPressed: () {
+                    controller.clear();
+                    setState(_updateEditingFromDirty);
+                  },
+                )
               : null),
+      helperText: requiredField ? 'Обязательное поле' : 'Необязательное поле',
       border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
@@ -971,6 +983,7 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
     required bool isOpen,
     required FocusNode focusNode,
     required VoidCallback onTap,
+    bool requiredField = false,
   }) {
     return TextFormField(
       key: key,
@@ -985,6 +998,7 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
         controller: controller,
         suffixIcon: Icon(isOpen ? Icons.arrow_drop_up : Icons.arrow_drop_down),
         showClear: false,
+        requiredField: requiredField,
       ),
       onTap: () {
         FocusScope.of(context).requestFocus(focusNode);
@@ -1075,6 +1089,7 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
           autovalidateMode: AutovalidateMode.disabled,
           child: ListView(
             controller: _scroll,
+            physics: const BouncingScrollPhysics(),
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 120),
             children: [
               // ===== Блок: Заголовок (превью карточки) =====
@@ -1107,6 +1122,7 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
                         label: 'ФИО*',
                         prefixIcon: Icons.person_outline,
                         controller: _nameController,
+                        requiredField: true,
                       ),
                       validator: (v) => v == null || v.trim().isEmpty ? 'Введите ФИО' : null,
                       onTapOutside: (_) => _defocus(),
@@ -1128,6 +1144,7 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
                         label: 'Телефон*',
                         prefixIcon: Icons.phone_outlined,
                         controller: _phoneController,
+                        requiredField: true,
                       ),
                       validator: (v) => _phoneValid ? null : 'Введите телефон',
                       onTapOutside: (_) => _defocus(),
@@ -1150,6 +1167,7 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
                     isOpen: _categoryOpen,
                     focusNode: _focusCategory,
                     onTap: _pickCategory,
+                    requiredField: true,
                   ),
                   const SizedBox(height: 12),
                   _pickerField(
@@ -1161,6 +1179,7 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
                     isOpen: _statusOpen,
                     focusNode: _focusStatus,
                     onTap: _pickStatus,
+                    requiredField: true,
                   ),
                 ],
               ),
@@ -1298,23 +1317,34 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
                   ],
                   children: _notes.isEmpty
                       ? const [
-                    Card(elevation: 0, child: ListTile(title: Text('Нет заметок'))),
-                  ]
+                          Card(
+                            elevation: 0,
+                            child: ListTile(
+                              leading: Icon(Icons.sticky_note_2_outlined),
+                              title: Text('Нет заметок'),
+                            ),
+                          ),
+                        ]
                       : [
-                    Card(
-                      elevation: 0,
-                      child: Column(
-                        children: ListTile.divideTiles(
-                          context: context,
-                          tiles: _notes.map((n) => ListTile(
-                            title: Text(n.text, maxLines: 2, overflow: TextOverflow.ellipsis),
-                            subtitle: Text(DateFormat('dd.MM.yyyy').format(n.createdAt)),
-                            onTap: () => _openNote(n),
-                          )),
-                        ).toList(),
-                      ),
-                    ),
-                  ],
+                          Card(
+                            elevation: 0,
+                            child: Column(
+                              children: ListTile.divideTiles(
+                                context: context,
+                                tiles: _notes.map((n) => ListTile(
+                                      leading:
+                                          const Icon(Icons.sticky_note_2_outlined),
+                                      title: Text(n.text,
+                                          maxLines: 2,
+                                          overflow: TextOverflow.ellipsis),
+                                      subtitle: Text(DateFormat('dd.MM.yyyy')
+                                          .format(n.createdAt)),
+                                      onTap: () => _openNote(n),
+                                    )),
+                              ).toList(),
+                            ),
+                          ),
+                        ],
                 ),
               ),
 
@@ -1341,15 +1371,15 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
               _sectionCard(
                 title: 'Дата добавления',
                 children: [
-                  // Оставил плиткой; можно тоже сделать _pickerField по желанию
                   _pickerField(
-                    key: const ValueKey('added'),
+                    key: _addedKey,
                     icon: Icons.event_outlined,
-                    title: 'Дата добавления',
+                    title: 'Дата добавления*',
                     controller: _addedController,
                     isOpen: _addedOpen,
                     focusNode: _focusAdded,
                     onTap: _pickAddedDate,
+                    requiredField: true,
                   ),
                   const SizedBox(height: 8),
                 ],
