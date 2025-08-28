@@ -698,14 +698,15 @@ class _AddContactScreenState extends State<AddContactScreen> {
   // ==================== UI helpers ====================
 
   InputDecoration _outlinedDec(
-      ThemeData theme, {
-        required String label,
-        IconData? prefixIcon,
-        String? hint,
-        required TextEditingController controller,
-        Widget? suffixIcon,
-        bool showClear = true,
-      }) {
+    ThemeData theme, {
+    required String label,
+    IconData? prefixIcon,
+    String? hint,
+    required TextEditingController controller,
+    Widget? suffixIcon,
+    bool showClear = true,
+    bool requiredField = false,
+  }) {
     Widget? suffix = suffixIcon;
     if (showClear && controller.text.isNotEmpty) {
       suffix = IconButton(
@@ -722,6 +723,7 @@ class _AddContactScreenState extends State<AddContactScreen> {
       hintText: hint,
       prefixIcon: prefixIcon != null ? Icon(prefixIcon) : null,
       suffixIcon: suffix,
+      helperText: requiredField ? 'Обязательное поле' : 'Необязательное поле',
       border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
@@ -730,7 +732,7 @@ class _AddContactScreenState extends State<AddContactScreen> {
       filled: false,
       isDense: true,
       contentPadding:
-      const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+          const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
     );
   }
 
@@ -815,6 +817,7 @@ class _AddContactScreenState extends State<AddContactScreen> {
     required bool isOpen,
     required FocusNode focusNode,
     required VoidCallback onTap,
+    bool requiredField = false,
   }) {
     return TextFormField(
       key: key,
@@ -829,6 +832,7 @@ class _AddContactScreenState extends State<AddContactScreen> {
         controller: controller,
         suffixIcon: Icon(isOpen ? Icons.arrow_drop_up : Icons.arrow_drop_down),
         showClear: false,
+        requiredField: requiredField,
       ),
       onTap: () {
         FocusScope.of(context).requestFocus(focusNode);
@@ -942,6 +946,7 @@ class _AddContactScreenState extends State<AddContactScreen> {
                         label: 'ФИО*',
                         prefixIcon: Icons.person_outline,
                         controller: _nameController,
+                        requiredField: true,
                       ),
                       validator: (v) => v == null || v.trim().isEmpty ? 'Введите ФИО' : null,
                       onTapOutside: (_) => _defocus(),
@@ -962,6 +967,7 @@ class _AddContactScreenState extends State<AddContactScreen> {
                         label: 'Телефон*',
                         prefixIcon: Icons.phone_outlined,
                         controller: _phoneController,
+                        requiredField: true,
                       ),
                       validator: (v) => _phoneValid ? null : 'Введите телефон',
                       onTapOutside: (_) => _defocus(),
@@ -983,6 +989,7 @@ class _AddContactScreenState extends State<AddContactScreen> {
                     isOpen: _categoryOpen,
                     focusNode: _focusCategory,
                     onTap: _pickCategory,
+                    requiredField: true,
                   ),
                   const SizedBox(height: 12),
                   _pickerField(
@@ -1000,6 +1007,7 @@ class _AddContactScreenState extends State<AddContactScreen> {
                         _hintSelectCategory();
                       }
                     },
+                    requiredField: true,
                   ),
                 ],
               ),
