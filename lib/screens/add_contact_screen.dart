@@ -24,6 +24,7 @@ class _AddContactScreenState extends State<AddContactScreen> {
   final _phoneKey = GlobalKey();
   final _categoryKey = GlobalKey();
   final _statusKey = GlobalKey();
+  final _addedKey = GlobalKey();
 
   // Controllers
   final _nameController = TextEditingController();
@@ -666,6 +667,13 @@ class _AddContactScreenState extends State<AddContactScreen> {
       );
       return;
     }
+    if (_addedController.text.trim().isEmpty) {
+      await _ensureVisible(_addedKey);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Укажите дату добавления')),
+      );
+      return;
+    }
 
     final contact = Contact(
       name: _nameController.text.trim(),
@@ -914,6 +922,7 @@ class _AddContactScreenState extends State<AddContactScreen> {
           key: _formKey,
           child: ListView(
             controller: _scroll,
+            physics: const BouncingScrollPhysics(),
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 120),
             children: [
               // ===== Блок: Заголовок (превью карточки) =====
@@ -1137,13 +1146,14 @@ class _AddContactScreenState extends State<AddContactScreen> {
                 title: 'Дата добавления',
                 children: [
                   _pickerField(
-                    key: const ValueKey('added'),
+                    key: _addedKey,
                     icon: Icons.event_outlined,
-                    title: 'Дата добавления',
+                    title: 'Дата добавления*',
                     controller: _addedController,
                     isOpen: _addedOpen,
                     focusNode: _focusAdded,
                     onTap: _pickAddedDate,
+                    requiredField: true,
                   ),
                   const SizedBox(height: 8),
                   Text(

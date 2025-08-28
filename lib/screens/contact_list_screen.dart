@@ -545,6 +545,7 @@ class _ContactListScreenState extends State<ContactListScreen> {
             )
                 : ListView.separated(
               controller: _scroll,
+              physics: const BouncingScrollPhysics(),
               padding:
               const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               itemCount: contacts.length + (_hasMore ? 1 : 0),
@@ -584,7 +585,16 @@ class _ContactListScreenState extends State<ContactListScreen> {
                       onTap: () async {
                         final deleted = await Navigator.push(
                           context,
-                          MaterialPageRoute(builder: (context) => ContactDetailsScreen(contact: c)),
+                          PageRouteBuilder(
+                            pageBuilder: (_, __, ___) => ContactDetailsScreen(contact: c),
+                            transitionsBuilder: (_, animation, __, child) {
+                              const begin = Offset(1.0, 0.0);
+                              const end = Offset.zero;
+                              final tween = Tween(begin: begin, end: end)
+                                  .chain(CurveTween(curve: Curves.ease));
+                              return SlideTransition(position: animation.drive(tween), child: child);
+                            },
+                          ),
                         );
                         await _loadContacts(reset: true);
                         if (deleted == true && mounted) {
@@ -608,8 +618,15 @@ class _ContactListScreenState extends State<ContactListScreen> {
         onPressed: () async {
           final saved = await Navigator.push(
             context,
-            MaterialPageRoute(
-              builder: (context) => AddContactScreen(category: widget.category),
+            PageRouteBuilder(
+              pageBuilder: (_, __, ___) => AddContactScreen(category: widget.category),
+              transitionsBuilder: (_, animation, __, child) {
+                const begin = Offset(0.0, 1.0);
+                const end = Offset.zero;
+                final tween = Tween(begin: begin, end: end)
+                    .chain(CurveTween(curve: Curves.ease));
+                return SlideTransition(position: animation.drive(tween), child: child);
+              },
             ),
           );
           if (saved == true) {
@@ -832,11 +849,14 @@ class _ContactCardState extends State<_ContactCard> with TickerProviderStateMixi
   Widget _buildCard(BuildContext context, BorderRadius border) {
     const double kStatusReserve = 120; // резерв ширины справа под чип статуса
 
-    return Material(
-      borderRadius: border,
-      color: Theme.of(context).colorScheme.surfaceVariant,
-      elevation: 2,
-      child: InkWell(
+    return AnimatedScale(
+      scale: _pressed ? 0.98 : 1.0,
+      duration: const Duration(milliseconds: 100),
+      child: Material(
+        borderRadius: border,
+        color: Theme.of(context).colorScheme.surfaceVariant,
+        elevation: 2,
+        child: InkWell(
         borderRadius: border,
         onTap: () { _set(false); widget.onTap?.call(); },
         onLongPress: () {

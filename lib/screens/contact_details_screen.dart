@@ -34,6 +34,7 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
   final _phoneKey = GlobalKey();
   final _categoryKey = GlobalKey();
   final _statusKey = GlobalKey();
+  final _addedKey = GlobalKey();
 
   // Controllers
   final _nameController = TextEditingController();
@@ -513,7 +514,8 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
       _nameController.text.trim().isNotEmpty &&
           _phoneValid &&
           (_category ?? _categoryController.text.trim()).isNotEmpty &&
-          (_status ?? _statusController.text.trim()).isNotEmpty;
+          (_status ?? _statusController.text.trim()).isNotEmpty &&
+          _addedController.text.trim().isNotEmpty;
 
   // ==================== pickers ====================
 
@@ -737,8 +739,16 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
       }
     }
     if (!_canSave) {
-      if ((_category ?? '').isEmpty) await _ensureVisible(_categoryKey);
-      else await _ensureVisible(_statusKey);
+      if ((_category ?? '').isEmpty) {
+        await _ensureVisible(_categoryKey);
+      } else if ((_status ?? '').isEmpty) {
+        await _ensureVisible(_statusKey);
+      } else {
+        await _ensureVisible(_addedKey);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Укажите дату добавления')),
+        );
+      }
       return;
     }
 
@@ -1079,6 +1089,7 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
           autovalidateMode: AutovalidateMode.disabled,
           child: ListView(
             controller: _scroll,
+            physics: const BouncingScrollPhysics(),
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 120),
             children: [
               // ===== Блок: Заголовок (превью карточки) =====
@@ -1360,15 +1371,15 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
               _sectionCard(
                 title: 'Дата добавления',
                 children: [
-                  // Оставил плиткой; можно тоже сделать _pickerField по желанию
                   _pickerField(
-                    key: const ValueKey('added'),
+                    key: _addedKey,
                     icon: Icons.event_outlined,
-                    title: 'Дата добавления',
+                    title: 'Дата добавления*',
                     controller: _addedController,
                     isOpen: _addedOpen,
                     focusNode: _focusAdded,
                     onTap: _pickAddedDate,
+                    requiredField: true,
                   ),
                   const SizedBox(height: 8),
                 ],

@@ -251,6 +251,7 @@ class _NoteDetailsScreenState extends State<NoteDetailsScreen>
               key: _formKey,
               autovalidateMode: AutovalidateMode.onUserInteraction,
               child: ListView(
+                physics: const BouncingScrollPhysics(),
                 children: [
                   _sectionCard(
                     title: 'Текст',

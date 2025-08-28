@@ -183,8 +183,15 @@ class _NotesListScreenState extends State<NotesListScreen> {
     if (widget.contact.id == null) return;
     final note = await Navigator.push<Note>(
       context,
-      MaterialPageRoute(
-        builder: (_) => AddNoteScreen(contactId: widget.contact.id!),
+      PageRouteBuilder(
+        pageBuilder: (_, __, ___) => AddNoteScreen(contactId: widget.contact.id!),
+        transitionsBuilder: (_, animation, __, child) {
+          const begin = Offset(0.0, 1.0);
+          const end = Offset.zero;
+          final tween = Tween(begin: begin, end: end)
+              .chain(CurveTween(curve: Curves.ease));
+          return SlideTransition(position: animation.drive(tween), child: child);
+        },
       ),
     );
     if (note != null) {
@@ -203,7 +210,11 @@ class _NotesListScreenState extends State<NotesListScreen> {
   Future<void> _openDetails(Note note) async {
     final result = await Navigator.push(
       context,
-      MaterialPageRoute(builder: (_) => NoteDetailsScreen(note: note)),
+      PageRouteBuilder(
+        pageBuilder: (_, __, ___) => NoteDetailsScreen(note: note),
+        transitionsBuilder: (_, animation, __, child) =>
+            FadeTransition(opacity: animation, child: child),
+      ),
     );
 
     // поддержка трёх сценариев: удалено, восстановлено, обновлено
@@ -301,6 +312,7 @@ class _NotesListScreenState extends State<NotesListScreen> {
         ? const Center(child: Text('Нет заметок'))
         : ListView.separated(
       controller: _scroll,
+      physics: const BouncingScrollPhysics(),
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
       itemCount: data.length + (_hasMore ? 1 : 0),
       separatorBuilder: (_, __) => const SizedBox(height: 8),
@@ -372,6 +384,9 @@ class _NoteCardState extends State<_NoteCard> with TickerProviderStateMixin {
   late final AnimationController _pulseCtrl;
   late final Animation<double> _scaleAnim;
   late final Animation<double> _glowAnim;
+  bool _pressed = false;
+
+  void _set(bool v) => setState(() => _pressed = v);
 
   @override
   void initState() {
@@ -445,7 +460,7 @@ class _NoteCardState extends State<_NoteCard> with TickerProviderStateMixin {
         final blur = 24 * _glowAnim.value + 0.0;
 
         return Transform.scale(
-          scale: _scaleAnim.value,
+          scale: _scaleAnim.value * (_pressed ? 0.98 : 1.0),
           child: Container(
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(12),
@@ -467,6 +482,9 @@ class _NoteCardState extends State<_NoteCard> with TickerProviderStateMixin {
               child: InkWell(
                 onTap: widget.onTap,
                 onLongPress: widget.onLongPress,
+                onTapDown: (_) => _set(true),
+                onTapCancel: () => _set(false),
+                onTapUp: (_) => _set(false),
                 child: Padding(
                   padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
                   child: Row(
