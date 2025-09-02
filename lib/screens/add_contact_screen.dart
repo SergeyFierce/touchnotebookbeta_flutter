@@ -18,6 +18,10 @@ class AddContactScreen extends StatefulWidget {
 class _AddContactScreenState extends State<AddContactScreen> {
   final _formKey = GlobalKey<FormState>();
   final _scroll = ScrollController();
+  bool _categoryHintVisible = false;
+
+  // Переход в режим "пытались сохранить" — чтобы подсвечивать ошибки и автопроверять всё
+  bool _submitted = false;
 
   // Keys для автоскролла к ошибкам
   final _nameKey = GlobalKey();
@@ -41,21 +45,31 @@ class _AddContactScreenState extends State<AddContactScreen> {
 
   // --- key для «Дополнительно» ---
   final _extraCardKey = GlobalKey();
-
-// Плавный скролл к карточке после анимации раскрытия
-  Future<void> _scrollToCard(GlobalKey key) async {
-    await Future.delayed(const Duration(milliseconds: 240));
-    await _ensureVisible(key);
+  Future<void> _flushUi() async {
+    await Future<void>.delayed(Duration.zero);
+    await WidgetsBinding.instance.endOfFrame;
   }
 
+  // Плавный автоскролл к карточке «Дополнительно»
+  Future<void> _scrollToCard(GlobalKey key) async {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final ctx = key.currentContext;
+      if (ctx == null) return;
+      Scrollable.ensureVisible(
+        ctx,
+        duration: const Duration(milliseconds: 800),
+        curve: Curves.easeInOutCubic,
+        alignment: 0.0, // начало видимой области
+      );
+    });
+  }
 
   void _hintSelectCategory() async {
+    setState(() => _submitted = true);
     await _ensureVisible(_categoryKey);
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Сначала выберите категорию')),
-    );
     FocusScope.of(context).requestFocus(_focusCategory);
   }
+
 
   // ==== PREVIEW HELPERS (как в _ContactCard из списка) ====
 
@@ -71,32 +85,70 @@ class _AddContactScreenState extends State<AddContactScreen> {
 
   Color _statusColor(String status) {
     switch (status) {
-      case 'Активный':   return Colors.green;
-      case 'Пассивный':  return Colors.orange;
-      case 'Потерянный': return Colors.red;
-      case 'Холодный':   return Colors.cyan;
-      case 'Тёплый':     return Colors.pink;
-      default:           return Colors.grey;
+      case 'Активный':
+        return Colors.green;
+      case 'Пассивный':
+        return Colors.orange;
+      case 'Потерянный':
+        return Colors.red;
+      case 'Холодный':
+        return Colors.cyan;
+      case 'Тёплый':
+        return Colors.pink;
+      default:
+        return Colors.grey;
     }
   }
 
   Color _tagColor(String tag) {
     switch (tag) {
-      case 'Новый':     return Colors.white;
-      case 'Напомнить': return Colors.purple;
-      case 'VIP':       return Colors.yellow;
-      default:          return Colors.grey.shade200;
+      case 'Новый':
+        return Colors.white;
+      case 'Напомнить':
+        return Colors.purple;
+      case 'VIP':
+        return Colors.yellow;
+      default:
+        return Colors.grey.shade200;
     }
   }
 
   Color _tagTextColor(String tag) {
     switch (tag) {
-      case 'Новый':     return Colors.black;
-      case 'Напомнить': return Colors.white;
-      case 'VIP':       return Colors.black;
-      default:          return Colors.black;
+      case 'Новый':
+        return Colors.black;
+      case 'Напомнить':
+        return Colors.white;
+      case 'VIP':
+        return Colors.black;
+      default:
+        return Colors.black;
     }
   }
+
+  // === Новое: прогрессивная маска телефона для превью ===
+  String _previewPhoneMasked() {
+    // Берём только цифры, которые ввёл пользователь (последние 10 как «локальный» номер)
+    final digits = _phoneMask.getUnmaskedText(); // может быть 0..10 символов
+    const mask = '+7 (XXX) XXX-XX-XX';
+    final buf = StringBuffer();
+    int di = 0;
+    for (int i = 0; i < mask.length; i++) {
+      final ch = mask[i];
+      if (ch == 'X') {
+        if (di < digits.length) {
+          buf.write(digits[di]);
+          di++;
+        } else {
+          buf.write('X');
+        }
+      } else {
+        buf.write(ch);
+      }
+    }
+    return buf.toString();
+  }
+
   Widget _previewCaption(BuildContext context, {String text = 'Предпросмотр карточки'}) {
     final theme = Theme.of(context);
     return Padding(
@@ -114,14 +166,14 @@ class _AddContactScreenState extends State<AddContactScreen> {
     );
   }
 
-
   Widget _buildHeaderPreview(BuildContext context) {
     const double kStatusReserve = 120; // резерв справа под чип статуса
     final scheme = Theme.of(context).colorScheme;
 
-    final name  = _nameController.text.trim().isEmpty ? 'Новый контакт' : _nameController.text.trim();
-    final phone = _phoneController.text.trim();
-    final status = (_status ?? _statusController.text).trim();
+    final name = _nameController.text.trim().isEmpty ? 'Новый контакт' : _nameController.text.trim();
+    final statusValue = (_status ?? _statusController.text).trim();
+    final statusText = statusValue.isEmpty ? 'Статус' : statusValue;
+    final statusBg = statusValue.isEmpty ? Colors.grey : _statusColor(statusValue);
     final tags = _tags.toList();
 
     Widget avatar() {
@@ -172,17 +224,15 @@ class _AddContactScreenState extends State<AddContactScreen> {
                           name,
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
-                          style: Theme.of(context)
-                              .textTheme
-                              .titleLarge
-                              ?.copyWith(fontWeight: FontWeight.w600),
+                          style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w600),
                         ),
                       ),
                     ],
                   ),
                   const SizedBox(height: 6),
+                  // Новое: превью телефона с прогрессивной маской
                   Text(
-                    phone.isEmpty ? '' : phone,
+                    _previewPhoneMasked(),
                     style: Theme.of(context).textTheme.bodyMedium,
                   ),
                   const SizedBox(height: 8),
@@ -195,10 +245,7 @@ class _AddContactScreenState extends State<AddContactScreen> {
                           Chip(
                             label: Text(
                               tag,
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .bodySmall
-                                  ?.copyWith(fontSize: 10, color: _tagTextColor(tag)),
+                              style: Theme.of(context).textTheme.bodySmall?.copyWith(fontSize: 10, color: _tagTextColor(tag)),
                             ),
                             backgroundColor: _tagColor(tag),
                             visualDensity: const VisualDensity(horizontal: -4, vertical: -4),
@@ -211,32 +258,27 @@ class _AddContactScreenState extends State<AddContactScreen> {
                 ],
               ),
             ),
-            // чип статуса в правом верхнем углу
-            if (status.isNotEmpty)
-              Positioned(
-                top: 0,
-                right: 0,
-                child: Chip(
-                  label: Text(
-                    status,
-                    style: Theme.of(context)
-                        .textTheme
-                        .bodySmall
-                        ?.copyWith(fontSize: 10, color: Colors.white),
-                  ),
-                  backgroundColor: _statusColor(status),
-                  visualDensity: const VisualDensity(horizontal: -4, vertical: -4),
-                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 0),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+            // Чип статуса — теперь всегда есть: либо реальный статус, либо «Статус»
+            Positioned(
+              top: 0,
+              right: 0,
+              child: Chip(
+                label: Text(
+                  statusText,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(fontSize: 10, color: Colors.white),
                 ),
+                backgroundColor: statusBg,
+                visualDensity: const VisualDensity(horizontal: -4, vertical: -4),
+                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 0),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
               ),
+            ),
           ],
         ),
       ),
     );
   }
-
 
   // ====== Состояния ======
   DateTime? _birthDate;
@@ -309,6 +351,12 @@ class _AddContactScreenState extends State<AddContactScreen> {
     _professionController.addListener(() => setState(() {}));
     _cityController.addListener(() => setState(() {}));
     _commentController.addListener(() => setState(() {}));
+
+    _focusCategory.addListener(() => setState(() {}));
+    _focusStatus.addListener(() => setState(() {}));
+    _focusSocial.addListener(() => setState(() {}));
+    _focusBirth.addListener(() => setState(() {}));
+    _focusAdded.addListener(() => setState(() {}));
   }
 
   @override
@@ -341,8 +389,7 @@ class _AddContactScreenState extends State<AddContactScreen> {
   int _calcAge(DateTime birth) {
     final now = DateTime.now();
     var age = now.year - birth.year;
-    if (now.month < birth.month ||
-        (now.month == birth.month && now.day < birth.day)) {
+    if (now.month < birth.month || (now.month == birth.month && now.day < birth.day)) {
       age--;
     }
     return age;
@@ -358,15 +405,12 @@ class _AddContactScreenState extends State<AddContactScreen> {
   }
 
   String _initials(String name) {
-    final parts =
-    name.trim().split(RegExp(r'\s+')).where((e) => e.isNotEmpty).toList();
+    final parts = name.trim().split(RegExp(r'\s+')).where((e) => e.isNotEmpty).toList();
     if (parts.isEmpty) return '';
     if (parts.length == 1) {
       return parts.first.characters.take(2).toString().toUpperCase();
     }
-    return (parts.first.characters.take(1).toString() +
-        parts[1].characters.take(1).toString())
-        .toUpperCase();
+    return (parts.first.characters.take(1).toString() + parts[1].characters.take(1).toString()).toUpperCase();
   }
 
   Future<void> _ensureVisible(GlobalKey key) async {
@@ -382,11 +426,6 @@ class _AddContactScreenState extends State<AddContactScreen> {
   }
 
   bool get _phoneValid => _phoneMask.getUnmaskedText().length == 10;
-  bool get _canSave =>
-      _nameController.text.trim().isNotEmpty &&
-          _phoneValid &&
-          _category != null &&
-          _status != null;
 
   // ==================== pickers ====================
 
@@ -431,8 +470,7 @@ class _AddContactScreenState extends State<AddContactScreen> {
         _birthDate = picked;
         _ageManual = null;
         final age = _calcAge(picked);
-        _birthController.text =
-        '${DateFormat('dd.MM.yyyy').format(picked)} (${_formatAge(age)})';
+        _birthController.text = '${DateFormat('dd.MM.yyyy').format(picked)} (${_formatAge(age)})';
         setState(() {});
       }
     } else if (choice == 'age') {
@@ -450,12 +488,9 @@ class _AddContactScreenState extends State<AddContactScreen> {
             ),
           ),
           actions: [
-            TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('Отмена')),
+            TextButton(onPressed: () => Navigator.pop(context), child: const Text('Отмена')),
             FilledButton(
-              onPressed: () =>
-                  Navigator.pop(context, int.tryParse(ctrl.text)),
+              onPressed: () => Navigator.pop(context, int.tryParse(ctrl.text)),
               child: const Text('OK'),
             ),
           ],
@@ -548,8 +583,19 @@ class _AddContactScreenState extends State<AddContactScreen> {
   }
 
   Future<void> _pickCategory() async {
+    // сначала ставим фокус, чтобы лейбл поднялся
     FocusScope.of(context).requestFocus(_focusCategory);
+
+    // ждём немного, чтобы анимация отрисовалась
+    await Future.delayed(const Duration(milliseconds: 100));
+
+    // теперь помечаем поле как "open", чтобы показать hint
     setState(() => _categoryOpen = true);
+
+    // ждём следующий кадр, чтобы hint успел отрисоваться
+    await Future.delayed(const Duration(milliseconds: 50));
+
+    // и только потом открываем сам bottom-sheet
     final result = await showModalBottomSheet<String>(
       context: context,
       showDragHandle: true,
@@ -564,6 +610,7 @@ class _AddContactScreenState extends State<AddContactScreen> {
         ),
       ),
     );
+
     setState(() => _categoryOpen = false);
 
     if (result != null) {
@@ -573,7 +620,6 @@ class _AddContactScreenState extends State<AddContactScreen> {
         _categoryController.text = result;
         _statusController.text = '';
       });
-      await _ensureVisible(_statusKey);
     }
   }
 
@@ -641,61 +687,59 @@ class _AddContactScreenState extends State<AddContactScreen> {
 
   Future<void> _save() async {
     _defocus();
+    setState(() => _submitted = true);
 
     final valid = _formKey.currentState?.validate() ?? false;
-    if (!valid) {
-      if (_nameController.text.trim().isEmpty) {
-        await _ensureVisible(_nameKey);
-        return;
-      }
-      if (!_phoneValid) {
-        await _ensureVisible(_phoneKey);
-        return;
-      }
-    }
-    if (_category == null) {
-      await _ensureVisible(_categoryKey);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Выберите категорию')),
-      );
-      return;
-    }
-    if (_status == null) {
-      await _ensureVisible(_statusKey);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Выберите статус')),
-      );
-      return;
-    }
-    if (_addedController.text.trim().isEmpty) {
-      await _ensureVisible(_addedKey);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Укажите дату добавления')),
-      );
+
+    // 1) ФИО
+    if (_nameController.text.trim().isEmpty) {
+      await _ensureVisible(_nameKey);
+      FocusScope.of(context).requestFocus(FocusNode()); // просто снять фокус с других
       return;
     }
 
+    // 2) Телефон
+    if (!_phoneValid) {
+      await _ensureVisible(_phoneKey);
+      FocusScope.of(context).requestFocus(FocusNode());
+      return;
+    }
+
+    // 3) Категория
+    if (_category == null || _categoryController.text.trim().isEmpty) {
+      await _ensureVisible(_categoryKey);
+      FocusScope.of(context).requestFocus(_focusCategory);
+      return;
+    }
+
+    // 4) Статус
+    if (_status == null || _statusController.text.trim().isEmpty) {
+      await _ensureVisible(_statusKey);
+      FocusScope.of(context).requestFocus(_focusStatus);
+      return;
+    }
+
+    // 5) Дата добавления
+    if (_addedController.text.trim().isEmpty) {
+      await _ensureVisible(_addedKey);
+      FocusScope.of(context).requestFocus(_focusAdded);
+      return;
+    }
+
+    // --- сохранение как было ---
     final contact = Contact(
       name: _nameController.text.trim(),
       birthDate: _birthDate,
       ageManual: _ageManual,
-      profession: _professionController.text.trim().isEmpty
-          ? null
-          : _professionController.text.trim(),
-      city: _cityController.text.trim().isEmpty
-          ? null
-          : _cityController.text.trim(),
+      profession: _professionController.text.trim().isEmpty ? null : _professionController.text.trim(),
+      city: _cityController.text.trim().isEmpty ? null : _cityController.text.trim(),
       phone: _phoneController.text.trim(),
-      email: _emailController.text.trim().isEmpty
-          ? null
-          : _emailController.text.trim(),
+      email: _emailController.text.trim().isNotEmpty ? _emailController.text.trim() : null,
       social: _socialType,
       category: _category!,
       status: _status!,
       tags: _tags.toList(),
-      comment: _commentController.text.trim().isEmpty
-          ? null
-          : _commentController.text.trim(),
+      comment: _commentController.text.trim().isNotEmpty ? _commentController.text.trim() : null,
       createdAt: _addedDate,
     );
 
@@ -703,18 +747,21 @@ class _AddContactScreenState extends State<AddContactScreen> {
     if (mounted) Navigator.pop(context, true);
   }
 
+
   // ==================== UI helpers ====================
 
   InputDecoration _outlinedDec(
-    ThemeData theme, {
-    required String label,
-    IconData? prefixIcon,
-    String? hint,
-    required TextEditingController controller,
-    Widget? suffixIcon,
-    bool showClear = true,
-    bool requiredField = false,
-  }) {
+      ThemeData theme, {
+        required String label,
+        IconData? prefixIcon,
+        String? hint,
+        required TextEditingController controller,
+        Widget? suffixIcon,
+        bool showClear = true,
+        bool requiredField = false,
+        FloatingLabelBehavior floatingLabelBehavior = FloatingLabelBehavior.auto,
+        String? errorText, // <<<<<<<<<< НОВОЕ
+      }) {
     Widget? suffix = suffixIcon;
     if (showClear && controller.text.isNotEmpty) {
       suffix = IconButton(
@@ -732,6 +779,7 @@ class _AddContactScreenState extends State<AddContactScreen> {
       prefixIcon: prefixIcon != null ? Icon(prefixIcon) : null,
       suffixIcon: suffix,
       helperText: requiredField ? 'Обязательное поле' : 'Необязательное поле',
+      errorText: errorText, // <<<<<<<<<< НОВОЕ
       border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
@@ -739,8 +787,8 @@ class _AddContactScreenState extends State<AddContactScreen> {
       ),
       filled: false,
       isDense: true,
-      contentPadding:
-          const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+      floatingLabelBehavior: floatingLabelBehavior,
     );
   }
 
@@ -759,9 +807,7 @@ class _AddContactScreenState extends State<AddContactScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(title,
-                style: theme.textTheme.titleMedium
-                    ?.copyWith(fontWeight: FontWeight.w700)),
+            Text(title, style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
             const SizedBox(height: 12),
             ...children,
           ],
@@ -795,10 +841,7 @@ class _AddContactScreenState extends State<AddContactScreen> {
             children: [
               Text(
                 title,
-                style: Theme.of(context)
-                    .textTheme
-                    .titleMedium
-                    ?.copyWith(fontWeight: FontWeight.w700),
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
               ),
               const SizedBox(width: 8),
               AnimatedRotation(
@@ -815,18 +858,20 @@ class _AddContactScreenState extends State<AddContactScreen> {
     );
   }
 
-
   Widget _pickerField({
     required Key key,
     required IconData icon,
     required String title,
     required TextEditingController controller,
     String? hint,
-    required bool isOpen,
+    required bool isOpen, // <-- уже есть у тебя
     required FocusNode focusNode,
     required VoidCallback onTap,
     bool requiredField = false,
   }) {
+    final floating = isOpen || focusNode.hasFocus; // держим лейбл наверху либо при фокусе, либо пока открыт лист
+    final showError = _submitted && requiredField && controller.text.trim().isEmpty;
+
     return TextFormField(
       key: key,
       controller: controller,
@@ -835,21 +880,24 @@ class _AddContactScreenState extends State<AddContactScreen> {
       decoration: _outlinedDec(
         Theme.of(context),
         label: title,
-        hint: hint,
+        hint: floating ? hint : null, // hint показываем ТОЛЬКО когда лист открыт
         prefixIcon: icon,
         controller: controller,
         suffixIcon: Icon(isOpen ? Icons.arrow_drop_up : Icons.arrow_drop_down),
         showClear: false,
         requiredField: requiredField,
+        floatingLabelBehavior: floating ? FloatingLabelBehavior.always : FloatingLabelBehavior.auto,
+        errorText: showError ? 'Обязательное поле' : null, // <--- подсветка
       ),
       onTap: () {
+        // сначала ставим фокус, чтобы лейбл поднялся, затем открываем лист
         FocusScope.of(context).requestFocus(focusNode);
         onTap();
       },
     );
   }
 
-  // Плитка «Соцсеть» — отдельная, чтобы показывать SVG leading
+  // Плитка «Соцсеть» с SVG leading
   Widget _socialPickerField() {
     final value = _socialController.text;
     final t = (_socialType ?? value).trim();
@@ -867,10 +915,8 @@ class _AddContactScreenState extends State<AddContactScreen> {
         showClear: false,
       ).copyWith(
         prefixIcon: Padding(
-          padding: const EdgeInsets.all(10), // уменьшаем отступы
-          child: t.isEmpty
-              ? const Icon(Icons.public, size: 20) // стандартная иконка
-              : _brandIcon(t, size: 20),          // svg-иконка меньшего размера
+          padding: const EdgeInsets.all(10),
+          child: t.isEmpty ? const Icon(Icons.public, size: 20) : _brandIcon(t, size: 20),
         ),
       ),
       onTap: () {
@@ -885,7 +931,6 @@ class _AddContactScreenState extends State<AddContactScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final initials = _initials(_nameController.text);
 
     Widget tagChip(String label) {
       final selected = _tags.contains(label);
@@ -909,7 +954,12 @@ class _AddContactScreenState extends State<AddContactScreen> {
         leading: const BackButton(),
         title: const Text('Добавить контакт'),
         actions: [
-          if (_canSave)
+          // Можно оставить и иконку в AppBar при готовности формы — не мешает.
+          // Она остаётся опциональной: основная «Сохранить» внизу всегда видна.
+          if ((_nameController.text.trim().isNotEmpty) &&
+              _phoneValid &&
+              _category != null &&
+              _status != null)
             IconButton(
               tooltip: 'Сохранить',
               icon: const Icon(Icons.add),
@@ -920,10 +970,11 @@ class _AddContactScreenState extends State<AddContactScreen> {
       body: SafeArea(
         child: Form(
           key: _formKey,
+          autovalidateMode: _submitted ? AutovalidateMode.always : AutovalidateMode.disabled,
           child: ListView(
             controller: _scroll,
             physics: const BouncingScrollPhysics(),
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 120),
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
             children: [
               // ===== Блок: Заголовок (превью карточки) =====
               Column(
@@ -957,7 +1008,7 @@ class _AddContactScreenState extends State<AddContactScreen> {
                         controller: _nameController,
                         requiredField: true,
                       ),
-                      validator: (v) => v == null || v.trim().isEmpty ? 'Введите ФИО' : null,
+                      validator: (v) => v == null || v.trim().isEmpty ? 'Обязательное поле' : null,
                       onTapOutside: (_) => _defocus(),
                     ),
                   ),
@@ -978,7 +1029,7 @@ class _AddContactScreenState extends State<AddContactScreen> {
                         controller: _phoneController,
                         requiredField: true,
                       ),
-                      validator: (v) => _phoneValid ? null : 'Введите телефон',
+                      validator: (v) => _phoneValid ? null : 'Обязательное поле',
                       onTapOutside: (_) => _defocus(),
                     ),
                   ),
@@ -1162,26 +1213,26 @@ class _AddContactScreenState extends State<AddContactScreen> {
                   ),
                 ],
               ),
+
+              const SizedBox(height: 16),
+
+              // ===== КНОПКА СОХРАНЕНИЯ В КОНЦЕ ФОРМЫ =====
+              SafeArea(
+                top: false,
+                minimum: const EdgeInsets.only(bottom: 24),
+                child: FilledButton.icon(
+                  onPressed: _save, // всегда активна
+                  icon: const Icon(Icons.save_outlined),
+                  label: const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 12),
+                    child: Text('Сохранить контакт'),
+                  ),
+                ),
+              ),
             ],
           ),
         ),
       ),
-
-
-      // Кнопка снизу — скрыта, если нельзя сохранять
-      bottomNavigationBar: _canSave
-          ? SafeArea(
-        minimum: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-        child: FilledButton.icon(
-          onPressed: _save,
-          icon: const Icon(Icons.save_outlined),
-          label: const Padding(
-            padding: EdgeInsets.symmetric(vertical: 12),
-            child: Text('Сохранить контакт'),
-          ),
-        ),
-      )
-          : null,
     );
   }
 }
@@ -1192,8 +1243,7 @@ class _PickerTile extends StatelessWidget {
   final IconData icon;
   final String label;
   final String value;
-  const _PickerTile(
-      {required this.icon, required this.label, required this.value});
+  const _PickerTile({required this.icon, required this.label, required this.value});
 
   @override
   Widget build(BuildContext context) {

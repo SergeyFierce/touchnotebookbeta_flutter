@@ -53,11 +53,20 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
   final _extraCardKey = GlobalKey();
   final _notesCardKey = GlobalKey();
 
-  // Плавный скролл к карточке после анимации раскрытия
+  // Плавный автоскролл к карточке после раскрытия (более мягкий)
   Future<void> _scrollToCard(GlobalKey key) async {
-    await Future.delayed(const Duration(milliseconds: 240));
-    await _ensureVisible(key);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final ctx = key.currentContext;
+      if (ctx == null) return;
+      Scrollable.ensureVisible(
+        ctx,
+        duration: const Duration(milliseconds: 800),
+        curve: Curves.easeInOutCubic,
+        alignment: 0.0, // к началу видимой области
+      );
+    });
   }
+
 
   Widget _previewCaption(BuildContext context, {String text = 'Предпросмотр карточки'}) {
     final theme = Theme.of(context);
@@ -113,6 +122,8 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
       case 'Потерянный': return Colors.red;
       case 'Холодный': return Colors.cyan;
       case 'Тёплый': return Colors.pink;
+    // <<< цвет плейсхолдера "Статус"
+      case 'Статус': return Colors.grey;
       default: return Colors.grey;
     }
   }
@@ -135,12 +146,47 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
     }
   }
 
+  // <<< помощник: цифры из строки
+  String _digitsOnly(String s) => s.replaceAll(RegExp(r'\D'), '');
+
+  // <<< НОВОЕ: формат превью телефона с X-плейсхолдерами
+  // Берём последние 10 цифр (чтобы отрезать константную "7" из "+7 ..."),
+  // подставляем их слева направо в шаблон "+7 (XXX) XXX-XX-XX".
+  String _phonePreview() {
+    // всегда только пользовательские 0..10 цифр без литерала +7
+    final raw = _phoneMask.getUnmaskedText(); // пример: "931293463" (пока не 10 цифр)
+    const template = '+7 (XXX) XXX-XX-XX';
+
+    final buf = StringBuffer();
+    int i = 0;
+    for (final ch in template.runes) {
+      if (String.fromCharCode(ch) == 'X') {
+        buf.write(i < raw.length ? raw[i] : 'X');
+        i++;
+      } else {
+        buf.writeCharCode(ch);
+      }
+    }
+    return buf.toString();
+  }
+
+
+  // <<< НОВОЕ: текст статуса или плейсхолдер "Статус"
+  String _statusOrPlaceholder() {
+    final s = (_status ?? _statusController.text).trim();
+    return s.isEmpty ? 'Статус' : s;
+  }
+
   Widget _buildHeaderPreview(BuildContext context) {
     const double kStatusReserve = 120; // как в _ContactCard
     final scheme = Theme.of(context).colorScheme;
     final name = _nameController.text.trim().isEmpty ? 'Новый контакт' : _nameController.text.trim();
-    final phone = _phoneController.text.trim();
-    final status = (_status ?? _statusController.text).trim();
+
+    // <<< телефон в превью с X-плейсхолдерами
+    final phonePreview = _phonePreview();
+
+    // <<< статус с плейсхолдером "Статус"
+    final statusText = _statusOrPlaceholder();
     final tags = _tags.toList();
 
     Widget avatar() {
@@ -199,8 +245,9 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
                     ],
                   ),
                   const SizedBox(height: 6),
+                  // <<< показываем всегда маску телефона с X
                   Text(
-                    phone.isEmpty ? '—' : phone,
+                    phonePreview,
                     style: Theme.of(context).textTheme.bodyMedium,
                   ),
                   const SizedBox(height: 8),
@@ -229,25 +276,25 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
                 ],
               ),
             ),
-            if (status.isNotEmpty)
-              Positioned(
-                top: 0,
-                right: 0,
-                child: Chip(
-                  label: Text(
-                    status,
-                    style: Theme.of(context)
-                        .textTheme
-                        .bodySmall
-                        ?.copyWith(fontSize: 10, color: Colors.white),
-                  ),
-                  backgroundColor: _statusColor(status),
-                  visualDensity: const VisualDensity(horizontal: -4, vertical: -4),
-                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 0),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+            // <<< чип статуса теперь показывается ВСЕГДА; если статуса нет — "Статус" серый
+            Positioned(
+              top: 0,
+              right: 0,
+              child: Chip(
+                label: Text(
+                  statusText,
+                  style: Theme.of(context)
+                      .textTheme
+                      .bodySmall
+                      ?.copyWith(fontSize: 10, color: Colors.white),
                 ),
+                backgroundColor: _statusColor(statusText),
+                visualDensity: const VisualDensity(horizontal: -4, vertical: -4),
+                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 0),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
               ),
+            ),
           ],
         ),
       ),
@@ -317,6 +364,10 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
     _contact = widget.contact;
     _loadFromContact();
     _loadNotes();
+    // чтобы превью обновлялось при каждом символе
+    _phoneController.addListener(() => setState(() {}));
+    _nameController.addListener(() => setState(() {}));
+    _statusController.addListener(() => setState(() {}));
   }
 
   @override
@@ -492,8 +543,6 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
     }
   }
 
-  String _digitsOnly(String s) => s.replaceAll(RegExp(r'\D'), '');
-
   void _setPhoneFromModel(String raw) {
     final d = _digitsOnly(raw);
     String masked = '';
@@ -625,7 +674,6 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
   }
 
   Future<void> _pickCategory() async {
-    FocusScope.of(context).requestFocus(_focusCategory);
     setState(() => _categoryOpen = true);
     final result = await showModalBottomSheet<String>(
       context: context,
@@ -650,7 +698,6 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
         _status = null;
         _statusController.text = '';
       });
-      await _ensureVisible(_statusKey);
       await _pickStatus();
       _updateEditingFromDirty();
     }
@@ -848,15 +895,15 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
   // ==================== UI helpers ====================
 
   InputDecoration _outlinedDec(
-    ThemeData theme, {
-    required String label,
-    IconData? prefixIcon,
-    String? hint,
-    required TextEditingController controller,
-    Widget? suffixIcon,
-    bool showClear = true,
-    bool requiredField = false,
-  }) {
+      ThemeData theme, {
+        required String label,
+        IconData? prefixIcon,
+        String? hint,
+        required TextEditingController controller,
+        Widget? suffixIcon,
+        bool showClear = true,
+        bool requiredField = false,
+      }) {
     return InputDecoration(
       labelText: label,
       hintText: hint,
@@ -864,13 +911,13 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
       suffixIcon: suffixIcon ??
           (showClear && controller.text.isNotEmpty
               ? IconButton(
-                  tooltip: 'Очистить',
-                  icon: const Icon(Icons.close),
-                  onPressed: () {
-                    controller.clear();
-                    setState(_updateEditingFromDirty);
-                  },
-                )
+            tooltip: 'Очистить',
+            icon: const Icon(Icons.close),
+            onPressed: () {
+              controller.clear();
+              setState(_updateEditingFromDirty);
+            },
+          )
               : null),
       helperText: requiredField ? 'Обязательное поле' : 'Необязательное поле',
       border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
@@ -1090,7 +1137,7 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
           child: ListView(
             controller: _scroll,
             physics: const BouncingScrollPhysics(),
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 120),
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
             children: [
               // ===== Блок: Заголовок (превью карточки) =====
               Column(
@@ -1317,34 +1364,34 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
                   ],
                   children: _notes.isEmpty
                       ? const [
-                          Card(
-                            elevation: 0,
-                            child: ListTile(
-                              leading: Icon(Icons.sticky_note_2_outlined),
-                              title: Text('Нет заметок'),
-                            ),
-                          ),
-                        ]
+                    Card(
+                      elevation: 0,
+                      child: ListTile(
+                        leading: Icon(Icons.sticky_note_2_outlined),
+                        title: Text('Нет заметок'),
+                      ),
+                    ),
+                  ]
                       : [
-                          Card(
-                            elevation: 0,
-                            child: Column(
-                              children: ListTile.divideTiles(
-                                context: context,
-                                tiles: _notes.map((n) => ListTile(
-                                      leading:
-                                          const Icon(Icons.sticky_note_2_outlined),
-                                      title: Text(n.text,
-                                          maxLines: 2,
-                                          overflow: TextOverflow.ellipsis),
-                                      subtitle: Text(DateFormat('dd.MM.yyyy')
-                                          .format(n.createdAt)),
-                                      onTap: () => _openNote(n),
-                                    )),
-                              ).toList(),
-                            ),
-                          ),
-                        ],
+                    Card(
+                      elevation: 0,
+                      child: Column(
+                        children: ListTile.divideTiles(
+                          context: context,
+                          tiles: _notes.map((n) => ListTile(
+                            leading:
+                            const Icon(Icons.sticky_note_2_outlined),
+                            title: Text(n.text,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis),
+                            subtitle: Text(DateFormat('dd.MM.yyyy')
+                                .format(n.createdAt)),
+                            onTap: () => _openNote(n),
+                          )),
+                        ).toList(),
+                      ),
+                    ),
+                  ],
                 ),
               ),
 
@@ -1384,17 +1431,21 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
                   const SizedBox(height: 8),
                 ],
               ),
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: _isEditing ? Theme.of(context).colorScheme.primary : Colors.red,
+                    foregroundColor: Colors.white,
+                  ),
+                  onPressed: _isEditing ? (_canSave ? _save : null) : _delete,
+                  child: Text(_isEditing ? 'Сохранить' : 'Удалить контакт'),
+                ),
+              ),
+              const SizedBox(height: 24),
             ],
           ),
-        ),
-      ),
-
-      bottomNavigationBar: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-        child: ElevatedButton(
-          style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
-          onPressed: _delete,
-          child: const Text('Удалить контакт'),
         ),
       ),
     );
