@@ -853,6 +853,31 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
     _snackTimer = Timer(endTime.difference(DateTime.now()), () => controller.close());
   }
 
+  String _titleForCategory(String cat) {
+    switch (cat) {
+      case 'Партнёр':
+        return 'Партнёры';
+      case 'Клиент':
+        return 'Клиенты';
+      case 'Потенциальный':
+        return 'Потенциальные';
+      default:
+        return cat;
+    }
+  }
+
+  Future<void> _goToRestored(Contact restored, int restoredId) async {
+    final title = _titleForCategory(restored.category);
+    App.navigatorKey.currentState?.push(
+      MaterialPageRoute(
+        builder: (_) => ContactListScreen(
+          category: restored.category,
+          title: title,
+        ),
+      ),
+    );
+  }
+
   Future<void> _delete() async {
     final ok = await showDialog<bool>(
       context: context,

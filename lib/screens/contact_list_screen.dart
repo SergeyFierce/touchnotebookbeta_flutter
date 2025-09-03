@@ -368,6 +368,23 @@ class _ContactListScreenState extends State<ContactListScreen> {
   /// без автопрокрутки.
   Future<void> _goToRestored(Contact restored, int restoredId) async {
     await ContactListScreen.goToRestored(restored, restoredId);
+    // уже на нужной категории
+    if (mounted && widget.category == restored.category) {
+      await _loadContacts(reset: true);
+      _flashHighlight(restoredId);
+      return;
+    }
+
+    // переходим в нужную категорию без прокрутки к восстановленному
+    final String title = _titleForCategory(restored.category);
+    App.navigatorKey.currentState?.push(
+      MaterialPageRoute(
+        builder: (_) => ContactListScreen(
+          category: restored.category,
+          title: title,
+        ),
+      ),
+    );
   }
 
 
