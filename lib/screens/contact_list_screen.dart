@@ -330,24 +330,23 @@ class _ContactListScreenState extends State<ContactListScreen> {
     }
   }
 
-  /// Переходит к нужной категории (если надо) и подсвечивает восстановленный контакт.
+  /// Обновляет список контактов и, если возможно, подсвечивает восстановленный контакт
+  /// без автопрокрутки.
   Future<void> _goToRestored(Contact restored, int restoredId) async {
     // уже на нужной категории
     if (mounted && widget.category == restored.category) {
       await _loadContacts(reset: true);
-      await _maybeScrollTo(restoredId);
       _flashHighlight(restoredId);
       return;
     }
 
-    // пушим новую страницу категории, она сама проскроллит и подсветит по scrollToId
+    // переходим в нужную категорию без прокрутки к восстановленному
     final String title = _titleForCategory(restored.category);
     App.navigatorKey.currentState?.push(
       MaterialPageRoute(
         builder: (_) => ContactListScreen(
           category: restored.category,
           title: title,
-          scrollToId: restoredId,
         ),
       ),
     );
@@ -597,9 +596,6 @@ class _ContactListScreenState extends State<ContactListScreen> {
                           ),
                         );
                         await _loadContacts(reset: true);
-                        if (deleted == true && mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Контакт удалён')));
-                        }
                       },
                       pulse: isHighlighted,
                       pulseSeed:

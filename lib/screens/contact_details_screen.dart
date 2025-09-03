@@ -820,7 +820,10 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
 
     final notesSnapshot = await db.deleteContactWithSnapshot(c.id!);
 
-    final ctx = App.navigatorKey.currentContext ?? context;
+    if (mounted) Navigator.pop(context, true);
+
+    final ctx = App.navigatorKey.currentContext;
+    if (ctx == null) return;
     final messenger = ScaffoldMessenger.of(ctx);
 
     const duration = Duration(seconds: 4);
@@ -838,7 +841,8 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
             _snackTimer?.cancel();
             messenger.hideCurrentSnackBar();
 
-            final newId = await db.restoreContactWithNotes(c.copyWith(id: null), notesSnapshot);
+            final newId =
+                await db.restoreContactWithNotes(c.copyWith(id: null), notesSnapshot);
 
             await _goToRestored(c, newId);
           },
@@ -847,8 +851,6 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
     );
 
     _snackTimer = Timer(endTime.difference(DateTime.now()), () => controller.close());
-
-    if (mounted) Navigator.pop(context, true);
   }
 
   String _titleForCategory(String cat) {
@@ -871,7 +873,6 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
         builder: (_) => ContactListScreen(
           category: restored.category,
           title: title,
-          scrollToId: restoredId,
         ),
       ),
     );
