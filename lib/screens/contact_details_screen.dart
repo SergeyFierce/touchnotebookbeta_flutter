@@ -844,7 +844,7 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
             final newId =
                 await db.restoreContactWithNotes(c.copyWith(id: null), notesSnapshot);
 
-            await _goToRestored(c, newId);
+            await ContactListScreen.goToRestored(c, newId);
           },
         ),
       ),

@@ -19,6 +19,40 @@ class ContactListScreen extends StatefulWidget {
     this.scrollToId,
   });
 
+  static String _titleForCategory(String cat) {
+    switch (cat) {
+      case 'Партнёр':
+        return 'Партнёры';
+      case 'Клиент':
+        return 'Клиенты';
+      case 'Потенциальный':
+        return 'Потенциальные';
+      default:
+        return cat;
+    }
+  }
+
+  static Future<void> goToRestored(Contact restored, int restoredId) async {
+    final ctx = App.navigatorKey.currentContext;
+    final state = ctx?.findAncestorStateOfType<_ContactListScreenState>();
+
+    if (state != null && state.mounted && state.widget.category == restored.category) {
+      await state._loadContacts(reset: true);
+      state._flashHighlight(restoredId);
+      return;
+    }
+
+    final title = _titleForCategory(restored.category);
+    App.navigatorKey.currentState?.push(
+      MaterialPageRoute(
+        builder: (_) => ContactListScreen(
+          category: restored.category,
+          title: title,
+        ),
+      ),
+    );
+  }
+
   @override
   State<ContactListScreen> createState() => _ContactListScreenState();
 }
@@ -333,6 +367,7 @@ class _ContactListScreenState extends State<ContactListScreen> {
   /// Обновляет список контактов и, если возможно, подсвечивает восстановленный контакт
   /// без автопрокрутки.
   Future<void> _goToRestored(Contact restored, int restoredId) async {
+    await ContactListScreen.goToRestored(restored, restoredId);
     // уже на нужной категории
     if (mounted && widget.category == restored.category) {
       await _loadContacts(reset: true);
@@ -352,18 +387,6 @@ class _ContactListScreenState extends State<ContactListScreen> {
     );
   }
 
-  String _titleForCategory(String cat) {
-    switch (cat) {
-      case 'Партнёр':
-        return 'Партнёры';
-      case 'Клиент':
-        return 'Клиенты';
-      case 'Потенциальный':
-        return 'Потенциальные';
-      default:
-        return cat;
-    }
-  }
 
   /// Удаляет контакт и показывает SnackBar с Undo + индикатором и обратным отсчётом.
   Future<void> _deleteWithUndo(Contact c) async {
