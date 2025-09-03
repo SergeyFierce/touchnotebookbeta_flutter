@@ -800,15 +800,24 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
     }
 
     final updated = _snapshot();
-
     await ContactDatabase.instance.update(updated);
     if (!mounted) return;
-    setState(() {
-      _contact = updated;
-      _isEditing = false;
-    });
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Изменения сохранены')));
+
+    // Обновляем локальный снапшот (без setState — мы всё равно уходим со страницы)
+    _contact = updated;
+
+    // Выходим с результатом
+    Navigator.pop(context, updated);
+
+    // Показываем снек на предыдущем экране через navigatorKey
+    final ctx = App.navigatorKey.currentContext;
+    if (ctx != null) {
+      ScaffoldMessenger.of(ctx).showSnackBar(
+        const SnackBar(content: Text('Изменения сохранены')),
+      );
+    }
   }
+
 
   // SnackBar с Undo — тот же, что в списке
   Timer? _snackTimer;
@@ -820,7 +829,8 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
 
     final notesSnapshot = await db.deleteContactWithSnapshot(c.id!);
 
-    if (mounted) Navigator.pop(context, true);
+    if (mounted) Navigator.pop(context, {'deletedId': c.id});
+
 
     final ctx = App.navigatorKey.currentContext;
     if (ctx == null) return;
@@ -1089,7 +1099,6 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final initials = _initials(_nameController.text);
 
     Widget tagChip(String label) {
       final selected = _tags.contains(label);

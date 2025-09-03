@@ -32,22 +32,28 @@ class ContactListScreen extends StatefulWidget {
     }
   }
 
-  static Future<void> goToRestored(Contact restored, int restoredId) async {
-    final ctx = App.navigatorKey.currentContext;
-    final state = ctx?.findAncestorStateOfType<_ContactListScreenState>();
+  // === РЕЕСТР АКТИВНЫХ СПИСКОВ ПО КАТЕГОРИИ ===
+  static final Map<String, _ContactListScreenState> _mountedByCategory = {};
 
-    if (state != null && state.mounted && state.widget.category == restored.category) {
-      await state._loadContacts(reset: true);
-      state._flashHighlight(restoredId);
+  /// Переходит к восстановленному контакту:
+  /// если экран нужной категории уже смонтирован — просто обновляет список и подсвечивает.
+  /// иначе — делает одиночный push нового списка.
+  static Future<void> goToRestored(Contact restored, int restoredId) async {
+    final existing = _mountedByCategory[restored.category];
+    if (existing != null && existing.mounted) {
+      final restoredWithId = restored.copyWith(id: restoredId);
+      existing._restoreLocally(restoredWithId, highlight: true);
       return;
     }
 
     final title = _titleForCategory(restored.category);
     App.navigatorKey.currentState?.push(
       MaterialPageRoute(
+        settings: RouteSettings(name: 'ContactList:${restored.category}'),
         builder: (_) => ContactListScreen(
           category: restored.category,
           title: title,
+          scrollToId: restoredId,
         ),
       ),
     );
@@ -67,6 +73,22 @@ class _ContactListScreenState extends State<ContactListScreen> {
 
   Timer? _debounce;
   Timer? _snackTimer;
+  void _restoreLocally(Contact restored, {bool highlight = false}) {
+    // если вдруг уже есть с таким id — заменим
+    final i = _all.indexWhere((e) => e.id == restored.id);
+    setState(() {
+      if (i >= 0) {
+        _all[i] = restored;
+      } else {
+        _all.add(restored);
+      }
+    });
+
+    // подчёркивание — без автоскролла
+    if (highlight && restored.id != null) {
+      _flashHighlight(restored.id!);
+    }
+  }
 
   // подсветка восстановленного контакта
   int? _highlightId;
@@ -86,8 +108,42 @@ class _ContactListScreenState extends State<ContactListScreen> {
   @override
   void initState() {
     super.initState();
+    // регистрируем экран в реестре активных по категории
+    ContactListScreen._mountedByCategory[widget.category] = this;
+
     _loadContacts(reset: true);
     _scroll.addListener(_onScroll);
+  }
+
+  @override
+  void didUpdateWidget(covariant ContactListScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.category != widget.category) {
+      // пере-регистрируем под новой категорией
+      final s = ContactListScreen._mountedByCategory[oldWidget.category];
+      if (identical(s, this)) {
+        ContactListScreen._mountedByCategory.remove(oldWidget.category);
+      }
+      ContactListScreen._mountedByCategory[widget.category] = this;
+    }
+  }
+
+  @override
+  void dispose() {
+    _debounce?.cancel();
+    _snackTimer?.cancel();
+    _highlightTimer?.cancel();
+    _searchController.dispose();
+    _scroll.removeListener(_onScroll);
+    _scroll.dispose();
+
+    // снимаем регистрацию
+    final s = ContactListScreen._mountedByCategory[widget.category];
+    if (identical(s, this)) {
+      ContactListScreen._mountedByCategory.remove(widget.category);
+    }
+
+    super.dispose();
   }
 
   GlobalKey _keyFor(Contact c) {
@@ -114,7 +170,7 @@ class _ContactListScreenState extends State<ContactListScreen> {
     _highlightTimer?.cancel();
     setState(() {
       _highlightId = id;
-      _pulseSeed++; // <- новый триггер для импульса
+      _pulseSeed++; // ← новый триггер для импульса
     });
 
     _highlightTimer = Timer(const Duration(milliseconds: 1800), () {
@@ -125,8 +181,7 @@ class _ContactListScreenState extends State<ContactListScreen> {
   }
 
   void _onScroll() {
-    if (_scroll.position.pixels >=
-        _scroll.position.maxScrollExtent - 200) {
+    if (_scroll.position.pixels >= _scroll.position.maxScrollExtent - 200) {
       _loadMoreContacts();
     }
   }
@@ -158,23 +213,11 @@ class _ContactListScreenState extends State<ContactListScreen> {
       }
     });
 
-    if (widget.scrollToId != null &&
-        _all.any((e) => e.id == widget.scrollToId)) {
+    if (widget.scrollToId != null && _all.any((e) => e.id == widget.scrollToId)) {
       final id = widget.scrollToId!;
       await _maybeScrollTo(id);
       _flashHighlight(id);
     }
-  }
-
-  @override
-  void dispose() {
-    _debounce?.cancel();
-    _snackTimer?.cancel();
-    _highlightTimer?.cancel();
-    _searchController.dispose();
-    _scroll.removeListener(_onScroll);
-    _scroll.dispose();
-    super.dispose();
   }
 
   void _onSearchChanged(String value) {
@@ -249,21 +292,20 @@ class _ContactListScreenState extends State<ContactListScreen> {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    // верхняя панель: слева Сбросить, справа Применить
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                       child: Row(
                         children: [
                           TextButton(
                             onPressed: () {
-                              Navigator.pop(context, <String>{}); // вернуть пустой набор => сброс
+                              Navigator.pop(context, <String>{}); // сброс
                             },
                             child: const Text('Сбросить'),
                           ),
                           const Spacer(),
                           TextButton(
                             onPressed: () {
-                              Navigator.pop(context, selected); // применить выбранное
+                              Navigator.pop(context, selected); // применить
                             },
                             child: const Text('Применить'),
                           ),
@@ -271,8 +313,6 @@ class _ContactListScreenState extends State<ContactListScreen> {
                       ),
                     ),
                     const Divider(height: 1),
-
-                    // список чекбоксов
                     Flexible(
                       child: SingleChildScrollView(
                         child: Column(
@@ -310,7 +350,6 @@ class _ContactListScreenState extends State<ContactListScreen> {
     }
   }
 
-
   Future<void> _showContactMenu(Contact c) async {
     final action = await showModalBottomSheet<String>(
       context: context,
@@ -335,12 +374,26 @@ class _ContactListScreenState extends State<ContactListScreen> {
       },
     );
     if (action == 'details') {
-      await Navigator.push(
+      final result = await Navigator.push(
         context,
         MaterialPageRoute(builder: (context) => ContactDetailsScreen(contact: c)),
       );
-      await _loadContacts(reset: true);
-    } else if (action == 'delete') {
+
+      // ⬇️ адресное обновление вместо _loadContacts(reset: true)
+      if (!mounted) return;
+      if (result is Contact) {
+        // если вернёшь обновлённый контакт (см. пункт 2)
+        setState(() {
+          final i = _all.indexWhere((e) => e.id == result.id);
+          if (i >= 0) _all[i] = result;
+        });
+      } else if (result is Map && result['deletedId'] is int) {
+        setState(() {
+          _all.removeWhere((e) => e.id == result['deletedId']);
+        });
+      }
+    }
+    else if (action == 'delete') {
       final confirm = await showDialog<bool>(
         context: context,
         builder: (context) => AlertDialog(
@@ -364,29 +417,30 @@ class _ContactListScreenState extends State<ContactListScreen> {
     }
   }
 
-  /// Обновляет список контактов и, если возможно, подсвечивает восстановленный контакт
-  /// без автопрокрутки.
+  /// Локальная версия перехода после восстановления (ИСПРАВЛЕНО: без статического вызова).
   Future<void> _goToRestored(Contact restored, int restoredId) async {
-    await ContactListScreen.goToRestored(restored, restoredId);
-    // уже на нужной категории
-    if (mounted && widget.category == restored.category) {
-      await _loadContacts(reset: true);
-      _flashHighlight(restoredId);
+    if (!mounted) return;
+
+    // уже на нужной категории — просто обновиться и подсветить
+    if (widget.category == restored.category) {
+      _restoreLocally(restored.copyWith(id: restoredId), highlight: true);
       return;
     }
 
-    // переходим в нужную категорию без прокрутки к восстановленному
-    final String title = _titleForCategory(restored.category);
+
+    // иначе один push на нужную категорию
+    final String title = ContactListScreen._titleForCategory(restored.category);
     App.navigatorKey.currentState?.push(
       MaterialPageRoute(
+        settings: RouteSettings(name: 'ContactList:${restored.category}'),
         builder: (_) => ContactListScreen(
           category: restored.category,
           title: title,
+          scrollToId: restoredId,
         ),
       ),
     );
   }
-
 
   /// Удаляет контакт и показывает SnackBar с Undo + индикатором и обратным отсчётом.
   Future<void> _deleteWithUndo(Contact c) async {
@@ -423,7 +477,8 @@ class _ContactListScreenState extends State<ContactListScreen> {
             final newId = await db.restoreContactWithNotes(c.copyWith(id: null), notesSnapshot);
 
             // 5) Прокрутить/подсветить восстановленного
-            await _goToRestored(c, newId);
+            _restoreLocally(c.copyWith(id: newId), highlight: true);
+
           },
         ),
       ),
@@ -431,7 +486,6 @@ class _ContactListScreenState extends State<ContactListScreen> {
 
     _snackTimer = Timer(endTime.difference(DateTime.now()), () => controller.close());
   }
-
 
   List<Contact> get _filtered {
     var list = _all.where((c) => c.name.toLowerCase().contains(_query));
@@ -566,10 +620,10 @@ class _ContactListScreenState extends State<ContactListScreen> {
               ),
             )
                 : ListView.separated(
+              key: PageStorageKey('ContactList:${widget.category}'),
               controller: _scroll,
               physics: const BouncingScrollPhysics(),
-              padding:
-              const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               itemCount: contacts.length + (_hasMore ? 1 : 0),
               itemBuilder: (context, index) {
                 if (index >= contacts.length) {
@@ -580,13 +634,11 @@ class _ContactListScreenState extends State<ContactListScreen> {
                 }
                 final c = contacts[index];
                 final wrapperKey = (c.id != null) ? _keyFor(c) : null;
-                final isHighlighted =
-                (c.id != null && c.id == _highlightId);
+                final isHighlighted = (c.id != null && c.id == _highlightId);
 
                 return Dismissible(
                   key: ValueKey(
-                    c.id ??
-                        '${c.name}_${c.createdAt.millisecondsSinceEpoch}',
+                    c.id ?? '${c.name}_${c.createdAt.millisecondsSinceEpoch}',
                   ),
                   direction: DismissDirection.endToStart,
                   background: Container(
@@ -605,24 +657,36 @@ class _ContactListScreenState extends State<ContactListScreen> {
                     child: _ContactCard(
                       contact: c,
                       onTap: () async {
-                        final deleted = await Navigator.push(
+                        final result = await Navigator.push(
                           context,
                           PageRouteBuilder(
                             pageBuilder: (_, __, ___) => ContactDetailsScreen(contact: c),
                             transitionsBuilder: (_, animation, __, child) {
                               const begin = Offset(1.0, 0.0);
                               const end = Offset.zero;
-                              final tween = Tween(begin: begin, end: end)
-                                  .chain(CurveTween(curve: Curves.ease));
+                              final tween = Tween(begin: begin, end: end).chain(CurveTween(curve: Curves.ease));
                               return SlideTransition(position: animation.drive(tween), child: child);
                             },
                           ),
                         );
-                        await _loadContacts(reset: true);
+
+                        if (!mounted) return;
+
+                        // ⬇️ адресное обновление вместо _loadContacts(reset: true)
+                        if (result is Contact) {
+                          setState(() {
+                            final i = _all.indexWhere((e) => e.id == result.id);
+                            if (i >= 0) _all[i] = result;
+                          });
+                        } else if (result is Map && result['deletedId'] is int) {
+                          setState(() {
+                            _all.removeWhere((e) => e.id == result['deletedId']);
+                          });
+                        }
                       },
+
                       pulse: isHighlighted,
-                      pulseSeed:
-                      _pulseSeed, // ← эффект «нажатия без нажатия»
+                      pulseSeed: _pulseSeed, // ← эффект «нажатия без нажатия»
                       onLongPress: () => _showContactMenu(c),
                     ),
                   ),
@@ -704,13 +768,11 @@ class _ContactCardState extends State<_ContactCard> with TickerProviderStateMixi
     // последовательность: чуть сжаться -> вернуться
     _scaleAnim = TweenSequence<double>([
       TweenSequenceItem(
-        tween: Tween(begin: 1.0, end: 0.965)
-            .chain(CurveTween(curve: Curves.easeOutCubic)),
+        tween: Tween(begin: 1.0, end: 0.965).chain(CurveTween(curve: Curves.easeOutCubic)),
         weight: 40,
       ),
       TweenSequenceItem(
-        tween: Tween(begin: 0.965, end: 1.0)
-            .chain(CurveTween(curve: Curves.easeOutBack)),
+        tween: Tween(begin: 0.965, end: 1.0).chain(CurveTween(curve: Curves.easeOutBack)),
         weight: 60,
       ),
     ]).animate(_pulseCtrl);
@@ -718,18 +780,15 @@ class _ContactCardState extends State<_ContactCard> with TickerProviderStateMixi
     // внутренний «блик» (быстрый всплеск и затухание)
     _glowAnim = TweenSequence<double>([
       TweenSequenceItem(
-        tween: Tween(begin: 0.0, end: 1.0)
-            .chain(CurveTween(curve: Curves.easeOutCubic)),
+        tween: Tween(begin: 0.0, end: 1.0).chain(CurveTween(curve: Curves.easeOutCubic)),
         weight: 35,
       ),
       TweenSequenceItem(
-        tween: Tween(begin: 1.0, end: 0.0)
-            .chain(CurveTween(curve: Curves.easeOutQuart)),
+        tween: Tween(begin: 1.0, end: 0.0).chain(CurveTween(curve: Curves.easeOutQuart)),
         weight: 65,
       ),
     ]).animate(_pulseCtrl);
 
-    // если уже пришли в состоянии подсветки (напр. при автоскролле) — сыграем сразу
     if (widget.pulse) {
       _pulseCtrl.forward(from: 0);
     }
@@ -738,11 +797,9 @@ class _ContactCardState extends State<_ContactCard> with TickerProviderStateMixi
   @override
   void didUpdateWidget(covariant _ContactCard oldWidget) {
     super.didUpdateWidget(oldWidget);
-    // 1) флаг стал true -> запуск
     if (!oldWidget.pulse && widget.pulse) {
       _pulseCtrl.forward(from: 0);
     }
-    // 2) сменился seed при pulse=true -> гарантированный перезапуск
     if (widget.pulse && oldWidget.pulseSeed != widget.pulseSeed) {
       _pulseCtrl.forward(from: 0);
     }
@@ -754,8 +811,6 @@ class _ContactCardState extends State<_ContactCard> with TickerProviderStateMixi
     super.dispose();
   }
 
-  // ---------- AVATAR HELPERS ----------
-
   String _initialsFrom(String name) {
     final cleaned = name.trim();
     if (cleaned.isEmpty) return '?';
@@ -765,7 +820,6 @@ class _ContactCardState extends State<_ContactCard> with TickerProviderStateMixi
 
     String takeFirstLetter(String s) {
       if (s.isEmpty) return '';
-      // Берем первый символ (работает и для кириллицы)
       return s.characters.first.toUpperCase();
     }
 
@@ -776,7 +830,6 @@ class _ContactCardState extends State<_ContactCard> with TickerProviderStateMixi
   }
 
   Color _avatarBgFor(String seed, ColorScheme scheme) {
-    // Детерминированный приятный цвет из имени
     int h = 0;
     for (final r in seed.runes) {
       h = (h * 31 + r) & 0x7fffffff;
@@ -791,7 +844,6 @@ class _ContactCardState extends State<_ContactCard> with TickerProviderStateMixi
     final initials = _initialsFrom(widget.contact.name);
     final bg = _avatarBgFor(widget.contact.name, scheme);
 
-    // Обводка в цвете поверхности для M3-стиля
     return Container(
       width: 44,
       height: 44,
@@ -803,10 +855,7 @@ class _ContactCardState extends State<_ContactCard> with TickerProviderStateMixi
         backgroundColor: bg,
         child: Text(
           initials,
-          style: Theme.of(context)
-              .textTheme
-              .titleMedium
-              ?.copyWith(color: Colors.white, fontWeight: FontWeight.w700),
+          style: Theme.of(context).textTheme.titleMedium?.copyWith(color: Colors.white, fontWeight: FontWeight.w700),
         ),
       ),
     );
@@ -820,17 +869,15 @@ class _ContactCardState extends State<_ContactCard> with TickerProviderStateMixi
     return AnimatedBuilder(
       animation: _pulseCtrl,
       builder: (context, child) {
-        // мягкий внутренний «блик»
         final glow = scheme.primary.withOpacity(0.14 * _glowAnim.value);
         final shadowColor = scheme.primary.withOpacity(0.20 * _glowAnim.value);
         final blur = 24 * _glowAnim.value + 0.0;
 
         return Transform.scale(
-          scale: _scaleAnim.value, // эффект «как при тапе»
+          scale: _scaleAnim.value,
           child: Container(
             decoration: BoxDecoration(
               borderRadius: border,
-              // тонкая подсветка изнутри
               boxShadow: _glowAnim.value == 0
                   ? null
                   : [
@@ -843,9 +890,7 @@ class _ContactCardState extends State<_ContactCard> with TickerProviderStateMixi
             ),
             child: Stack(
               children: [
-                // сама карточка
                 _buildCard(context, border),
-                // тонкий внутренний слой, «заливающий» фон на миг
                 if (_glowAnim.value > 0)
                   Positioned.fill(
                     child: IgnorePointer(
@@ -866,7 +911,7 @@ class _ContactCardState extends State<_ContactCard> with TickerProviderStateMixi
   }
 
   Widget _buildCard(BuildContext context, BorderRadius border) {
-    const double kStatusReserve = 120; // резерв ширины справа под чип статуса
+    const double kStatusReserve = 120;
 
     return AnimatedScale(
       scale: _pressed ? 0.98 : 1.0,
@@ -876,110 +921,93 @@ class _ContactCardState extends State<_ContactCard> with TickerProviderStateMixi
         color: Theme.of(context).colorScheme.surfaceVariant,
         elevation: 2,
         child: InkWell(
-        borderRadius: border,
-        onTap: () { _set(false); widget.onTap?.call(); },
-        onLongPress: () {
-          _set(false);
-          widget.onLongPress?.call();
-        },
-        onTapDown: (_) => _set(true),
-        onTapCancel: () => _set(false),
-        onTapUp: (_) => _set(false),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Stack(
-            children: [
-              // РЕЗЕРВ справа, чтобы имя/текст не заезжали под статус
-              Padding(
-                padding: const EdgeInsets.only(right: kStatusReserve),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Аватар + Имя (вертикально по центру аватарки)
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.center,
-                      children: [
-                        _buildAvatar(context),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Text(
-                            widget.contact.name,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            textAlign: TextAlign.start,
-                            style: Theme.of(context)
-                                .textTheme
-                                .titleLarge
-                                ?.copyWith(fontWeight: FontWeight.w600),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      widget.contact.phone,
-                      style: Theme.of(context).textTheme.bodyMedium,
-                    ),
-                    const SizedBox(height: 8),
-                    // Теги под телефоном
-                    Wrap(
-                      spacing: 4,
-                      runSpacing: 4,
-                      children: [
-                        for (final tag in widget.contact.tags)
-                          Chip(
-                            label: Text(
-                              tag,
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .bodySmall
-                                  ?.copyWith(fontSize: 10, color: _tagTextColor(tag)),
-                            ),
-                            backgroundColor: _tagColor(tag),
-                            visualDensity:
-                            const VisualDensity(horizontal: -4, vertical: -4),
-                            materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 0),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(30),
+          borderRadius: border,
+          onTap: () { _set(false); widget.onTap?.call(); },
+          onLongPress: () {
+            _set(false);
+            widget.onLongPress?.call();
+          },
+          onTapDown: (_) => _set(true),
+          onTapCancel: () => _set(false),
+          onTapUp: (_) => _set(false),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Stack(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.only(right: kStatusReserve),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          _buildAvatar(context),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              widget.contact.name,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              textAlign: TextAlign.start,
+                              style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w600),
                             ),
                           ),
-                      ],
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        widget.contact.phone,
+                        style: Theme.of(context).textTheme.bodyMedium,
+                      ),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 4,
+                        runSpacing: 4,
+                        children: [
+                          for (final tag in widget.contact.tags)
+                            Chip(
+                              label: Text(
+                                tag,
+                                style: Theme.of(context).textTheme.bodySmall?.copyWith(fontSize: 10, color: _tagTextColor(tag)),
+                              ),
+                              backgroundColor: _tagColor(tag),
+                              visualDensity: const VisualDensity(horizontal: -4, vertical: -4),
+                              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 0),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(30),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                Positioned(
+                  top: 0,
+                  right: 0,
+                  child: Chip(
+                    label: Text(
+                      widget.contact.status,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(fontSize: 10, color: Colors.white),
                     ),
-                  ],
-                ),
-              ),
-
-              // Статус — фиксированно в правом верхнем углу
-              Positioned(
-                top: 0,
-                right: 0,
-                child: Chip(
-                  label: Text(
-                    widget.contact.status,
-                    style: Theme.of(context)
-                        .textTheme
-                        .bodySmall
-                        ?.copyWith(fontSize: 10, color: Colors.white),
-                  ),
-                  backgroundColor: _statusColor(widget.contact.status),
-                  visualDensity: const VisualDensity(horizontal: -4, vertical: -4),
-                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 0),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(30),
+                    backgroundColor: _statusColor(widget.contact.status),
+                    visualDensity: const VisualDensity(horizontal: -4, vertical: -4),
+                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 0),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(30),
+                    ),
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
-       ),
       ),
     );
   }
-
-
 
   Color _statusColor(String status) {
     switch (status) {
@@ -1079,8 +1107,7 @@ class _UndoSnackContentState extends State<_UndoSnackContent>
   @override
   void didUpdateWidget(covariant _UndoSnackContent oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.endTime != widget.endTime ||
-        oldWidget.duration != widget.duration) {
+    if (oldWidget.endTime != widget.endTime || oldWidget.duration != widget.duration) {
       _syncAndRun();
     }
   }
@@ -1094,8 +1121,7 @@ class _UndoSnackContentState extends State<_UndoSnackContent>
   @override
   Widget build(BuildContext context) {
     final value = _ctrl.value; // 1.0 -> 0.0
-    final secondsLeft =
-    (value * widget.duration.inSeconds).ceil().clamp(0, 999);
+    final secondsLeft = (value * widget.duration.inSeconds).ceil().clamp(0, 999);
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start,
