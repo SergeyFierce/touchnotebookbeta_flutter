@@ -1,4 +1,3 @@
-import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -99,7 +98,7 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
             ListTile(
               leading: const Icon(Icons.settings),
-              title: Text('settings'.tr()),
+              title: const Text('Настройки'),
               onTap: () {
                 Navigator.pop(context);
                 Navigator.push(
