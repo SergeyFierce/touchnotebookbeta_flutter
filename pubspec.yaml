@@ -20,8 +20,6 @@ dependencies:
   path_provider: ^2.1.2
   intl: ^0.20.2
   mask_text_input_formatter: ^2.4.0
-  geolocator: ^11.0.0
-  geocoding: ^2.1.0
 
 dev_dependencies:
   flutter_test:
