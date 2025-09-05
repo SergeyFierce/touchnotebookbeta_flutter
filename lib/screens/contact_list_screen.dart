@@ -536,6 +536,8 @@ class _ContactListScreenState extends State<ContactListScreen> {
       appBar: AppBar(
         leading: const BackButton(),
         title: Text(widget.title),
+        surfaceTintColor: Colors.transparent,
+        scrolledUnderElevation: 0,
         actions: [
           IconButton(icon: const Icon(Icons.sort), onPressed: _openSort),
           IconButton(icon: const Icon(Icons.filter_alt), onPressed: _openFilters),

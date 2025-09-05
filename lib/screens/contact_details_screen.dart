@@ -997,7 +997,7 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
         child: ExpansionTile(
           initiallyExpanded: expanded,
           tilePadding: const EdgeInsets.only(left: 16, right: 0),
-          childrenPadding: const EdgeInsets.fromLTRB(24, 0, 16, 16),
+          childrenPadding: const EdgeInsets.fromLTRB(24, 16, 16, 16),
           onExpansionChanged: onChanged,
           maintainState: true,
           trailing: const SizedBox.shrink(),
@@ -1386,19 +1386,24 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
                     Card(
                       elevation: 0,
                       child: Column(
-                        children: ListTile.divideTiles(
-                          context: context,
-                          tiles: _notes.map((n) => ListTile(
-                            leading:
-                            const Icon(Icons.sticky_note_2_outlined),
-                            title: Text(n.text,
+                        children: [
+                          for (var i = 0; i < _notes.length; i++) ...[
+                            ListTile(
+                              leading: const Icon(Icons.sticky_note_2_outlined),
+                              title: Text(
+                                _notes[i].text,
                                 maxLines: 2,
-                                overflow: TextOverflow.ellipsis),
-                            subtitle: Text(DateFormat('dd.MM.yyyy')
-                                .format(n.createdAt)),
-                            onTap: () => _openNote(n),
-                          )),
-                        ).toList(),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              subtitle: Text(
+                                DateFormat('dd.MM.yyyy').format(_notes[i].createdAt),
+                              ),
+                              onTap: () => _openNote(_notes[i]),
+                            ),
+                            if (i < _notes.length - 1)
+                              const Divider(indent: 72, height: 0, thickness: 1),
+                          ],
+                        ],
                       ),
                     ),
                   ],
