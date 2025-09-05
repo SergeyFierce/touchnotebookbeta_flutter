@@ -43,7 +43,9 @@
 	</array>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
-	<key>UIApplicationSupportsIndirectInputEvents</key>
-	<true/>
+  <key>UIApplicationSupportsIndirectInputEvents</key>
+  <true/>
+  <key>NSLocationWhenInUseUsageDescription</key>
+  <string>Need location to determine your country</string>
 </dict>
 </plist>
