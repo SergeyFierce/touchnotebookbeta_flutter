@@ -6,6 +6,7 @@ import '../models/contact.dart';
 import '../services/contact_database.dart';
 import 'add_contact_screen.dart';
 import 'contact_details_screen.dart';
+import 'package:characters/characters.dart';
 
 class ContactListScreen extends StatefulWidget {
   final String category; // singular value for DB
@@ -415,31 +416,6 @@ class _ContactListScreenState extends State<ContactListScreen> {
         await _deleteWithUndo(c);
       }
     }
-  }
-
-  /// Локальная версия перехода после восстановления (ИСПРАВЛЕНО: без статического вызова).
-  Future<void> _goToRestored(Contact restored, int restoredId) async {
-    if (!mounted) return;
-
-    // уже на нужной категории — просто обновиться и подсветить
-    if (widget.category == restored.category) {
-      _restoreLocally(restored.copyWith(id: restoredId), highlight: true);
-      return;
-    }
-
-
-    // иначе один push на нужную категорию
-    final String title = ContactListScreen._titleForCategory(restored.category);
-    App.navigatorKey.currentState?.push(
-      MaterialPageRoute(
-        settings: RouteSettings(name: 'ContactList:${restored.category}'),
-        builder: (_) => ContactListScreen(
-          category: restored.category,
-          title: title,
-          scrollToId: restoredId,
-        ),
-      ),
-    );
   }
 
   /// Удаляет контакт и показывает SnackBar с Undo + индикатором и обратным отсчётом.
