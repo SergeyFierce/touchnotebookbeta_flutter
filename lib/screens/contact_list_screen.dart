@@ -697,8 +697,7 @@ class _ContactListScreenState extends State<ContactListScreen> {
             }
           }
         },
-        icon: const Icon(Icons.add),
-        label: const Text('Добавить'),
+        label: const Text('Добавить контакт'),
       ),
     );
   }
