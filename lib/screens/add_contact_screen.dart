@@ -833,7 +833,7 @@ class _AddContactScreenState extends State<AddContactScreen> {
         child: ExpansionTile(
           initiallyExpanded: expanded,
           tilePadding: const EdgeInsets.symmetric(horizontal: 16),
-          childrenPadding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+          childrenPadding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
           onExpansionChanged: onChanged,
           maintainState: true,
           trailing: const SizedBox.shrink(),
