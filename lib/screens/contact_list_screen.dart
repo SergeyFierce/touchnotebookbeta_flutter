@@ -536,6 +536,9 @@ class _ContactListScreenState extends State<ContactListScreen> {
       appBar: AppBar(
         leading: const BackButton(),
         title: Text(widget.title),
+        backgroundColor: Theme.of(context).colorScheme.surface,
+        elevation: 0,
+        shadowColor: Colors.transparent,
         surfaceTintColor: Colors.transparent,
         scrolledUnderElevation: 0,
         actions: [
