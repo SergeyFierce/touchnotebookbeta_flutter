@@ -53,6 +53,182 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
   final _extraCardKey = GlobalKey();
   final _notesCardKey = GlobalKey();
 
+  IconData _statusIcon(String s) {
+    switch (s) {
+      case 'Активный':   return Icons.check_circle;
+      case 'Пассивный':  return Icons.pause_circle;
+      case 'Потерянный': return Icons.cancel;
+      case 'Холодный':   return Icons.ac_unit;
+      case 'Тёплый':     return Icons.local_fire_department;
+      default:           return Icons.label_outline;
+    }
+  }
+
+  Widget _noteRow(Note note, {bool isLast = false}) {
+    final theme = Theme.of(context);
+    return _sheetRow(
+      leading: const Icon(Icons.sticky_note_2_outlined),
+      right: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            note.text,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: theme.textTheme.bodyLarge,
+          ),
+          const SizedBox(height: 4),
+          Text(
+            DateFormat('dd.MM.yyyy').format(note.createdAt),
+            style: theme.textTheme.bodySmall?.copyWith(color: theme.hintColor),
+          ),
+        ],
+      ),
+      onTap: () => _openNote(note),
+      isLast: isLast,
+    );
+  }
+
+  Widget _sheetRow({
+    required Widget leading,
+    required Widget right,
+    required VoidCallback onTap,
+    bool isLast = false,
+  }) {
+    final theme = Theme.of(context);
+
+    final leftCell = Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+      child: Center(child: leading),
+    );
+
+    final rightCell = Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+      child: right,
+    );
+
+    final rightDivider = SizedBox(
+      height: 0.5,
+      child: ColoredBox(color: theme.dividerColor.withOpacity(0.25)),
+    );
+
+    return InkWell(
+      onTap: onTap,
+      child: Table(
+        columnWidths: const {
+          0: IntrinsicColumnWidth(), // узкая колонка с иконкой
+          1: FlexColumnWidth(),      // правая — резиновая
+        },
+        defaultVerticalAlignment: TableCellVerticalAlignment.middle,
+        children: [
+          TableRow(children: [leftCell, rightCell]),
+          if (!isLast)
+            TableRow(children: [
+              const SizedBox(), // слева пусто
+              rightDivider,     // линия только под правой колонкой
+            ]),
+        ],
+      ),
+    );
+  }
+
+
+  Widget _radioRow<T>({
+    required T value,
+    required T? groupValue,
+    required String title,
+    IconData? icon,
+    Widget? leading,
+    required VoidCallback onSelect,
+    bool isLast = false,
+  }) {
+    final theme = Theme.of(context);
+
+    // Левая ячейка: центрируем иконку; ширина колонки будет равна её естественной ширине.
+    final leftCell = Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+      child: Center(child: leading ?? (icon != null ? Icon(icon) : const SizedBox())),
+    );
+
+    // Правая ячейка: текст тянется, радио справа.
+    final rightCell = Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+      child: Row(
+        children: [
+          Expanded(child: Text(title, style: theme.textTheme.bodyLarge)),
+          Radio<T>(
+            value: value,
+            groupValue: groupValue,
+            onChanged: (_) => onSelect(),
+            materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            visualDensity: const VisualDensity(horizontal: -4, vertical: -4),
+          ),
+        ],
+      ),
+    );
+
+    // Делитель только под правой колонкой, на всю её ширину.
+    final rightDivider = SizedBox(
+      height: 0.5,
+      child: ColoredBox(
+        color: theme.dividerColor.withOpacity(0.25),
+      ),
+    );
+
+    return InkWell(
+      onTap: onSelect,
+      child: Table(
+        // Лево — естественная ширина (иконка), право — тянется.
+        columnWidths: const {
+          0: IntrinsicColumnWidth(),
+          1: FlexColumnWidth(),
+        },
+        defaultVerticalAlignment: TableCellVerticalAlignment.middle,
+        children: [
+          TableRow(children: [leftCell, rightCell]),
+          if (!isLast)
+            TableRow(children: [
+              const SizedBox(),   // пусто в левой колонке
+              rightDivider,       // линия только под правой колонкой
+            ]),
+        ],
+      ),
+    );
+  }
+
+
+
+
+  Widget _sheetWrap({required String title, required Widget child}) {
+    final bottom = MediaQuery.of(context).viewInsets.bottom;
+    return SafeArea(
+      child: Padding(
+        padding: EdgeInsets.only(
+          left: 16, right: 16, top: 8, bottom: bottom > 0 ? bottom : 16,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Заголовок
+            Padding(
+              padding: const EdgeInsets.only(left: 4, right: 4, bottom: 8),
+              child: Text(
+                title,
+                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+              ),
+            ),
+            const Divider(height: 1),
+            const SizedBox(height: 8),
+            // Контент шита
+            child,
+          ],
+        ),
+      ),
+    );
+  }
+
+
   // Плавный автоскролл к карточке после раскрытия (более мягкий)
   Future<void> _scrollToCard(GlobalKey key) async {
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -125,6 +301,15 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
     // <<< цвет плейсхолдера "Статус"
       case 'Статус': return Colors.grey;
       default: return Colors.grey;
+    }
+  }
+
+  IconData _categoryIcon(String? c) {
+    switch (c) {
+      case 'Партнёр':       return Icons.handshake;
+      case 'Клиент':        return Icons.people;
+      case 'Потенциальный': return Icons.person_add_alt_1;
+      default:              return Icons.person_outline;
     }
   }
 
@@ -571,21 +756,47 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
   Future<void> _pickBirthOrAge() async {
     FocusScope.of(context).requestFocus(_focusBirth);
     setState(() => _birthOpen = true);
+
+    final mode = (_birthDate != null)
+        ? 'date'
+        : (_ageManual != null ? 'age' : null);
+
     final choice = await showModalBottomSheet<String>(
       context: context,
       showDragHandle: true,
-      builder: (context) => SafeArea(
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      clipBehavior: Clip.antiAlias,
+      builder: (context) => _sheetWrap(
+        title: 'Дата рождения / возраст',
         child: Column(
           mainAxisSize: MainAxisSize.min,
-          children: const [
-            ListTile(leading: Icon(Icons.cake_outlined), title: Text('Выбрать дату рождения'), dense: true),
-            ListTile(leading: Icon(Icons.numbers), title: Text('Указать возраст'), dense: true),
+          children: [
+            _radioRow<String>(
+              value: 'date',
+              groupValue: mode,
+              title: 'Выбрать дату рождения',
+              icon: Icons.cake_outlined,
+              onSelect: () => Navigator.pop(context, 'date'),
+            ),
+            _radioRow<String>(
+              value: 'age',
+              groupValue: mode,
+              title: 'Указать возраст',
+              icon: Icons.numbers,
+              onSelect: () => Navigator.pop(context, 'age'),
+              isLast: true,
+            ),
           ],
         ),
       ),
     );
-    setState(() => _birthOpen = false);
 
+
+
+    setState(() => _birthOpen = false);
     if (choice == null) return;
 
     if (choice == 'date') {
@@ -601,7 +812,8 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
         _birthDate = picked;
         _ageManual = null;
         final age = _calcAge(picked);
-        _birthController.text = '${DateFormat('dd.MM.yyyy').format(picked)} (${_formatAge(age)})';
+        _birthController.text =
+        '${DateFormat('dd.MM.yyyy').format(picked)} (${_formatAge(age)})';
         setState(_updateEditingFromDirty);
       }
     } else if (choice == 'age') {
@@ -609,17 +821,41 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
       final age = await showDialog<int>(
         context: context,
         builder: (context) => AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16), // мягкие углы
+          ),
           title: const Text('Возраст'),
-          content: TextField(
-            controller: ctrl,
-            keyboardType: TextInputType.number,
-            decoration: const InputDecoration(hintText: 'Количество лет', prefixIcon: Icon(Icons.numbers)),
+          content: SizedBox(
+            width: double.maxFinite, // растягиваем по ширине диалога
+            child: TextField(
+              controller: ctrl,
+              autofocus: true,
+              keyboardType: TextInputType.number,
+              textInputAction: TextInputAction.done,
+              decoration: const InputDecoration(
+                labelText: 'Возраст',
+                hintText: 'Количество лет',
+                prefixIcon: Icon(Icons.numbers),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.all(Radius.circular(12)),
+                ),
+                isDense: true,
+                contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+              ),
+            ),
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(context), child: const Text('Отмена')),
-            FilledButton(onPressed: () => Navigator.pop(context, int.tryParse(ctrl.text)), child: const Text('OK')),
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Отмена'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(context, int.tryParse(ctrl.text)),
+              child: const Text('OK'),
+            ),
           ],
         ),
+
       );
       if (age != null && age != _ageManual) {
         _ageManual = age;
@@ -630,6 +866,7 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
     }
   }
 
+
   Future<void> _pickSocial() async {
     FocusScope.of(context).requestFocus(_focusSocial);
     setState(() => _socialOpen = true);
@@ -638,9 +875,17 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
       context: context,
       showDragHandle: true,
       isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      clipBehavior: Clip.antiAlias,
       builder: (context) {
         final maxH = MediaQuery.of(context).size.height * 0.8;
-        return SafeArea(
+        final items = [
+          'Telegram','VK','Instagram','Facebook','WhatsApp','TikTok','Одноклассники','Twitter',
+        ];
+        return _sheetWrap(
+          title: 'Соцсеть',
           child: ConstrainedBox(
             constraints: BoxConstraints(maxHeight: maxH),
             child: SingleChildScrollView(
@@ -648,14 +893,15 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  ListTile(leading: _brandIcon('Telegram'), title: const Text('Telegram'), onTap: () => Navigator.pop(context, 'Telegram')),
-                  ListTile(leading: _brandIcon('VK'), title: const Text('VK'), onTap: () => Navigator.pop(context, 'VK')),
-                  ListTile(leading: _brandIcon('Instagram'), title: const Text('Instagram'), onTap: () => Navigator.pop(context, 'Instagram')),
-                  ListTile(leading: _brandIcon('Facebook'), title: const Text('Facebook'), onTap: () => Navigator.pop(context, 'Facebook')),
-                  ListTile(leading: _brandIcon('WhatsApp'), title: const Text('WhatsApp'), onTap: () => Navigator.pop(context, 'WhatsApp')),
-                  ListTile(leading: _brandIcon('TikTok'), title: const Text('TikTok'), onTap: () => Navigator.pop(context, 'TikTok')),
-                  ListTile(leading: _brandIcon('Одноклассники'), title: const Text('Одноклассники'), onTap: () => Navigator.pop(context, 'Одноклассники')),
-                  ListTile(leading: _brandIcon('Twitter'), title: const Text('Twitter'), onTap: () => Navigator.pop(context, 'Twitter')),
+                  for (int i = 0; i < items.length; i++)
+                    _radioRow<String>(
+                      value: items[i],
+                      groupValue: _socialType,
+                      title: items[i],
+                      leading: _brandIcon(items[i]),
+                      onSelect: () => Navigator.pop(context, items[i]),
+                      isLast: i == items.length - 1,
+                    ),
                 ],
               ),
             ),
@@ -663,6 +909,7 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
         );
       },
     );
+
 
     setState(() => _socialOpen = false);
 
@@ -678,17 +925,44 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
     final result = await showModalBottomSheet<String>(
       context: context,
       showDragHandle: true,
-      builder: (context) => SafeArea(
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      clipBehavior: Clip.antiAlias,
+      builder: (context) => _sheetWrap(
+        title: 'Категория',
         child: Column(
           mainAxisSize: MainAxisSize.min,
-          children: const [
-            _PickerTile(icon: Icons.handshake, label: 'Партнёр', value: 'Партнёр'),
-            _PickerTile(icon: Icons.people, label: 'Клиент', value: 'Клиент'),
-            _PickerTile(icon: Icons.person_add_alt_1, label: 'Потенциальный', value: 'Потенциальный'),
+          children: [
+            _radioRow<String>(
+              value: 'Партнёр',
+              groupValue: _category,
+              title: 'Партнёр',
+              icon: Icons.handshake,
+              onSelect: () => Navigator.pop(context, 'Партнёр'),
+            ),
+            _radioRow<String>(
+              value: 'Клиент',
+              groupValue: _category,
+              title: 'Клиент',
+              icon: Icons.people,
+              onSelect: () => Navigator.pop(context, 'Клиент'),
+            ),
+            _radioRow<String>(
+              value: 'Потенциальный',
+              groupValue: _category,
+              title: 'Потенциальный',
+              icon: Icons.person_add_alt_1,
+              onSelect: () => Navigator.pop(context, 'Потенциальный'),
+              isLast: true,
+            ),
           ],
         ),
       ),
     );
+
+
     setState(() => _categoryOpen = false);
 
     if (result != null && result != _category) {
@@ -722,15 +996,24 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
     final result = await showModalBottomSheet<String>(
       context: context,
       showDragHandle: true,
-      builder: (context) => SafeArea(
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      clipBehavior: Clip.antiAlias,
+      builder: (context) => _sheetWrap(
+        title: 'Статус',
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            for (final s in options)
-              ListTile(
-                leading: const Icon(Icons.label_outline),
-                title: Text(s),
-                onTap: () => Navigator.pop(context, s),
+            for (int i = 0; i < options.length; i++)
+              _radioRow<String>(
+                value: options[i],
+                groupValue: _status,
+                title: options[i],
+                icon: _statusIcon(options[i]),   // ← вот тут
+                onSelect: () => Navigator.pop(context, options[i]),
+                isLast: i == options.length - 1,
               ),
           ],
         ),
@@ -831,7 +1114,6 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
 
     if (mounted) Navigator.pop(context, {'deletedId': c.id});
 
-
     final ctx = App.navigatorKey.currentContext;
     if (ctx == null) return;
     final messenger = ScaffoldMessenger.of(ctx);
@@ -852,7 +1134,7 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
             messenger.hideCurrentSnackBar();
 
             final newId =
-                await db.restoreContactWithNotes(c.copyWith(id: null), notesSnapshot);
+            await db.restoreContactWithNotes(c.copyWith(id: null), notesSnapshot);
 
             await ContactListScreen.goToRestored(c, newId);
           },
@@ -914,10 +1196,13 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
         Widget? suffixIcon,
         bool showClear = true,
         bool requiredField = false,
+        bool forceFloatingLabel = false, // <<< НОВОЕ: принудительно держать метку сверху
       }) {
     return InputDecoration(
       labelText: label,
       hintText: hint,
+      floatingLabelBehavior:
+      forceFloatingLabel ? FloatingLabelBehavior.always : FloatingLabelBehavior.auto,
       prefixIcon: prefixIcon != null ? Icon(prefixIcon) : null,
       suffixIcon: suffixIcon ??
           (showClear && controller.text.isNotEmpty
@@ -997,7 +1282,7 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
         child: ExpansionTile(
           initiallyExpanded: expanded,
           tilePadding: const EdgeInsets.only(left: 16, right: 0),
-          childrenPadding: const EdgeInsets.fromLTRB(24, 16, 16, 16),
+          childrenPadding: const EdgeInsets.fromLTRB(0, 0, 0, 0),
           onExpansionChanged: onChanged,
           maintainState: true,
           trailing: const SizedBox.shrink(),
@@ -1042,22 +1327,30 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
     required FocusNode focusNode,
     required VoidCallback onTap,
     bool requiredField = false,
+    bool forceFloatingLabel = false,
+    Widget? prefix, // ← ДОБАВЛЕНО
   }) {
+    final dec = _outlinedDec(
+      Theme.of(context),
+      label: title,
+      hint: hint,
+      prefixIcon: null, // базовый не даём — переопределим ниже
+      controller: controller,
+      suffixIcon: Icon(isOpen ? Icons.arrow_drop_up : Icons.arrow_drop_down),
+      showClear: false,
+      requiredField: requiredField,
+      forceFloatingLabel: forceFloatingLabel,
+    ).copyWith(
+      // если передан кастомный, используем его, иначе — обычный Icon(icon)
+      prefixIcon: prefix ?? Icon(icon),
+    );
+
     return TextFormField(
       key: key,
       controller: controller,
       readOnly: true,
       focusNode: focusNode,
-      decoration: _outlinedDec(
-        Theme.of(context),
-        label: title,
-        hint: hint,
-        prefixIcon: icon,
-        controller: controller,
-        suffixIcon: Icon(isOpen ? Icons.arrow_drop_up : Icons.arrow_drop_down),
-        showClear: false,
-        requiredField: requiredField,
-      ),
+      decoration: dec,
       onTap: () {
         FocusScope.of(context).requestFocus(focusNode);
         onTap();
@@ -1065,9 +1358,11 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
     );
   }
 
+
   Widget _socialPickerField() {
     final value = _socialController.text;
     final t = (_socialType ?? value).trim();
+    final forceTop = t.isEmpty; // <<< верхний хинт показываем, если не выбрано
     return TextFormField(
       key: const ValueKey('social'),
       controller: _socialController,
@@ -1080,6 +1375,7 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
         controller: _socialController,
         suffixIcon: Icon(_socialOpen ? Icons.arrow_drop_up : Icons.arrow_drop_down),
         showClear: false,
+        forceFloatingLabel: forceTop,
       ).copyWith(
         // компактная иконка бренда слева
         prefixIcon: Padding(
@@ -1118,8 +1414,19 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
       );
     }
 
+    // вычисления для верхнего хинта у категории/статуса
+    final _categoryEmpty = (_category ?? _categoryController.text.trim()).isEmpty;
+    final _statusEmpty = (_status ?? _statusController.text.trim()).isEmpty;
+    final catValue = (_category ?? _categoryController.text.trim());
+    final statusValue = (_status ?? _statusController.text.trim());
+
     return Scaffold(
       appBar: AppBar(
+        backgroundColor: Theme.of(context).colorScheme.surface, // фиксированный фон
+        elevation: 0,                      // без обычной тени
+        shadowColor: Colors.transparent,   // на всякий
+        scrolledUnderElevation: 0,         // отключить подъём при скролле
+        surfaceTintColor: Colors.transparent, // убрать M3-тонку
         leading: _isEditing
             ? IconButton(
           tooltip: 'Отмена',
@@ -1140,6 +1447,7 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
             ),
         ],
       ),
+
       body: SafeArea(
         child: Form(
           key: _formKey,
@@ -1147,7 +1455,7 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
           child: ListView(
             controller: _scroll,
             physics: const BouncingScrollPhysics(),
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
             children: [
               // ===== Блок: Заголовок (превью карточки) =====
               Column(
@@ -1217,7 +1525,7 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
                 children: [
                   _pickerField(
                     key: _categoryKey,
-                    icon: Icons.person_outline,
+                    icon: _categoryIcon(catValue),            // базовая, на всякий случай
                     title: 'Категория*',
                     controller: _categoryController,
                     hint: 'Выберите категорию',
@@ -1225,11 +1533,13 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
                     focusNode: _focusCategory,
                     onTap: _pickCategory,
                     requiredField: true,
+                    forceFloatingLabel: _categoryEmpty,
+                    prefix: Icon(_categoryIcon(catValue)),    // ← ДИНАМИЧЕСКАЯ ИКОНКА
                   ),
                   const SizedBox(height: 12),
                   _pickerField(
                     key: _statusKey,
-                    icon: Icons.how_to_reg,
+                    icon: _statusIcon(statusValue.isEmpty ? 'Статус' : statusValue),
                     title: 'Статус*',
                     controller: _statusController,
                     hint: (_category ?? '').isEmpty ? 'Сначала выберите категорию' : 'Выберите статус',
@@ -1237,6 +1547,13 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
                     focusNode: _focusStatus,
                     onTap: _pickStatus,
                     requiredField: true,
+                    forceFloatingLabel: _statusEmpty,
+                    prefix: Icon(
+                      _statusIcon(statusValue.isEmpty ? 'Статус' : statusValue),
+                      color: statusValue.isEmpty
+                          ? Theme.of(context).hintColor
+                          : _statusColor(statusValue),
+                    ),
                   ),
                 ],
               ),
@@ -1280,6 +1597,7 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
                     if (v) _scrollToCard(_extraCardKey);
                   },
                   children: [
+                    // Дата рождения / возраст — ВЕРХНИЙ хинт ВСЕГДА + внутренний хинт
                     _pickerField(
                       key: const ValueKey('birth'),
                       icon: Icons.cake_outlined,
@@ -1289,6 +1607,7 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
                       isOpen: _birthOpen,
                       focusNode: _focusBirth,
                       onTap: _pickBirthOrAge,
+                      forceFloatingLabel: true, // <<< всегда сверху
                     ),
                     const SizedBox(height: 12),
 
@@ -1340,7 +1659,7 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
                     ),
                     const SizedBox(height: 12),
 
-                    // Соцсеть — как в AddContact (однострочное поле-пикер)
+                    // Соцсеть — верхний хинт показываем, если пусто
                     _socialPickerField(),
                   ],
                 ),
@@ -1358,19 +1677,25 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
                   },
                   headerActions: [
                     const Spacer(),
-                    TextButton(
-                      onPressed: () async {
-                        if (_contact.id == null) return;
-                        await Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => NotesListScreen(contact: _contact),
-                          ),
-                        );
-                        await _loadNotes();
-                      },
-                      child: const Text('Все заметки'),
-                    ),
+                    if (_notes.isEmpty)
+                      TextButton.icon(
+                        onPressed: _contact.id == null ? null : _addNote,
+                        label: const Text('Добавить заметку'),
+                      )
+                    else
+                      TextButton(
+                        onPressed: () async {
+                          if (_contact.id == null) return;
+                          await Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => NotesListScreen(contact: _contact),
+                            ),
+                          );
+                          await _loadNotes();
+                        },
+                        child: const Text('Все заметки'),
+                      ),
                   ],
                   children: _notes.isEmpty
                       ? const [
@@ -1387,28 +1712,15 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
                       elevation: 0,
                       child: Column(
                         children: [
-                          for (var i = 0; i < _notes.length; i++) ...[
-                            ListTile(
-                              leading: const Icon(Icons.sticky_note_2_outlined),
-                              title: Text(
-                                _notes[i].text,
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                              subtitle: Text(
-                                DateFormat('dd.MM.yyyy').format(_notes[i].createdAt),
-                              ),
-                              onTap: () => _openNote(_notes[i]),
-                            ),
-                            if (i < _notes.length - 1)
-                              const Divider(indent: 72, height: 0, thickness: 1),
-                          ],
+                          for (var i = 0; i < _notes.length; i++)
+                            _noteRow(_notes[i], isLast: i == _notes.length - 1),
                         ],
                       ),
                     ),
                   ],
                 ),
               ),
+
 
               // ===== Блок: Комментарий =====
               _sectionCard(
@@ -1442,6 +1754,7 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
                     focusNode: _focusAdded,
                     onTap: _pickAddedDate,
                     requiredField: true,
+                    forceFloatingLabel: _addedController.text.trim().isEmpty,
                   ),
                   const SizedBox(height: 8),
                 ],

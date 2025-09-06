@@ -21,6 +21,10 @@ class App extends StatelessWidget {
           seedColor: Colors.deepPurple,
           brightness: Brightness.light,
         ),
+        appBarTheme: const AppBarTheme(
+          scrolledUnderElevation: 0,
+          surfaceTintColor: Colors.transparent,
+        ),
         useMaterial3: true,
       ),
       darkTheme: ThemeData(

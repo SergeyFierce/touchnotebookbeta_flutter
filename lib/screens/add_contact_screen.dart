@@ -43,6 +43,8 @@ class _AddContactScreenState extends State<AddContactScreen> {
   final _commentController = TextEditingController();
   final _addedController = TextEditingController();
 
+
+
   // --- key для «Дополнительно» ---
   final _extraCardKey = GlobalKey();
   Future<void> _flushUi() async {
@@ -82,6 +84,27 @@ class _AddContactScreenState extends State<AddContactScreen> {
     final hsl = HSLColor.fromAHSL(1.0, hue, 0.45, 0.55);
     return hsl.toColor();
   }
+
+  IconData _statusIcon(String s) {
+    switch (s) {
+      case 'Активный':   return Icons.check_circle;
+      case 'Пассивный':  return Icons.pause_circle;
+      case 'Потерянный': return Icons.cancel;
+      case 'Холодный':   return Icons.ac_unit;
+      case 'Тёплый':     return Icons.local_fire_department;
+      default:           return Icons.label_outline;
+    }
+  }
+
+  IconData _categoryIcon(String? c) {
+    switch (c) {
+      case 'Партнёр':       return Icons.handshake;
+      case 'Клиент':        return Icons.people;
+      case 'Потенциальный': return Icons.person_add_alt_1;
+      default:              return Icons.person_outline;
+    }
+  }
+
 
   Color _statusColor(String status) {
     switch (status) {
@@ -644,7 +667,7 @@ class _AddContactScreenState extends State<AddContactScreen> {
           children: [
             for (final s in options)
               ListTile(
-                leading: const Icon(Icons.label_outline),
+                leading: Icon(_statusIcon(s)),
                 title: Text(s),
                 onTap: () => Navigator.pop(context, s),
               ),
@@ -864,12 +887,14 @@ class _AddContactScreenState extends State<AddContactScreen> {
     required String title,
     required TextEditingController controller,
     String? hint,
-    required bool isOpen, // <-- уже есть у тебя
+    required bool isOpen,
     required FocusNode focusNode,
     required VoidCallback onTap,
     bool requiredField = false,
+    bool forceFloatingLabel = false,       // ← НОВОЕ
+    Widget? prefix,                         // ← НОВОЕ
   }) {
-    final floating = isOpen || focusNode.hasFocus; // держим лейбл наверху либо при фокусе, либо пока открыт лист
+    final floating = isOpen || focusNode.hasFocus || forceFloatingLabel;
     final showError = _submitted && requiredField && controller.text.trim().isEmpty;
 
     return TextFormField(
@@ -880,22 +905,26 @@ class _AddContactScreenState extends State<AddContactScreen> {
       decoration: _outlinedDec(
         Theme.of(context),
         label: title,
-        hint: floating ? hint : null, // hint показываем ТОЛЬКО когда лист открыт
-        prefixIcon: icon,
+        hint: floating ? hint : null,
+        prefixIcon: null, // зададим ниже через copyWith
         controller: controller,
         suffixIcon: Icon(isOpen ? Icons.arrow_drop_up : Icons.arrow_drop_down),
         showClear: false,
         requiredField: requiredField,
-        floatingLabelBehavior: floating ? FloatingLabelBehavior.always : FloatingLabelBehavior.auto,
-        errorText: showError ? 'Обязательное поле' : null, // <--- подсветка
+        floatingLabelBehavior: floating
+            ? FloatingLabelBehavior.always
+            : FloatingLabelBehavior.auto,
+        errorText: showError ? 'Обязательное поле' : null,
+      ).copyWith(
+        prefixIcon: prefix ?? Icon(icon),
       ),
       onTap: () {
-        // сначала ставим фокус, чтобы лейбл поднялся, затем открываем лист
         FocusScope.of(context).requestFocus(focusNode);
         onTap();
       },
     );
   }
+
 
   // Плитка «Соцсеть» с SVG leading
   Widget _socialPickerField() {
@@ -948,14 +977,21 @@ class _AddContactScreenState extends State<AddContactScreen> {
         },
       );
     }
+    final catValue = (_category ?? _categoryController.text.trim());
+    final statusValue = (_status ?? _statusController.text.trim());
+    final _categoryEmpty = catValue.isEmpty;
+    final _statusEmpty = statusValue.isEmpty;
 
     return Scaffold(
       appBar: AppBar(
+        backgroundColor: Theme.of(context).colorScheme.surface,
+        elevation: 0,
+        shadowColor: Colors.transparent,
+        scrolledUnderElevation: 0,
+        surfaceTintColor: Colors.transparent,
         leading: const BackButton(),
         title: const Text('Добавить контакт'),
         actions: [
-          // Можно оставить и иконку в AppBar при готовности формы — не мешает.
-          // Она остаётся опциональной: основная «Сохранить» внизу всегда видна.
           if ((_nameController.text.trim().isNotEmpty) &&
               _phoneValid &&
               _category != null &&
@@ -1042,7 +1078,7 @@ class _AddContactScreenState extends State<AddContactScreen> {
                 children: [
                   _pickerField(
                     key: _categoryKey,
-                    icon: Icons.person_outline,
+                    icon: _categoryIcon(catValue),
                     title: 'Категория*',
                     controller: _categoryController,
                     hint: 'Выберите категорию',
@@ -1050,11 +1086,13 @@ class _AddContactScreenState extends State<AddContactScreen> {
                     focusNode: _focusCategory,
                     onTap: _pickCategory,
                     requiredField: true,
+                    forceFloatingLabel: _categoryEmpty,               // ← как в detail
+                    prefix: Icon(_categoryIcon(catValue)),            // ← динамичная иконка
                   ),
                   const SizedBox(height: 12),
                   _pickerField(
                     key: _statusKey,
-                    icon: Icons.how_to_reg,
+                    icon: _statusIcon(statusValue.isEmpty ? 'Статус' : statusValue),
                     title: 'Статус*',
                     controller: _statusController,
                     hint: _category == null ? 'Сначала выберите категорию' : 'Выберите статус',
@@ -1068,6 +1106,13 @@ class _AddContactScreenState extends State<AddContactScreen> {
                       }
                     },
                     requiredField: true,
+                    forceFloatingLabel: _statusEmpty,                  // ← как в detail
+                    prefix: Icon(
+                      _statusIcon(statusValue.isEmpty ? 'Статус' : statusValue),
+                      color: statusValue.isEmpty
+                          ? Theme.of(context).hintColor
+                          : _statusColor(statusValue),                 // ← цвет как в detail
+                    ),
                   ),
                 ],
               ),
@@ -1119,6 +1164,7 @@ class _AddContactScreenState extends State<AddContactScreen> {
                       isOpen: _birthOpen,
                       focusNode: _focusBirth,
                       onTap: _pickBirthOrAge,
+                      forceFloatingLabel: true, // ← ВАЖНО
                     ),
                     const SizedBox(height: 12),
 
