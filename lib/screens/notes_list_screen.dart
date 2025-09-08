@@ -7,6 +7,7 @@ import '../models/note.dart';
 import '../services/contact_database.dart';
 import 'add_note_screen.dart';
 import 'note_details_screen.dart';
+import '../utils/insets.dart';
 
 class NotesListScreen extends StatefulWidget {
   final Contact contact;
@@ -311,33 +312,33 @@ class _NotesListScreenState extends State<NotesListScreen> {
     final content = data.isEmpty
         ? const Center(child: Text('Нет заметок'))
         : ListView.separated(
-      controller: _scroll,
-      physics: const BouncingScrollPhysics(),
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-      itemCount: data.length + (_hasMore ? 1 : 0),
-      separatorBuilder: (_, __) => const SizedBox(height: 8),
-      itemBuilder: (context, i) {
-        if (i >= data.length) {
-          return const Padding(
-            padding: EdgeInsets.symmetric(vertical: 16),
-            child: Center(child: CircularProgressIndicator()),
+            controller: _scroll,
+            physics: const BouncingScrollPhysics(),
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+            itemCount: data.length + (_hasMore ? 1 : 0),
+            separatorBuilder: (_, __) => const SizedBox(height: 8),
+            itemBuilder: (context, i) {
+              if (i >= data.length) {
+                return const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 16),
+                  child: Center(child: CircularProgressIndicator()),
+                );
+              }
+              final n = data[i];
+              final k = (n.id != null) ? _keyFor(n) : null;
+              final isHighlighted = (n.id != null && n.id == _highlightId);
+              return KeyedSubtree(
+                key: k,
+                child: _NoteCard(
+                  note: n,
+                  pulse: isHighlighted,
+                  pulseSeed: _pulseSeed,
+                  onTap: () => _openDetails(n),
+                  onLongPress: () => _showNoteMenu(n),
+                ),
+              );
+            },
           );
-        }
-        final n = data[i];
-        final k = (n.id != null) ? _keyFor(n) : null;
-        final isHighlighted = (n.id != null && n.id == _highlightId);
-        return KeyedSubtree(
-          key: k,
-          child: _NoteCard(
-            note: n,
-            pulse: isHighlighted,
-            pulseSeed: _pulseSeed,
-            onTap: () => _openDetails(n),
-            onLongPress: () => _showNoteMenu(n),
-          ),
-        );
-      },
-    );
 
     return Scaffold(
       appBar: AppBar(
@@ -350,10 +351,15 @@ class _NotesListScreenState extends State<NotesListScreen> {
           ),
         ],
       ),
-      body: content,
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: _addNote,
-        label: const Text('Добавить заметку'),
+      body: SafeArea(child: content),
+      floatingActionButton: Builder(
+        builder: (context) => Padding(
+          padding: EdgeInsets.only(bottom: safeBottom(context)),
+          child: FloatingActionButton.extended(
+            onPressed: _addNote,
+            label: const Text('Добавить заметку'),
+          ),
+        ),
       ),
     );
   }

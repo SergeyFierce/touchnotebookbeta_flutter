@@ -5,6 +5,7 @@ import 'add_contact_screen.dart';
 import 'settings_screen.dart';
 import 'contact_list_screen.dart';
 import '../services/contact_database.dart';
+import '../utils/insets.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -120,56 +121,63 @@ class _HomeScreenState extends State<HomeScreen> {
           ],
         ),
       ),
-      body: ValueListenableBuilder<int>(
-        valueListenable: ContactDatabase.instance.revision,
-        builder: (context, _rev, _) {
-          return ListView.separated(
-            padding: const EdgeInsets.all(16),
-            itemBuilder: (context, index) {
-              final cat = categories[index];
-              return FutureBuilder<int>(
-                future: ContactDatabase.instance.countByCategory(cat.value),
-                builder: (context, snapshot) {
-                  final count = snapshot.data ?? 0;
-                  return _CategoryCard(
-                    category: cat,
-                    subtitle: '$count ${_plural(count, cat.forms)}',
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => ContactListScreen(
-                            category: cat.value,
-                            title: cat.title,
+      body: SafeArea(
+        child: ValueListenableBuilder<int>(
+          valueListenable: ContactDatabase.instance.revision,
+          builder: (context, _rev, _) {
+            return ListView.separated(
+              padding: const EdgeInsets.all(16),
+              itemBuilder: (context, index) {
+                final cat = categories[index];
+                return FutureBuilder<int>(
+                  future: ContactDatabase.instance.countByCategory(cat.value),
+                  builder: (context, snapshot) {
+                    final count = snapshot.data ?? 0;
+                    return _CategoryCard(
+                      category: cat,
+                      subtitle: '$count ${_plural(count, cat.forms)}',
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => ContactListScreen(
+                              category: cat.value,
+                              title: cat.title,
+                            ),
                           ),
-                        ),
-                      ).then((_) => setState(() {}));
-                    },
-                  );
-                },
-              );
-            },
-            separatorBuilder: (_, __) => const SizedBox(height: 12),
-            itemCount: categories.length,
-          );
-        },
-      ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () async {
-          final saved = await Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => const AddContactScreen(),
-            ),
-          );
-          if (saved == true && mounted) {
-            setState(() {});
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Контакт сохранён')),
+                        ).then((_) => setState(() {}));
+                      },
+                    );
+                  },
+                );
+              },
+              separatorBuilder: (_, __) => const SizedBox(height: 12),
+              itemCount: categories.length,
             );
-          }
-        },
-        label: const Text('Добавить контакт'),
+          },
+        ),
+      ),
+      floatingActionButton: Builder(
+        builder: (context) => Padding(
+          padding: EdgeInsets.only(bottom: safeBottom(context)),
+          child: FloatingActionButton.extended(
+            onPressed: () async {
+              final saved = await Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const AddContactScreen(),
+                ),
+              );
+              if (saved == true && mounted) {
+                setState(() {});
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Контакт сохранён')),
+                );
+              }
+            },
+            label: const Text('Добавить контакт'),
+          ),
+        ),
       ),
     );
   }

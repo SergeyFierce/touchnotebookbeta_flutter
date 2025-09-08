@@ -190,18 +190,21 @@ class _AddNoteScreenState extends State<AddNoteScreen> {
           ),
         ),
       ),
-      bottomNavigationBar: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-        child: _canSave
-            ? FilledButton.icon(
-          onPressed: _save,
-          icon: const Icon(Icons.check),
-          label: const Text('Сохранить'),
-          style: FilledButton.styleFrom(
-            padding: const EdgeInsets.symmetric(vertical: 14),
-          ),
-        )
-            : const SizedBox.shrink(), // пустое место вместо кнопки
+      bottomNavigationBar: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+          child: _canSave
+              ? FilledButton.icon(
+                  onPressed: _save,
+                  icon: const Icon(Icons.check),
+                  label: const Text('Сохранить'),
+                  style: FilledButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                  ),
+                )
+              : const SizedBox.shrink(), // пустое место вместо кнопки
+        ),
       ),
 
     );

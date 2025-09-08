@@ -7,6 +7,7 @@ import '../services/contact_database.dart';
 import 'add_contact_screen.dart';
 import 'contact_details_screen.dart';
 import 'package:characters/characters.dart';
+import '../utils/insets.dart';
 
 class ContactListScreen extends StatefulWidget {
   final String category; // singular value for DB
@@ -546,8 +547,9 @@ class _ContactListScreenState extends State<ContactListScreen> {
           IconButton(icon: const Icon(Icons.filter_alt), onPressed: _openFilters),
         ],
       ),
-      body: Column(
-        children: [
+      body: SafeArea(
+        child: Column(
+          children: [
           Padding(
             padding: const EdgeInsets.all(16),
             child: TextField(
@@ -677,32 +679,38 @@ class _ContactListScreenState extends State<ContactListScreen> {
             ),
           ),
         ],
+        ),
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () async {
-          final saved = await Navigator.push(
-            context,
-            PageRouteBuilder(
-              pageBuilder: (_, __, ___) => AddContactScreen(category: widget.category),
-              transitionsBuilder: (_, animation, __, child) {
-                const begin = Offset(0.0, 1.0);
-                const end = Offset.zero;
-                final tween = Tween(begin: begin, end: end)
-                    .chain(CurveTween(curve: Curves.ease));
-                return SlideTransition(position: animation.drive(tween), child: child);
-              },
-            ),
-          );
-          if (saved == true) {
-            await _loadContacts(reset: true);
-            if (mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Контакт сохранён')),
+      floatingActionButton: Builder(
+        builder: (context) => Padding(
+          padding: EdgeInsets.only(bottom: safeBottom(context)),
+          child: FloatingActionButton.extended(
+            onPressed: () async {
+              final saved = await Navigator.push(
+                context,
+                PageRouteBuilder(
+                  pageBuilder: (_, __, ___) => AddContactScreen(category: widget.category),
+                  transitionsBuilder: (_, animation, __, child) {
+                    const begin = Offset(0.0, 1.0);
+                    const end = Offset.zero;
+                    final tween = Tween(begin: begin, end: end)
+                        .chain(CurveTween(curve: Curves.ease));
+                    return SlideTransition(position: animation.drive(tween), child: child);
+                  },
+                ),
               );
-            }
-          }
-        },
-        label: const Text('Добавить контакт'),
+              if (saved == true) {
+                await _loadContacts(reset: true);
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Контакт сохранён')),
+                  );
+                }
+              }
+            },
+            label: const Text('Добавить контакт'),
+          ),
+        ),
       ),
     );
   }
