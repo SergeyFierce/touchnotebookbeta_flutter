@@ -162,6 +162,16 @@ class _HomeScreenState extends State<HomeScreen> {
               child: FutureBuilder<List<int>>(
                 future: future,
                 builder: (context, snapshot) {
+                  if (snapshot.hasError) {
+                    debugPrint('Error loading contact counts: ${snapshot.error}\n${snapshot.stackTrace}');
+                    WidgetsBinding.instance.addPostFrameCallback((_) {
+                      if (!mounted) return;
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Не удалось загрузить данные')),
+                      );
+                    });
+                    return const Center(child: Text('Ошибка загрузки данных'));
+                  }
                   final isLoading = snapshot.connectionState == ConnectionState.waiting;
                   final counts = snapshot.data ?? const [0, 0, 0];
 
@@ -180,7 +190,6 @@ class _HomeScreenState extends State<HomeScreen> {
                         return _CategoryCard(
                           category: cat,
                           subtitle: subtitle,
-                          isLoading: isLoading,
                           onTap: () {
                             Navigator.push(
                               context,
@@ -239,14 +248,12 @@ class _Category {
 class _CategoryCard extends StatefulWidget {
   final _Category category;
   final String subtitle;
-  final bool isLoading;
   final VoidCallback onTap;
 
   const _CategoryCard({
     required this.category,
     required this.subtitle,
     required this.onTap,
-    this.isLoading = false,
   });
 
   @override

@@ -7,7 +7,8 @@ import '../models/note.dart';
 
 class ContactDatabase {
   ContactDatabase._();
-  static final ContactDatabase instance = ContactDatabase._();
+  // Made non-final to allow tests to replace with a mock implementation
+  static ContactDatabase instance = ContactDatabase._();
   Database? _db;
 
   // Ревизия для подписки экранов на изменения
