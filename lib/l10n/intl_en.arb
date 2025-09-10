@@ -18,7 +18,6 @@
   "contactSaved": "Contact saved",
   "addContact": "Add contact",
   "partnersTitle": "Partners",
-  "partnersValue": "Partner",
   "partnersCount": "{count, plural, one{{count} partner} other{{count} partners}}",
   "@partnersCount": {
     "placeholders": {
@@ -28,7 +27,6 @@
     }
   },
   "clientsTitle": "Clients",
-  "clientsValue": "Client",
   "clientsCount": "{count, plural, one{{count} client} other{{count} clients}}",
   "@clientsCount": {
     "placeholders": {
@@ -38,8 +36,8 @@
     }
   },
   "potentialTitle": "Potential",
-  "potentialValue": "Potential",
   "potentialCount": "{count, plural, one{{count} potential} other{{count} potential}}",
+  "category": "Category",
   "@potentialCount": {
     "placeholders": {
       "count": {

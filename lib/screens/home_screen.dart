@@ -214,19 +214,19 @@ List<_Category> _categories(AppLocalizations l10n) => [
       _Category(
         icon: Icons.handshake,
         title: l10n.partnersTitle,
-        value: l10n.partnersValue,
+        value: 'Партнёр',
         plural: l10n.partnersCount,
       ),
       _Category(
         icon: Icons.people,
         title: l10n.clientsTitle,
-        value: l10n.clientsValue,
+        value: 'Клиент',
         plural: l10n.clientsCount,
       ),
       _Category(
         icon: Icons.person_add_alt_1,
         title: l10n.potentialTitle,
-        value: l10n.potentialValue,
+        value: 'Потенциальный',
         plural: l10n.potentialCount,
       ),
     ];

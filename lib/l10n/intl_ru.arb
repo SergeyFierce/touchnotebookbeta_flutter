@@ -18,7 +18,6 @@
   "contactSaved": "Контакт сохранён",
   "addContact": "Добавить контакт",
   "partnersTitle": "Партнёры",
-  "partnersValue": "Партнёр",
   "partnersCount": "{count, plural, one{{count} партнёр} few{{count} партнёра} many{{count} партнёров} other{{count} партнёра}}",
   "@partnersCount": {
     "placeholders": {
@@ -28,7 +27,6 @@
     }
   },
   "clientsTitle": "Клиенты",
-  "clientsValue": "Клиент",
   "clientsCount": "{count, plural, one{{count} клиент} few{{count} клиента} many{{count} клиентов} other{{count} клиента}}",
   "@clientsCount": {
     "placeholders": {
@@ -38,8 +36,8 @@
     }
   },
   "potentialTitle": "Потенциальные",
-  "potentialValue": "Потенциальный",
   "potentialCount": "{count, plural, one{{count} потенциальный} few{{count} потенциальных} many{{count} потенциальных} other{{count} потенциальных}}",
+  "category": "Категория",
   "@potentialCount": {
     "placeholders": {
       "count": {
