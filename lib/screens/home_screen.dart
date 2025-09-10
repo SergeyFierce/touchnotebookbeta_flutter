@@ -162,6 +162,17 @@ class _HomeScreenState extends State<HomeScreen> {
               child: FutureBuilder<List<int>>(
                 future: future,
                 builder: (context, snapshot) {
+                  if (snapshot.hasError) {
+                    debugPrint('Error loading contact counts: ${snapshot.error}\n${snapshot.stackTrace}');
+                    WidgetsBinding.instance.addPostFrameCallback((_) {
+                      if (!mounted) return;
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Не удалось загрузить данные')),
+                      );
+                    });
+                    return const Center(child: Text('Ошибка загрузки данных'));
+                  }
+
                   final isLoading = snapshot.connectionState == ConnectionState.waiting;
                   final counts = snapshot.data ?? const [0, 0, 0];
 
