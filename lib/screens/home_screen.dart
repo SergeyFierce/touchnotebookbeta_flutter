@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
+import '../l10n/app_localizations.dart';
 
 import 'add_contact_screen.dart';
 import 'settings_screen.dart';
@@ -15,11 +16,11 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   late Future<List<int>> _countsFuture;
+  bool _initialized = false;
 
   @override
   void initState() {
     super.initState();
-    _countsFuture = _loadCounts();
     ContactDatabase.instance.revision.addListener(_refresh);
   }
 
@@ -30,12 +31,13 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<List<int>> _loadCounts() async {
-    final results = await Future.wait<int>([
-      ContactDatabase.instance.countByCategory('Партнёр'),
-      ContactDatabase.instance.countByCategory('Клиент'),
-      ContactDatabase.instance.countByCategory('Потенциальный'),
-    ]);
-    return results;
+    final l10n = AppLocalizations.of(context)!;
+    final categories = _categories(l10n);
+    return Future.wait<int>(
+      categories.map(
+        (c) => ContactDatabase.instance.countByCategory(c.value),
+      ),
+    );
   }
 
   Future<void> _refresh() async {
@@ -53,16 +55,27 @@ class _HomeScreenState extends State<HomeScreen> {
         await launchUrl(tgUri, mode: LaunchMode.externalApplication);
       } else {
         if (!mounted) return;
+        final l10n = AppLocalizations.of(context)!;
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Telegram не установлен, открываем в браузере')),
+          SnackBar(content: Text(l10n.telegramNotInstalled)),
         );
         await launchUrl(webUri, mode: LaunchMode.externalApplication);
       }
     } catch (e) {
       if (!mounted) return;
+      final l10n = AppLocalizations.of(context)!;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Не удалось открыть ссылку: $e')),
+        SnackBar(content: Text(l10n.cannotOpenLink(e.toString()))),
       );
+    }
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!_initialized) {
+      _countsFuture = _loadCounts();
+      _initialized = true;
     }
   }
 
@@ -79,10 +92,12 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
+    final l10n = AppLocalizations.of(context)!;
+    final categories = _categories(l10n);
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Touch NoteBook'),
+        title: Text(l10n.appTitle),
       ),
       drawer: Drawer(
         child: SafeArea(
@@ -103,21 +118,21 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                     ),
                     const SizedBox(width: 16),
-                    const Text(
-                      'Touch NoteBook',
-                      style: TextStyle(fontSize: 20, color: Colors.white),
+                    Text(
+                      l10n.appTitle,
+                      style: const TextStyle(fontSize: 20, color: Colors.white),
                     ),
                   ],
                 ),
               ),
               ListTile(
                 leading: const Icon(Icons.home),
-                title: const Text('Главный экран'),
+                title: Text(l10n.drawerMain),
                 onTap: () => Navigator.pop(context),
               ),
               ListTile(
                 leading: const Icon(Icons.settings),
-                title: const Text('Настройки'),
+                title: Text(l10n.drawerSettings),
                 onTap: () {
                   Navigator.pop(context);
                   Navigator.push(
@@ -128,7 +143,7 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
               ListTile(
                 leading: const Icon(Icons.support_agent),
-                title: const Text('Поддержка'),
+                title: Text(l10n.drawerSupport),
                 onTap: () {
                   Navigator.pop(context);
                   _openSupport(context);
@@ -153,10 +168,10 @@ class _HomeScreenState extends State<HomeScreen> {
                     WidgetsBinding.instance.addPostFrameCallback((_) {
                       if (!mounted) return;
                       ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Не удалось загрузить данные')),
+                        SnackBar(content: Text(l10n.dataLoadFailed)),
                       );
                     });
-                    return const Center(child: Text('Ошибка загрузки данных'));
+                    return Center(child: Text(l10n.dataLoadError));
                   }
                   final isLoading = snapshot.connectionState == ConnectionState.waiting;
                   final counts = snapshot.data ?? const [0, 0, 0];
@@ -164,13 +179,13 @@ class _HomeScreenState extends State<HomeScreen> {
                   return Scrollbar(
                     child: ListView.separated(
                       padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
-                      itemCount: _kCategories.length,
+                      itemCount: categories.length,
                       separatorBuilder: (_, __) => const SizedBox(height: 12),
                       itemBuilder: (context, index) {
-                        final cat = _kCategories[index];
+                        final cat = categories[index];
                         final count = isLoading ? null : counts[index];
                         final subtitle = count == null
-                            ? '…'
+                            ? l10n.ellipsis
                             : '$count ${_plural(count, cat.forms)}';
 
                         return _CategoryCard(
@@ -205,11 +220,11 @@ class _HomeScreenState extends State<HomeScreen> {
           );
           if (saved == true && mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Контакт сохранён')),
+              SnackBar(content: Text(l10n.contactSaved)),
             );
           }
         },
-        label: const Text('Добавить контакт'),
+        label: Text(l10n.addContact),
         icon: const Icon(Icons.add),
       ),
     );
@@ -230,26 +245,26 @@ class _Category {
   });
 }
 
-const List<_Category> _kCategories = [
-  _Category(
-    icon: Icons.handshake,
-    title: 'Партнёры',
-    value: 'Партнёр',
-    forms: ['партнёр', 'партнёра', 'партнёров'],
-  ),
-  _Category(
-    icon: Icons.people,
-    title: 'Клиенты',
-    value: 'Клиент',
-    forms: ['клиент', 'клиента', 'клиентов'],
-  ),
-  _Category(
-    icon: Icons.person_add_alt_1,
-    title: 'Потенциальные',
-    value: 'Потенциальный',
-    forms: ['потенциальный', 'потенциальных', 'потенциальных'],
-  ),
-];
+List<_Category> _categories(AppLocalizations l10n) => [
+      _Category(
+        icon: Icons.handshake,
+        title: l10n.partnersTitle,
+        value: l10n.partnersValue,
+        forms: [l10n.partnersFormOne, l10n.partnersFormFew, l10n.partnersFormMany],
+      ),
+      _Category(
+        icon: Icons.people,
+        title: l10n.clientsTitle,
+        value: l10n.clientsValue,
+        forms: [l10n.clientsFormOne, l10n.clientsFormFew, l10n.clientsFormMany],
+      ),
+      _Category(
+        icon: Icons.person_add_alt_1,
+        title: l10n.potentialTitle,
+        value: l10n.potentialValue,
+        forms: [l10n.potentialFormOne, l10n.potentialFormFew, l10n.potentialFormMany],
+      ),
+    ];
 
 class _CategoryCard extends StatefulWidget {
   final _Category category;
