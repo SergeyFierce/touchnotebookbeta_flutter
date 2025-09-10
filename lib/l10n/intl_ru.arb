@@ -45,5 +45,22 @@
       }
     }
   },
-  "ellipsis": "…"
+  "ellipsis": "…",
+  "noteSaved": "Заметка сохранена",
+  "deleteNoteQuestion": "Удалить заметку?",
+  "deleteNoteWarning": "Это действие нельзя отменить.",
+  "cancel": "Отмена",
+  "delete": "Удалить",
+  "undo": "Отменить",
+  "close": "Закрыть",
+  "note": "Заметка",
+  "save": "Сохранить",
+  "text": "Текст",
+  "noteTextLabel": "Текст заметки*",
+  "enterText": "Введите текст",
+  "date": "Дата",
+  "dateAdded": "Дата добавления",
+  "deleteNote": "Удалить заметку",
+  "noteDeleted": "Заметка удалена",
+  "secondsShort": "с"
 }

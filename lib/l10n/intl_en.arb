@@ -45,5 +45,22 @@
       }
     }
   },
-  "ellipsis": "…"
+  "ellipsis": "…",
+  "noteSaved": "Note saved",
+  "deleteNoteQuestion": "Delete note?",
+  "deleteNoteWarning": "This action cannot be undone.",
+  "cancel": "Cancel",
+  "delete": "Delete",
+  "undo": "Undo",
+  "close": "Close",
+  "note": "Note",
+  "save": "Save",
+  "text": "Text",
+  "noteTextLabel": "Note text*",
+  "enterText": "Enter text",
+  "date": "Date",
+  "dateAdded": "Date added",
+  "deleteNote": "Delete note",
+  "noteDeleted": "Note deleted",
+  "secondsShort": "s"
 }
