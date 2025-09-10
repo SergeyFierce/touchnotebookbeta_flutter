@@ -14,18 +14,48 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
+  late Future<List<int>> _countsFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _countsFuture = _loadCounts();
+  }
+
+  Future<List<int>> _loadCounts() async {
+    final results = await Future.wait<int>([
+      ContactDatabase.instance.countByCategory('Партнёр'),
+      ContactDatabase.instance.countByCategory('Клиент'),
+      ContactDatabase.instance.countByCategory('Потенциальный'),
+    ]);
+    return results;
+  }
+
+  Future<void> _refresh() async {
+    setState(() {
+      _countsFuture = _loadCounts();
+    });
+  }
 
   Future<void> _openSupport(BuildContext context) async {
     const group = 'touchnotebook';
     final tgUri = Uri.parse('tg://resolve?domain=$group');
     final webUri = Uri.parse('https://t.me/$group');
-    if (await canLaunchUrl(tgUri)) {
-      await launchUrl(tgUri, mode: LaunchMode.externalApplication);
-    } else {
+    try {
+      if (await canLaunchUrl(tgUri)) {
+        await launchUrl(tgUri, mode: LaunchMode.externalApplication);
+      } else {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Telegram не установлен, открываем в браузере')),
+        );
+        await launchUrl(webUri, mode: LaunchMode.externalApplication);
+      }
+    } catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Telegram не установлен, открываем в браузере')),
+        SnackBar(content: Text('Не удалось открыть ссылку: $e')),
       );
-      await launchUrl(webUri, mode: LaunchMode.externalApplication);
     }
   }
 
@@ -62,114 +92,131 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
     ];
 
+    final colorScheme = Theme.of(context).colorScheme;
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Touch NoteBook'),
       ),
       drawer: Drawer(
-        child: ListView(
-          padding: EdgeInsets.zero,
-          children: [
-            DrawerHeader(
-              decoration: BoxDecoration(color: Theme.of(context).colorScheme.primary),
-              child: Row(
-                children: [
-                  CircleAvatar(
-                    radius: 36,
-                    backgroundColor: Theme.of(context).colorScheme.onPrimary,
-                    child: Icon(
-                      Icons.menu_book,
-                      size: 36,
-                      color: Theme.of(context).colorScheme.primary,
+        child: SafeArea(
+          child: ListView(
+            padding: EdgeInsets.zero,
+            children: [
+              DrawerHeader(
+                decoration: BoxDecoration(color: colorScheme.primary),
+                child: Row(
+                  children: [
+                    CircleAvatar(
+                      radius: 36,
+                      backgroundColor: colorScheme.onPrimary,
+                      child: Icon(
+                        Icons.menu_book,
+                        size: 36,
+                        color: colorScheme.primary,
+                      ),
                     ),
-                  ),
-                  const SizedBox(width: 16),
-                  const Text(
-                    'Touch NoteBook',
-                    style: TextStyle(fontSize: 20, color: Colors.white),
-                  ),
-                ],
+                    const SizedBox(width: 16),
+                    const Text(
+                      'Touch NoteBook',
+                      style: TextStyle(fontSize: 20, color: Colors.white),
+                    ),
+                  ],
+                ),
               ),
-            ),
-            ListTile(
-              leading: const Icon(Icons.home),
-              title: const Text('Главный экран'),
-              onTap: () => Navigator.pop(context),
-            ),
-            ListTile(
-              leading: const Icon(Icons.settings),
-              title: const Text('Настройки'),
-              onTap: () {
-                Navigator.pop(context);
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => const SettingsScreen(),
-                  ),
-                );
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.support_agent),
-              title: const Text('Поддержка'),
-              onTap: () {
-                Navigator.pop(context);
-                _openSupport(context);
-              },
-            ),
-          ],
-        ),
-      ),
-      body: ValueListenableBuilder<int>(
-        valueListenable: ContactDatabase.instance.revision,
-        builder: (context, _rev, _) {
-          return ListView.separated(
-            padding: const EdgeInsets.all(16),
-            itemBuilder: (context, index) {
-              final cat = categories[index];
-              return FutureBuilder<int>(
-                future: ContactDatabase.instance.countByCategory(cat.value),
-                builder: (context, snapshot) {
-                  final count = snapshot.data ?? 0;
-                  return _CategoryCard(
-                    category: cat,
-                    subtitle: '$count ${_plural(count, cat.forms)}',
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => ContactListScreen(
-                            category: cat.value,
-                            title: cat.title,
-                          ),
-                        ),
-                      ).then((_) => setState(() {}));
-                    },
+              ListTile(
+                leading: const Icon(Icons.home),
+                title: const Text('Главный экран'),
+                onTap: () => Navigator.pop(context),
+              ),
+              ListTile(
+                leading: const Icon(Icons.settings),
+                title: const Text('Настройки'),
+                onTap: () {
+                  Navigator.pop(context);
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (context) => const SettingsScreen()),
                   );
                 },
-              );
-            },
-            separatorBuilder: (_, __) => const SizedBox(height: 12),
-            itemCount: categories.length,
-          );
-        },
+              ),
+              ListTile(
+                leading: const Icon(Icons.support_agent),
+                title: const Text('Поддержка'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _openSupport(context);
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+      body: SafeArea(
+        child: ValueListenableBuilder<int>(
+          valueListenable: ContactDatabase.instance.revision,
+          builder: (context, _rev, _) {
+            final future = _countsFuture;
+            return RefreshIndicator(
+              onRefresh: _refresh,
+              child: FutureBuilder<List<int>>(
+                future: future,
+                builder: (context, snapshot) {
+                  final isLoading = snapshot.connectionState == ConnectionState.waiting;
+                  final counts = snapshot.data ?? const [0, 0, 0];
+
+                  return Scrollbar(
+                    child: ListView.separated(
+                      padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
+                      itemCount: categories.length,
+                      separatorBuilder: (_, __) => const SizedBox(height: 12),
+                      itemBuilder: (context, index) {
+                        final cat = categories[index];
+                        final count = isLoading ? null : counts[index];
+                        final subtitle = count == null
+                            ? '…'
+                            : '$count ${_plural(count, cat.forms)}';
+
+                        return _CategoryCard(
+                          category: cat,
+                          subtitle: subtitle,
+                          isLoading: isLoading,
+                          onTap: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => ContactListScreen(
+                                  category: cat.value,
+                                  title: cat.title,
+                                ),
+                              ),
+                            ).then((_) => _refresh());
+                          },
+                        );
+                      },
+                    ),
+                  );
+                },
+              ),
+            );
+          },
+        ),
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () async {
           final saved = await Navigator.push(
             context,
-            MaterialPageRoute(
-              builder: (context) => const AddContactScreen(),
-            ),
+            MaterialPageRoute(builder: (context) => const AddContactScreen()),
           );
           if (saved == true && mounted) {
-            setState(() {});
+            await _refresh();
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(content: Text('Контакт сохранён')),
             );
           }
         },
         label: const Text('Добавить контакт'),
+        icon: const Icon(Icons.add),
       ),
     );
   }
@@ -177,8 +224,8 @@ class _HomeScreenState extends State<HomeScreen> {
 
 class _Category {
   final IconData icon;
-  final String title; // plural title
-  final String value; // singular value for DB
+  final String title;
+  final String value;
   final List<String> forms;
 
   const _Category({
@@ -192,12 +239,14 @@ class _Category {
 class _CategoryCard extends StatefulWidget {
   final _Category category;
   final String subtitle;
+  final bool isLoading;
   final VoidCallback onTap;
 
   const _CategoryCard({
     required this.category,
     required this.subtitle,
     required this.onTap,
+    this.isLoading = false,
   });
 
   @override
@@ -215,42 +264,63 @@ class _CategoryCardState extends State<_CategoryCard> {
 
   @override
   Widget build(BuildContext context) {
-    final borderRadius = BorderRadius.circular(12);
-    return AnimatedScale(
-      scale: _pressed ? 0.98 : 1.0,
-      duration: const Duration(milliseconds: 100),
-      child: Material(
-        color: Theme.of(context).colorScheme.surfaceVariant,
-        borderRadius: borderRadius,
-        elevation: 2,
-        child: InkWell(
+    final borderRadius = BorderRadius.circular(16);
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return Semantics(
+      button: true,
+      label: widget.category.title,
+      child: AnimatedScale(
+        scale: _pressed ? 0.985 : 1.0,
+        duration: const Duration(milliseconds: 90),
+        child: Material(
+          color: colorScheme.surfaceVariant,
+          elevation: 1.5,
           borderRadius: borderRadius,
-          onTap: widget.onTap,
-          onTapDown: (_) => _setPressed(true),
-          onTapCancel: () => _setPressed(false),
-          onTapUp: (_) => _setPressed(false),
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Row(
-              children: [
-                Icon(widget.category.icon, size: 32),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        widget.category.title,
-                        style: Theme.of(context).textTheme.titleMedium,
-                      ),
-                      const SizedBox(height: 4),
-                      Text(widget.subtitle,
-                          style: Theme.of(context).textTheme.bodyMedium),
-                    ],
+          clipBehavior: Clip.antiAlias,
+          child: InkWell(
+            borderRadius: borderRadius,
+            onTap: widget.onTap,
+            onTapDown: (_) => _setPressed(true),
+            onTapCancel: () => _setPressed(false),
+            onTapUp: (_) => _setPressed(false),
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                children: [
+                  Hero(
+                    tag: 'cat:${widget.category.value}',
+                    flightShuttleBuilder: (_, __, ___, ____, _____) => Icon(
+                      widget.category.icon, size: 32, color: colorScheme.primary,
+                    ),
+                    child: Icon(widget.category.icon, size: 32, color: colorScheme.primary),
                   ),
-                ),
-                const Icon(Icons.chevron_right),
-              ],
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          widget.category.title,
+                          style: Theme.of(context).textTheme.titleMedium,
+                        ),
+                        const SizedBox(height: 4),
+                        AnimatedSwitcher(
+                          duration: const Duration(milliseconds: 200),
+                          transitionBuilder: (child, anim) =>
+                              FadeTransition(opacity: anim, child: child),
+                          child: Text(
+                            widget.subtitle,
+                            key: ValueKey(widget.subtitle),
+                            style: Theme.of(context).textTheme.bodyMedium,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const Icon(Icons.chevron_right),
+                ],
+              ),
             ),
           ),
         ),
