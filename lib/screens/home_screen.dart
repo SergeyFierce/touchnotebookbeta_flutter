@@ -15,20 +15,6 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  late Future<List<int>> _countsFuture;
-  bool _initialized = false;
-
-  @override
-  void initState() {
-    super.initState();
-    ContactDatabase.instance.revision.addListener(_refresh);
-  }
-
-  @override
-  void dispose() {
-    ContactDatabase.instance.revision.removeListener(_refresh);
-    super.dispose();
-  }
 
   Future<List<int>> _loadCounts() async {
     final l10n = AppLocalizations.of(context)!;
@@ -41,9 +27,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _refresh() async {
-    setState(() {
-      _countsFuture = _loadCounts();
-    });
+    setState(() {});
   }
 
   Future<void> _openSupport(BuildContext context) async {
@@ -67,15 +51,6 @@ class _HomeScreenState extends State<HomeScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(l10n.cannotOpenLink(e.toString()))),
       );
-    }
-  }
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    if (!_initialized) {
-      _countsFuture = _loadCounts();
-      _initialized = true;
     }
   }
 
@@ -147,11 +122,11 @@ class _HomeScreenState extends State<HomeScreen> {
         child: ValueListenableBuilder<int>(
           valueListenable: ContactDatabase.instance.revision,
           builder: (context, _rev, _) {
-            final future = _countsFuture;
             return RefreshIndicator(
               onRefresh: _refresh,
               child: FutureBuilder<List<int>>(
-                future: future,
+                key: ValueKey(_rev),
+                future: _loadCounts(),
                 builder: (context, snapshot) {
                   if (snapshot.hasError) {
                     debugPrint('Error loading contact counts: ${snapshot.error}\n${snapshot.stackTrace}');
@@ -169,6 +144,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   return Scrollbar(
                     child: ListView.separated(
                       padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
+                      physics: const AlwaysScrollableScrollPhysics(),
                       itemCount: categories.length,
                       separatorBuilder: (_, __) => const SizedBox(height: 12),
                       itemBuilder: (context, index) {

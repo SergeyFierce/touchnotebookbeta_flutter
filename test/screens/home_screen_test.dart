@@ -87,4 +87,23 @@ void main() {
     expect(find.text('3 клиента'), findsOneWidget);
     expect(find.text('6 потенциальных'), findsOneWidget);
   });
+
+
+  testWidgets('manual refresh reloads counts without revision change', (tester) async {
+    await tester.pumpWidget(const MaterialApp(home: HomeScreen()));
+    await tester.pump();
+    await tester.pump();
+
+    counts['Партнёр'] = 4;
+    counts['Клиент'] = 5;
+    counts['Потенциальный'] = 6;
+
+    await tester.state<RefreshIndicatorState>(find.byType(RefreshIndicator)).show();
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.text('4 партнёра'), findsOneWidget);
+    expect(find.text('5 клиентов'), findsOneWidget);
+    expect(find.text('6 потенциальных'), findsOneWidget);
+  });
 }
