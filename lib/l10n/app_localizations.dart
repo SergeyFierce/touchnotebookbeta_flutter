@@ -1,4 +1,5 @@
 import 'package:flutter/widgets.dart';
+import 'package:intl/intl.dart';
 
 class AppLocalizations {
   AppLocalizations(this.locale);
@@ -25,19 +26,31 @@ class AppLocalizations {
   String get addContact => 'Добавить контакт';
   String get partnersTitle => 'Партнёры';
   String get partnersValue => 'Партнёр';
-  String get partnersFormOne => 'партнёр';
-  String get partnersFormFew => 'партнёра';
-  String get partnersFormMany => 'партнёров';
+  String partnersCount(int count) => Intl.plural(
+        count,
+        one: '$count партнёр',
+        few: '$count партнёра',
+        many: '$count партнёров',
+        other: '$count партнёра',
+      );
   String get clientsTitle => 'Клиенты';
   String get clientsValue => 'Клиент';
-  String get clientsFormOne => 'клиент';
-  String get clientsFormFew => 'клиента';
-  String get clientsFormMany => 'клиентов';
+  String clientsCount(int count) => Intl.plural(
+        count,
+        one: '$count клиент',
+        few: '$count клиента',
+        many: '$count клиентов',
+        other: '$count клиента',
+      );
   String get potentialTitle => 'Потенциальные';
   String get potentialValue => 'Потенциальный';
-  String get potentialFormOne => 'потенциальный';
-  String get potentialFormFew => 'потенциальных';
-  String get potentialFormMany => 'потенциальных';
+  String potentialCount(int count) => Intl.plural(
+        count,
+        one: '$count потенциальный',
+        few: '$count потенциальных',
+        many: '$count потенциальных',
+        other: '$count потенциальных',
+      );
   String get ellipsis => '…';
 }
 

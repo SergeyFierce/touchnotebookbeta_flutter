@@ -19,18 +19,33 @@
   "addContact": "Добавить контакт",
   "partnersTitle": "Партнёры",
   "partnersValue": "Партнёр",
-  "partnersFormOne": "партнёр",
-  "partnersFormFew": "партнёра",
-  "partnersFormMany": "партнёров",
+  "partnersCount": "{count, plural, one{{count} партнёр} few{{count} партнёра} many{{count} партнёров} other{{count} партнёра}}",
+  "@partnersCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "clientsTitle": "Клиенты",
   "clientsValue": "Клиент",
-  "clientsFormOne": "клиент",
-  "clientsFormFew": "клиента",
-  "clientsFormMany": "клиентов",
+  "clientsCount": "{count, plural, one{{count} клиент} few{{count} клиента} many{{count} клиентов} other{{count} клиента}}",
+  "@clientsCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "potentialTitle": "Потенциальные",
   "potentialValue": "Потенциальный",
-  "potentialFormOne": "потенциальный",
-  "potentialFormFew": "потенциальных",
-  "potentialFormMany": "потенциальных",
+  "potentialCount": "{count, plural, one{{count} потенциальный} few{{count} потенциальных} many{{count} потенциальных} other{{count} потенциальных}}",
+  "@potentialCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "ellipsis": "…"
 }
