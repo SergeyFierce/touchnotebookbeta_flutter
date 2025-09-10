@@ -1,0 +1,36 @@
+{
+  "@@locale": "ru",
+  "appTitle": "Touch NoteBook",
+  "drawerMain": "Главный экран",
+  "drawerSettings": "Настройки",
+  "drawerSupport": "Поддержка",
+  "telegramNotInstalled": "Telegram не установлен, открываем в браузере",
+  "cannotOpenLink": "Не удалось открыть ссылку: {error}",
+  "@cannotOpenLink": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "dataLoadFailed": "Не удалось загрузить данные",
+  "dataLoadError": "Ошибка загрузки данных",
+  "contactSaved": "Контакт сохранён",
+  "addContact": "Добавить контакт",
+  "partnersTitle": "Партнёры",
+  "partnersValue": "Партнёр",
+  "partnersFormOne": "партнёр",
+  "partnersFormFew": "партнёра",
+  "partnersFormMany": "партнёров",
+  "clientsTitle": "Клиенты",
+  "clientsValue": "Клиент",
+  "clientsFormOne": "клиент",
+  "clientsFormFew": "клиента",
+  "clientsFormMany": "клиентов",
+  "potentialTitle": "Потенциальные",
+  "potentialValue": "Потенциальный",
+  "potentialFormOne": "потенциальный",
+  "potentialFormFew": "потенциальных",
+  "potentialFormMany": "потенциальных",
+  "ellipsis": "…"
+}
