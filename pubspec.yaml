@@ -29,6 +29,7 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  # Enables generation of localization files
   generate: true
   assets:
     - assets/
