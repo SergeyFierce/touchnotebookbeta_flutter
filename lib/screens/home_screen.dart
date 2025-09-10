@@ -20,6 +20,13 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     _countsFuture = _loadCounts();
+    ContactDatabase.instance.revision.addListener(_refresh);
+  }
+
+  @override
+  void dispose() {
+    ContactDatabase.instance.revision.removeListener(_refresh);
+    super.dispose();
   }
 
   Future<List<int>> _loadCounts() async {
@@ -71,27 +78,6 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final categories = const [
-      _Category(
-        icon: Icons.handshake,
-        title: 'Партнёры',
-        value: 'Партнёр',
-        forms: ['партнёр', 'партнёра', 'партнёров'],
-      ),
-      _Category(
-        icon: Icons.people,
-        title: 'Клиенты',
-        value: 'Клиент',
-        forms: ['клиент', 'клиента', 'клиентов'],
-      ),
-      _Category(
-        icon: Icons.person_add_alt_1,
-        title: 'Потенциальные',
-        value: 'Потенциальный',
-        forms: ['потенциальный', 'потенциальных', 'потенциальных'],
-      ),
-    ];
-
     final colorScheme = Theme.of(context).colorScheme;
 
     return Scaffold(
@@ -178,10 +164,10 @@ class _HomeScreenState extends State<HomeScreen> {
                   return Scrollbar(
                     child: ListView.separated(
                       padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
-                      itemCount: categories.length,
+                      itemCount: _kCategories.length,
                       separatorBuilder: (_, __) => const SizedBox(height: 12),
                       itemBuilder: (context, index) {
-                        final cat = categories[index];
+                        final cat = _kCategories[index];
                         final count = isLoading ? null : counts[index];
                         final subtitle = count == null
                             ? '…'
@@ -199,7 +185,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                   title: cat.title,
                                 ),
                               ),
-                            ).then((_) => _refresh());
+                            );
                           },
                         );
                       },
@@ -218,7 +204,6 @@ class _HomeScreenState extends State<HomeScreen> {
             MaterialPageRoute(builder: (context) => const AddContactScreen()),
           );
           if (saved == true && mounted) {
-            await _refresh();
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(content: Text('Контакт сохранён')),
             );
@@ -244,6 +229,27 @@ class _Category {
     required this.forms,
   });
 }
+
+const List<_Category> _kCategories = [
+  _Category(
+    icon: Icons.handshake,
+    title: 'Партнёры',
+    value: 'Партнёр',
+    forms: ['партнёр', 'партнёра', 'партнёров'],
+  ),
+  _Category(
+    icon: Icons.people,
+    title: 'Клиенты',
+    value: 'Клиент',
+    forms: ['клиент', 'клиента', 'клиентов'],
+  ),
+  _Category(
+    icon: Icons.person_add_alt_1,
+    title: 'Потенциальные',
+    value: 'Потенциальный',
+    forms: ['потенциальный', 'потенциальных', 'потенциальных'],
+  ),
+];
 
 class _CategoryCard extends StatefulWidget {
   final _Category category;
