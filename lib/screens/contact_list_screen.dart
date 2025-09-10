@@ -72,6 +72,9 @@ class _ContactListScreenState extends State<ContactListScreen> {
   // ключи карточек по id для ensureVisible
   final Map<int, GlobalKey> _itemKeys = {};
 
+  // Резервная высота под FAB (кнопка + стандартный отступ)
+  static const double _fabReserve = 0;
+
   Timer? _debounce;
   Timer? _snackTimer;
   void _restoreLocally(Contact restored, {bool highlight = false}) {
@@ -383,7 +386,6 @@ class _ContactListScreenState extends State<ContactListScreen> {
       // ⬇️ адресное обновление вместо _loadContacts(reset: true)
       if (!mounted) return;
       if (result is Contact) {
-        // если вернёшь обновлённый контакт (см. пункт 2)
         setState(() {
           final i = _all.indexWhere((e) => e.id == result.id);
           if (i >= 0) _all[i] = result;
@@ -430,7 +432,7 @@ class _ContactListScreenState extends State<ContactListScreen> {
     // 2) Убираем из локального списка
     setState(() => _all.removeWhere((e) => e.id == c.id));
 
-    // 3) Snackbar с Undo
+    // 3) Обычный (НЕ плавающий) Snackbar у нижнего края
     if (!mounted) return;
     final messenger = ScaffoldMessenger.of(context);
     const duration = Duration(seconds: 4);
@@ -454,7 +456,6 @@ class _ContactListScreenState extends State<ContactListScreen> {
 
             // 5) Прокрутить/подсветить восстановленного
             _restoreLocally(c.copyWith(id: newId), highlight: true);
-
           },
         ),
       ),
@@ -532,7 +533,12 @@ class _ContactListScreenState extends State<ContactListScreen> {
   @override
   Widget build(BuildContext context) {
     final contacts = _filtered;
+    final bottomInset = MediaQuery.of(context).padding.bottom; // жестовая зона / home indicator
+    final viewInsets = MediaQuery.of(context).viewInsets.bottom;
+    final keyboardShown = viewInsets > 0;
+
     return Scaffold(
+      resizeToAvoidBottomInset: false,
       appBar: AppBar(
         leading: const BackButton(),
         title: Text(widget.title),
@@ -546,93 +552,86 @@ class _ContactListScreenState extends State<ContactListScreen> {
           IconButton(icon: const Icon(Icons.filter_alt), onPressed: _openFilters),
         ],
       ),
-      body: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: TextField(
-              controller: _searchController,
-              onChanged: _onSearchChanged,
-              decoration: InputDecoration(
-                hintText: 'Поиск',
-                prefixIcon: const Icon(Icons.search),
-                suffixIcon: _searchController.text.isEmpty
-                    ? null
-                    : IconButton(
-                  icon: const Icon(Icons.close),
-                  onPressed: () {
-                    _searchController.clear();
-                    setState(() => _query = '');
-                  },
+      body: SafeArea(
+        top: false, // AppBar уже учитывает верхний инсет
+        bottom: true,
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: TextField(
+                controller: _searchController,
+                onChanged: _onSearchChanged,
+                decoration: InputDecoration(
+                  hintText: 'Поиск',
+                  prefixIcon: const Icon(Icons.search),
+                  suffixIcon: _searchController.text.isEmpty
+                      ? null
+                      : IconButton(
+                    icon: const Icon(Icons.close),
+                    onPressed: () {
+                      _searchController.clear();
+                      setState(() => _query = '');
+                    },
+                  ),
+                  filled: true,
+                  fillColor: Theme.of(context).colorScheme.surfaceVariant,
+                  border: OutlineInputBorder(
+                    borderSide: BorderSide.none,
+                    borderRadius: BorderRadius.circular(28), // капсула
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderSide: BorderSide.none,
+                    borderRadius: BorderRadius.circular(28),
+                  ),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
                 ),
-                filled: true,
-                fillColor: Theme.of(context).colorScheme.surfaceVariant,
-                border: OutlineInputBorder(
-                  borderSide: BorderSide.none,
-                  borderRadius: BorderRadius.circular(28), // капсула
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderSide: BorderSide.none,
-                  borderRadius: BorderRadius.circular(28),
-                ),
-                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
               ),
             ),
-          ),
-          Expanded(
-            child: contacts.isEmpty
-                ? Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Text('Ничего не найдено'),
-                  if (_statusFilters.isNotEmpty || _query.isNotEmpty)
-                    TextButton(
-                      onPressed: () {
-                        setState(() {
-                          _query = '';
-                          _searchController.clear();
-                          _statusFilters.clear();
-                        });
-                      },
-                      child: const Text('Сбросить фильтры'),
-                    ),
-                ],
-              ),
-            )
-                : ListView.separated(
-              key: PageStorageKey('ContactList:${widget.category}'),
-              controller: _scroll,
-              physics: const BouncingScrollPhysics(),
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              itemCount: contacts.length + (_hasMore ? 1 : 0),
-              itemBuilder: (context, index) {
-                if (index >= contacts.length) {
-                  return const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 16),
-                    child: Center(child: CircularProgressIndicator()),
-                  );
-                }
-                final c = contacts[index];
-                final wrapperKey = (c.id != null) ? _keyFor(c) : null;
-                final isHighlighted = (c.id != null && c.id == _highlightId);
+            Expanded(
+              child: contacts.isEmpty
+                  ? Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text('Ничего не найдено'),
+                    if (_statusFilters.isNotEmpty || _query.isNotEmpty)
+                      TextButton(
+                        onPressed: () {
+                          setState(() {
+                            _query = '';
+                            _searchController.clear();
+                            _statusFilters.clear();
+                          });
+                        },
+                        child: const Text('Сбросить фильтры'),
+                      ),
+                  ],
+                ),
+              )
+                  : ListView.separated(
+                key: PageStorageKey('ContactList:${widget.category}'),
+                controller: _scroll,
+                physics: const BouncingScrollPhysics(),
+                padding: EdgeInsets.fromLTRB(
+                  16,
+                  8,
+                  16,
+                  8 + _fabReserve, // ← безопасная зона + запас под FAB
+                ),
+                itemCount: contacts.length + (_hasMore ? 1 : 0),
+                itemBuilder: (context, index) {
+                  if (index >= contacts.length) {
+                    return const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 16),
+                      child: Center(child: CircularProgressIndicator()),
+                    );
+                  }
+                  final c = contacts[index];
+                  final wrapperKey = (c.id != null) ? _keyFor(c) : null;
+                  final isHighlighted = (c.id != null && c.id == _highlightId);
 
-                return Dismissible(
-                  key: ValueKey(
-                    c.id ?? '${c.name}_${c.createdAt.millisecondsSinceEpoch}',
-                  ),
-                  direction: DismissDirection.endToStart,
-                  background: Container(
-                    alignment: Alignment.centerRight,
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    color: Colors.red,
-                    child: const Icon(Icons.delete, color: Colors.white),
-                  ),
-                  confirmDismiss: (_) async => true,
-                  onDismissed: (_) async {
-                    await _deleteWithUndo(c);
-                  },
-                  child: RepaintBoundary(
+                  return RepaintBoundary(
                     // изолируем перерисовку эффекта
                     key: wrapperKey, // для ensureVisible
                     child: _ContactCard(
@@ -645,7 +644,8 @@ class _ContactListScreenState extends State<ContactListScreen> {
                             transitionsBuilder: (_, animation, __, child) {
                               const begin = Offset(1.0, 0.0);
                               const end = Offset.zero;
-                              final tween = Tween(begin: begin, end: end).chain(CurveTween(curve: Curves.ease));
+                              final tween = Tween(begin: begin, end: end)
+                                  .chain(CurveTween(curve: Curves.ease));
                               return SlideTransition(position: animation.drive(tween), child: child);
                             },
                           ),
@@ -653,7 +653,7 @@ class _ContactListScreenState extends State<ContactListScreen> {
 
                         if (!mounted) return;
 
-                        // ⬇️ адресное обновление вместо _loadContacts(reset: true)
+                        // адресное обновление
                         if (result is Contact) {
                           setState(() {
                             final i = _all.indexWhere((e) => e.id == result.id);
@@ -665,18 +665,17 @@ class _ContactListScreenState extends State<ContactListScreen> {
                           });
                         }
                       },
-
                       pulse: isHighlighted,
-                      pulseSeed: _pulseSeed, // ← эффект «нажатия без нажатия»
+                      pulseSeed: _pulseSeed, // эффект «нажатия без нажатия»
                       onLongPress: () => _showContactMenu(c),
                     ),
-                  ),
-                );
-              },
-              separatorBuilder: (_, __) => const SizedBox(height: 8),
+                  );
+                },
+                separatorBuilder: (_, __) => const SizedBox(height: 8),
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () async {
@@ -696,6 +695,7 @@ class _ContactListScreenState extends State<ContactListScreen> {
           if (saved == true) {
             await _loadContacts(reset: true);
             if (mounted) {
+              // Обычный (не плавающий) Snackbar
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(content: Text('Контакт сохранён')),
               );
