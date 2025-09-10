@@ -1,0 +1,51 @@
+{
+  "@@locale": "en",
+  "appTitle": "Touch NoteBook",
+  "drawerMain": "Main Screen",
+  "drawerSettings": "Settings",
+  "drawerSupport": "Support",
+  "telegramNotInstalled": "Telegram is not installed, opening in browser",
+  "cannotOpenLink": "Could not open link: {error}",
+  "@cannotOpenLink": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "dataLoadFailed": "Failed to load data",
+  "dataLoadError": "Data load error",
+  "contactSaved": "Contact saved",
+  "addContact": "Add contact",
+  "partnersTitle": "Partners",
+  "partnersValue": "Partner",
+  "partnersCount": "{count, plural, one{{count} partner} other{{count} partners}}",
+  "@partnersCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "clientsTitle": "Clients",
+  "clientsValue": "Client",
+  "clientsCount": "{count, plural, one{{count} client} other{{count} clients}}",
+  "@clientsCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "potentialTitle": "Potential",
+  "potentialValue": "Potential",
+  "potentialCount": "{count, plural, one{{count} potential} other{{count} potential}}",
+  "@potentialCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "ellipsis": "…"
+}
