@@ -79,16 +79,6 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  String _plural(int count, List<String> forms) {
-    final mod10 = count % 10;
-    final mod100 = count % 100;
-    if (mod10 == 1 && mod100 != 11) return forms[0];
-    if (mod10 >= 2 && mod10 <= 4 && (mod100 < 10 || mod100 >= 20)) {
-      return forms[1];
-    }
-    return forms[2];
-  }
-
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
@@ -184,9 +174,8 @@ class _HomeScreenState extends State<HomeScreen> {
                       itemBuilder: (context, index) {
                         final cat = categories[index];
                         final count = isLoading ? null : counts[index];
-                        final subtitle = count == null
-                            ? l10n.ellipsis
-                            : '$count ${_plural(count, cat.forms)}';
+                        final subtitle =
+                            count == null ? l10n.ellipsis : cat.plural(count);
 
                         return _CategoryCard(
                           category: cat,
@@ -235,13 +224,13 @@ class _Category {
   final IconData icon;
   final String title;
   final String value;
-  final List<String> forms;
+  final String Function(int) plural;
 
   const _Category({
     required this.icon,
     required this.title,
     required this.value,
-    required this.forms,
+    required this.plural,
   });
 }
 
@@ -250,19 +239,19 @@ List<_Category> _categories(AppLocalizations l10n) => [
         icon: Icons.handshake,
         title: l10n.partnersTitle,
         value: l10n.partnersValue,
-        forms: [l10n.partnersFormOne, l10n.partnersFormFew, l10n.partnersFormMany],
+        plural: l10n.partnersCount,
       ),
       _Category(
         icon: Icons.people,
         title: l10n.clientsTitle,
         value: l10n.clientsValue,
-        forms: [l10n.clientsFormOne, l10n.clientsFormFew, l10n.clientsFormMany],
+        plural: l10n.clientsCount,
       ),
       _Category(
         icon: Icons.person_add_alt_1,
         title: l10n.potentialTitle,
         value: l10n.potentialValue,
-        forms: [l10n.potentialFormOne, l10n.potentialFormFew, l10n.potentialFormMany],
+        plural: l10n.potentialCount,
       ),
     ];
 
