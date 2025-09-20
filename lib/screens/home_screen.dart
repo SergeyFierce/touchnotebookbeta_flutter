@@ -15,6 +15,7 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   late Future<List<int>> _countsFuture;
+  bool _loadErrorShown = false;
 
   @override
   void initState() {
@@ -42,6 +43,17 @@ class _HomeScreenState extends State<HomeScreen> {
     setState(() {
       _countsFuture = _loadCounts();
     });
+  }
+
+  void _showLoadErrorOnce(BuildContext context) {
+    if (_loadErrorShown) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Не удалось загрузить данные')),
+      );
+    });
+    _loadErrorShown = true;
   }
 
   Future<void> _openSupport(BuildContext context) async {
@@ -150,19 +162,16 @@ class _HomeScreenState extends State<HomeScreen> {
                 builder: (context, snapshot) {
                   if (snapshot.hasError) {
                     debugPrint('Error loading contact counts: ${snapshot.error}\n${snapshot.stackTrace}');
-                    WidgetsBinding.instance.addPostFrameCallback((_) {
-                      if (!mounted) return;
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Не удалось загрузить данные')),
-                      );
-                    });
+                    _showLoadErrorOnce(context);
                     return const Center(child: Text('Ошибка загрузки данных'));
                   }
+                  _loadErrorShown = false;
                   final isLoading = snapshot.connectionState == ConnectionState.waiting;
                   final counts = snapshot.data ?? const [0, 0, 0];
 
                   return Scrollbar(
                     child: ListView.separated(
+                      physics: const AlwaysScrollableScrollPhysics(),
                       padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
                       itemCount: _kCategories.length,
                       separatorBuilder: (_, __) => const SizedBox(height: 12),
@@ -210,7 +219,6 @@ class _HomeScreenState extends State<HomeScreen> {
           }
         },
         label: const Text('Добавить контакт'),
-        icon: const Icon(Icons.add),
       ),
     );
   }
