@@ -110,16 +110,6 @@ class ContactDatabase {
     return _db!;
   }
 
-  /// Закрывает подключение к базе. При следующем обращении [database]
-  /// соединение будет открыто заново. Полезно вызывать при завершении
-  /// приложения, чтобы избежать утечек ресурсов в продакшене.
-  Future<void> close() async {
-    if (_db != null) {
-      await _db!.close();
-      _db = null;
-    }
-  }
-
   // ---- Вспомогательное: карта для insert без id ----
   Map<String, Object?> _mapForInsert(Map<String, Object?> src) {
     final m = Map<String, Object?>.from(src);
@@ -264,24 +254,13 @@ class ContactDatabase {
 
   /// Удаляет контакт (каскадно удаляются заметки) и возвращает снапшот заметок.
   /// В UI можно сохранить возвращённый список для последующего Undo.
-  ///
-  /// Операция обёрнута в транзакцию, чтобы снимок и удаление были атомарными.
   Future<List<Note>> deleteContactWithSnapshot(int contactId) async {
     final db = await database;
-    final snapshot = <Note>[];
+    // Снимок заметок до удаления
+    final snapshot = await notesByContact(contactId);
 
-    await db.transaction((txn) async {
-      final maps = await txn.query(
-        'notes',
-        where: 'contactId = ?',
-        whereArgs: [contactId],
-        orderBy: 'createdAt DESC',
-      );
-      snapshot.addAll(maps.map(Note.fromMap));
-
-      // Удаляем контакт — FK каскадно удалит связанные заметки
-      await txn.delete('contacts', where: 'id = ?', whereArgs: [contactId]);
-    });
+    // Удаляем контакт — FK прибьёт notes
+    await db.delete('contacts', where: 'id = ?', whereArgs: [contactId]);
 
     _bumpRevision();
     return snapshot;
