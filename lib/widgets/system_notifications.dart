@@ -213,27 +213,60 @@ class _UndoCountdownContentState extends State<UndoCountdownContent>
     final progressColor = widget.progressColor ?? Theme.of(context).colorScheme.primary;
     final trackColor = widget.trackColor ?? progressColor.withOpacity(0.2);
 
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.start,
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        Row(
-          children: [
-            Expanded(child: Text(widget.message)),
-            Text('$secondsLeft c'),
-          ],
-        ),
-        const SizedBox(height: 8),
-        ClipRRect(
-          borderRadius: BorderRadius.circular(999),
-          child: LinearProgressIndicator(
-            value: value,
-            minHeight: 4,
-            color: progressColor,
-            backgroundColor: trackColor,
-          ),
+        Expanded(child: Text(widget.message)),
+        const SizedBox(width: 12),
+        _CircularCountdownIndicator(
+          value: value,
+          secondsLeft: secondsLeft,
+          progressColor: progressColor,
+          trackColor: trackColor,
         ),
       ],
+    );
+  }
+}
+
+class _CircularCountdownIndicator extends StatelessWidget {
+  final double value;
+  final int secondsLeft;
+  final Color progressColor;
+  final Color trackColor;
+
+  const _CircularCountdownIndicator({
+    required this.value,
+    required this.secondsLeft,
+    required this.progressColor,
+    required this.trackColor,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final displayValue = secondsLeft.clamp(0, 999);
+
+    return SizedBox(
+      width: 36,
+      height: 36,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          CircularProgressIndicator(
+            value: value,
+            strokeWidth: 3,
+            valueColor: AlwaysStoppedAnimation<Color>(progressColor),
+            backgroundColor: trackColor,
+          ),
+          Text(
+            '$displayValue',
+            style: const TextStyle(
+              fontWeight: FontWeight.w600,
+              fontSize: 12,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
