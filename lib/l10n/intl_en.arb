@@ -35,8 +35,8 @@
       }
     }
   },
-  "potentialTitle": "Potential",
-  "potentialCount": "{count, plural, one{{count} potential} other{{count} potential}}",
+  "potentialTitle": "Prospects",
+  "potentialCount": "{count, plural, one{{count} prospect} other{{count} prospects}}",
   "category": "Category",
   "@potentialCount": {
     "placeholders": {

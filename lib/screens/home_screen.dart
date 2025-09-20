@@ -178,6 +178,7 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
       ),
       floatingActionButton: FloatingActionButton.extended(
+        tooltip: l10n.addContact,
         onPressed: () async {
           final saved = await Navigator.push(
             context,
