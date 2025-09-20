@@ -13,7 +13,7 @@ import 'contact_list_screen.dart'; // переход к восстановлен
 import 'notes_list_screen.dart';
 import 'add_note_screen.dart';
 import 'note_details_screen.dart';
-import '../l10n/app_localizations.dart';
+import '../strings.dart';
 
 class ContactDetailsScreen extends StatefulWidget {
   final Contact contact;
@@ -932,30 +932,29 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
       ),
       clipBehavior: Clip.antiAlias,
       builder: (context) {
-        final l10n = AppLocalizations.of(context)!;
         return _sheetWrap(
-          title: l10n.category,
+          title: Strings.category,
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               _radioRow<String>(
                 value: 'Партнёр',
                 groupValue: _category,
-                title: l10n.partnersTitle,
+                title: Strings.partnersTitle,
                 icon: Icons.handshake,
                 onSelect: () => Navigator.pop(context, 'Партнёр'),
               ),
               _radioRow<String>(
                 value: 'Клиент',
                 groupValue: _category,
-                title: l10n.clientsTitle,
+                title: Strings.clientsTitle,
                 icon: Icons.people,
                 onSelect: () => Navigator.pop(context, 'Клиент'),
               ),
               _radioRow<String>(
                 value: 'Потенциальный',
                 groupValue: _category,
-                title: l10n.potentialTitle,
+                title: Strings.potentialTitle,
                 icon: Icons.person_add_alt_1,
                 onSelect: () => Navigator.pop(context, 'Потенциальный'),
                 isLast: true,
@@ -1149,22 +1148,21 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
     _snackTimer = Timer(endTime.difference(DateTime.now()), () => controller.close());
   }
 
-  String _titleForCategory(BuildContext context, String cat) {
-    final l10n = AppLocalizations.of(context)!;
+  String _titleForCategory(String cat) {
     switch (cat) {
       case 'Партнёр':
-        return l10n.partnersTitle;
+        return Strings.partnersTitle;
       case 'Клиент':
-        return l10n.clientsTitle;
+        return Strings.clientsTitle;
       case 'Потенциальный':
-        return l10n.potentialTitle;
+        return Strings.potentialTitle;
       default:
         return cat;
     }
   }
 
   Future<void> _goToRestored(Contact restored, int restoredId) async {
-    final title = _titleForCategory(context, restored.category);
+    final title = _titleForCategory(restored.category);
     App.navigatorKey.currentState?.push(
       MaterialPageRoute(
         builder: (_) => ContactListScreen(

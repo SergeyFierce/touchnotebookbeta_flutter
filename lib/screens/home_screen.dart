@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
-import '../l10n/app_localizations.dart';
+import '../strings.dart';
 
 import 'add_contact_screen.dart';
 import 'settings_screen.dart';
@@ -17,8 +17,7 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
 
   Future<List<int>> _loadCounts() async {
-    final l10n = AppLocalizations.of(context)!;
-    final categories = _categories(l10n);
+    final categories = _categories();
     return Future.wait<int>(
       categories.map(
         (c) => ContactDatabase.instance.countByCategory(c.value),
@@ -39,17 +38,15 @@ class _HomeScreenState extends State<HomeScreen> {
         await launchUrl(tgUri, mode: LaunchMode.externalApplication);
       } else {
         if (!mounted) return;
-        final l10n = AppLocalizations.of(context)!;
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(l10n.telegramNotInstalled)),
+          const SnackBar(content: Text(Strings.telegramNotInstalled)),
         );
         await launchUrl(webUri, mode: LaunchMode.externalApplication);
       }
     } catch (e) {
       if (!mounted) return;
-      final l10n = AppLocalizations.of(context)!;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(l10n.cannotOpenLink(e.toString()))),
+        SnackBar(content: Text(Strings.cannotOpenLink(e.toString()))),
       );
     }
   }
@@ -57,12 +54,11 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    final l10n = AppLocalizations.of(context)!;
-    final categories = _categories(l10n);
+    final categories = _categories();
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(l10n.appTitle),
+        title: const Text(Strings.appTitle),
       ),
       drawer: Drawer(
         child: SafeArea(
@@ -84,7 +80,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                     const SizedBox(width: 16),
                     Text(
-                      l10n.appTitle,
+                      Strings.appTitle,
                       style: const TextStyle(fontSize: 20, color: Colors.white),
                     ),
                   ],
@@ -92,12 +88,12 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
               ListTile(
                 leading: const Icon(Icons.home),
-                title: Text(l10n.drawerMain),
+                title: const Text(Strings.drawerMain),
                 onTap: () => Navigator.pop(context),
               ),
               ListTile(
                 leading: const Icon(Icons.settings),
-                title: Text(l10n.drawerSettings),
+                title: const Text(Strings.drawerSettings),
                 onTap: () {
                   Navigator.pop(context);
                   Navigator.push(
@@ -108,7 +104,7 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
               ListTile(
                 leading: const Icon(Icons.support_agent),
-                title: Text(l10n.drawerSupport),
+                title: const Text(Strings.drawerSupport),
                 onTap: () {
                   Navigator.pop(context);
                   _openSupport(context);
@@ -133,16 +129,16 @@ class _HomeScreenState extends State<HomeScreen> {
                     WidgetsBinding.instance.addPostFrameCallback((_) {
                       if (!mounted) return;
                       ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Не удалось загрузить данные')),
+                        const SnackBar(content: Text(Strings.dataLoadFailed)),
                       );
                     });
-                    return const Center(child: Text('Ошибка загрузки данных'));
+                    return const Center(child: Text(Strings.dataLoadError));
                   }
 
-                        SnackBar(content: Text(l10n.dataLoadFailed)),
+                        const SnackBar(content: Text(Strings.dataLoadFailed)),
                       );
                     });
-                    return Center(child: Text(l10n.dataLoadError));
+                    return const Center(child: Text(Strings.dataLoadError));
                   }
                   final isLoading = snapshot.connectionState == ConnectionState.waiting;
                   final counts = snapshot.data ?? const [0, 0, 0];
@@ -157,7 +153,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         final cat = categories[index];
                         final count = isLoading ? null : counts[index];
                         final subtitle =
-                            count == null ? l10n.ellipsis : cat.plural(count);
+                            count == null ? Strings.ellipsis : cat.plural(count);
 
                         return _CategoryCard(
                           category: cat,
@@ -184,7 +180,7 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
       ),
       floatingActionButton: FloatingActionButton.extended(
-        tooltip: l10n.addContact,
+        tooltip: Strings.addContact,
         onPressed: () async {
           final saved = await Navigator.push(
             context,
@@ -192,11 +188,11 @@ class _HomeScreenState extends State<HomeScreen> {
           );
           if (saved == true && mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text(l10n.contactSaved)),
+              const SnackBar(content: Text(Strings.contactSaved)),
             );
           }
         },
-        label: Text(l10n.addContact),
+        label: const Text(Strings.addContact),
         icon: const Icon(Icons.add),
       ),
     );
@@ -217,24 +213,24 @@ class _Category {
   });
 }
 
-List<_Category> _categories(AppLocalizations l10n) => [
+List<_Category> _categories() => [
       _Category(
         icon: Icons.handshake,
-        title: l10n.partnersTitle,
+        title: Strings.partnersTitle,
         value: 'Партнёр',
-        plural: l10n.partnersCount,
+        plural: Strings.partnersCount,
       ),
       _Category(
         icon: Icons.people,
-        title: l10n.clientsTitle,
+        title: Strings.clientsTitle,
         value: 'Клиент',
-        plural: l10n.clientsCount,
+        plural: Strings.clientsCount,
       ),
       _Category(
         icon: Icons.person_add_alt_1,
-        title: l10n.potentialTitle,
+        title: Strings.potentialTitle,
         value: 'Потенциальный',
-        plural: l10n.potentialCount,
+        plural: Strings.potentialCount,
       ),
     ];
 

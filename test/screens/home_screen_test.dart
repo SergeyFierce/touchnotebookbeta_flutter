@@ -7,7 +7,6 @@ import 'package:touchnotebookbeta_flutter/screens/add_contact_screen.dart';
 import 'package:touchnotebookbeta_flutter/screens/contact_list_screen.dart';
 import 'package:touchnotebookbeta_flutter/services/contact_database.dart';
 import 'package:touchnotebookbeta_flutter/models/contact.dart';
-import 'package:touchnotebookbeta_flutter/l10n/app_localizations.dart';
 
 class MockContactDatabase extends Mock implements ContactDatabase {}
 
@@ -46,11 +45,8 @@ void main() {
   });
 
   testWidgets('category cards display correct counts and plural forms', (tester) async {
-    await tester.pumpWidget(MaterialApp(
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      supportedLocales: AppLocalizations.supportedLocales,
-      locale: const Locale('ru'),
-      home: const HomeScreen(),
+    await tester.pumpWidget(const MaterialApp(
+      home: HomeScreen(),
     ));
     await tester.pump(); // start future
     await tester.pump(); // finish future
@@ -61,11 +57,8 @@ void main() {
   });
 
   testWidgets('tapping category navigates to ContactListScreen', (tester) async {
-    await tester.pumpWidget(MaterialApp(
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      supportedLocales: AppLocalizations.supportedLocales,
-      locale: const Locale('ru'),
-      home: const HomeScreen(),
+    await tester.pumpWidget(const MaterialApp(
+      home: HomeScreen(),
     ));
     await tester.pump();
     await tester.pump();
@@ -77,11 +70,8 @@ void main() {
   });
 
   testWidgets('tapping FAB navigates to AddContactScreen and refreshes counts on return', (tester) async {
-    await tester.pumpWidget(MaterialApp(
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      supportedLocales: AppLocalizations.supportedLocales,
-      locale: const Locale('ru'),
-      home: const HomeScreen(),
+    await tester.pumpWidget(const MaterialApp(
+      home: HomeScreen(),
     ));
     await tester.pump();
     await tester.pump();
@@ -106,11 +96,8 @@ void main() {
 
 
   testWidgets('manual refresh reloads counts without revision change', (tester) async {
-    await tester.pumpWidget(MaterialApp(
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      supportedLocales: AppLocalizations.supportedLocales,
-      locale: const Locale('ru'),
-      home: const HomeScreen(),
+    await tester.pumpWidget(const MaterialApp(
+      home: HomeScreen(),
     ));
     await tester.pump();
     await tester.pump();

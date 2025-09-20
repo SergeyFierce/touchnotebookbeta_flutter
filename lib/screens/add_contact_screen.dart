@@ -6,7 +6,7 @@ import 'package:characters/characters.dart';
 
 import '../models/contact.dart';
 import '../services/contact_database.dart';
-import '../l10n/app_localizations.dart';
+import '../strings.dart';
 
 class AddContactScreen extends StatefulWidget {
   final String? category; // preselected category (singular)
@@ -624,14 +624,13 @@ class _AddContactScreenState extends State<AddContactScreen> {
       context: context,
       showDragHandle: true,
       builder: (context) {
-        final l10n = AppLocalizations.of(context)!;
         return SafeArea(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              _PickerTile(icon: Icons.handshake, label: l10n.partnersTitle, value: 'Партнёр'),
-              _PickerTile(icon: Icons.people, label: l10n.clientsTitle, value: 'Клиент'),
-              _PickerTile(icon: Icons.person_add_alt_1, label: l10n.potentialTitle, value: 'Потенциальный'),
+              _PickerTile(icon: Icons.handshake, label: Strings.partnersTitle, value: 'Партнёр'),
+              _PickerTile(icon: Icons.people, label: Strings.clientsTitle, value: 'Клиент'),
+              _PickerTile(icon: Icons.person_add_alt_1, label: Strings.potentialTitle, value: 'Потенциальный'),
             ],
           ),
         );

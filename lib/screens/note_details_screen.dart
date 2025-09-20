@@ -4,7 +4,7 @@ import 'package:intl/intl.dart';
 import '../app.dart'; // для App.navigatorKey
 import '../models/note.dart';
 import '../services/contact_database.dart';
-import '../l10n/app_localizations.dart';
+import '../strings.dart';
 
 class NoteDetailsScreen extends StatefulWidget {
   final Note note;
@@ -152,9 +152,8 @@ class _NoteDetailsScreenState extends State<NoteDetailsScreen>
     // ✅ показываем SnackBar так, чтобы он остался после pop
     final rootCtx = App.navigatorKey.currentContext;
     if (rootCtx != null) {
-      final l10nRoot = AppLocalizations.of(rootCtx)!;
       ScaffoldMessenger.of(rootCtx).showSnackBar(
-        SnackBar(content: Text(l10nRoot.noteSaved)),
+        const SnackBar(content: Text(Strings.noteSaved)),
       );
     }
 
@@ -164,17 +163,16 @@ class _NoteDetailsScreenState extends State<NoteDetailsScreen>
 
 
   Future<void> _delete() async {
-    final l10n = AppLocalizations.of(context)!;
     final ok = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text(l10n.deleteNoteQuestion),
-        content: Text(l10n.deleteNoteWarning),
+        title: const Text(Strings.deleteNoteQuestion),
+        content: const Text(Strings.deleteNoteWarning),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: Text(l10n.cancel)),
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text(Strings.cancel)),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
-            child: Text(l10n.delete, style: const TextStyle(color: Colors.red)),
+            child: const Text(Strings.delete, style: TextStyle(color: Colors.red)),
           ),
         ],
       ),
@@ -196,7 +194,7 @@ class _NoteDetailsScreenState extends State<NoteDetailsScreen>
         duration: const Duration(days: 1),
         content: _UndoSnackContentLocal(endTime: endTime, duration: duration),
         action: SnackBarAction(
-          label: l10n.undo,
+          label: Strings.undo,
           onPressed: () async {
             _snackTimer?.cancel();
             messenger.hideCurrentSnackBar();
@@ -228,21 +226,20 @@ class _NoteDetailsScreenState extends State<NoteDetailsScreen>
 
   @override
   Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context)!;
     final dateStr = DateFormat('dd.MM.yyyy').format(_date);
 
     return Scaffold(
       appBar: AppBar(
         leading: IconButton(
-          tooltip: l10n.close,
+          tooltip: Strings.close,
           icon: const Icon(Icons.close),
           onPressed: () => Navigator.pop(context),
         ),
-        title: Text(l10n.note),
+        title: const Text(Strings.note),
         actions: [
           if (_isEditing)
             IconButton(
-              tooltip: l10n.save,
+              tooltip: Strings.save,
               icon: const Icon(Icons.check),
               onPressed: _canSave ? _save : null,
             ),
@@ -261,7 +258,7 @@ class _NoteDetailsScreenState extends State<NoteDetailsScreen>
                 physics: const BouncingScrollPhysics(),
                 children: [
                   _sectionCard(
-                    title: l10n.text,
+                    title: Strings.text,
                     children: [
                       TextFormField(
                         controller: _textController,
@@ -269,23 +266,23 @@ class _NoteDetailsScreenState extends State<NoteDetailsScreen>
                         maxLines: null,
                         textInputAction: TextInputAction.newline,
                         decoration: _outlinedDec(
-                          label: l10n.noteTextLabel,
-                          hint: l10n.enterText,
+                          label: Strings.noteTextLabel,
+                          hint: Strings.enterText,
                           prefixIcon: Icons.notes_outlined,
                         ),
-                        validator: (v) => (v == null || v.trim().isEmpty) ? l10n.enterText : null,
+                        validator: (v) => (v == null || v.trim().isEmpty) ? Strings.enterText : null,
                         onChanged: (_) => setState(() => _isEditing = _isDirty),
                       ),
                     ],
                   ),
                   _sectionCard(
-                    title: l10n.date,
+                    title: Strings.date,
                     children: [
                       _borderedTile(
                         child: ListTile(
                           contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                           leading: const Icon(Icons.event_outlined),
-                          title: Text(l10n.dateAdded),
+                          title: const Text(Strings.dateAdded),
                           subtitle: Text(dateStr),
                           trailing: const Icon(Icons.arrow_drop_down),
                           onTap: _pickDate,
@@ -308,7 +305,7 @@ class _NoteDetailsScreenState extends State<NoteDetailsScreen>
             foregroundColor: Colors.white,
           ),
           onPressed: _delete,
-          child: Text(l10n.deleteNote),
+          child: const Text(Strings.deleteNote),
         ),
       ),
 
@@ -381,12 +378,14 @@ class _UndoSnackContentLocalState extends State<_UndoSnackContentLocal>
   Widget build(BuildContext context) {
     final value = _ctrl.value;
     final secondsLeft = (value * widget.duration.inSeconds).ceil().clamp(0, 999);
-    final l10n = AppLocalizations.of(context)!;
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(children: [Expanded(child: Text(l10n.noteDeleted)), Text('$secondsLeft ${l10n.secondsShort}')]),
+        Row(children: [
+          const Expanded(child: Text(Strings.noteDeleted)),
+          Text('$secondsLeft ${Strings.secondsShort}')
+        ]),
         const SizedBox(height: 4),
         LinearProgressIndicator(value: value),
       ],
