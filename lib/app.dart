@@ -1,7 +1,10 @@
 // lib/app.dart
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:provider/provider.dart';
+import 'l10n/app_localizations.dart';
 import 'screens/home_screen.dart';
+import 'services/locale_notifier.dart';
 
 class App extends StatelessWidget {
   const App({super.key});
@@ -12,8 +15,9 @@ class App extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final locale = context.watch<LocaleNotifier>().locale;
     return MaterialApp(
-      title: 'Touch NoteBook',
+      onGenerateTitle: (context) => AppLocalizations.of(context)!.appTitle,
       debugShowCheckedModeBanner: false, // 🔔 убирает "DEBUG" в углу
       navigatorKey: navigatorKey, // <-- ВАЖНО: подключили ключ
       theme: ThemeData(
@@ -36,15 +40,13 @@ class App extends StatelessWidget {
       ),
       themeMode: ThemeMode.system,
       localizationsDelegates: const [
+        AppLocalizations.delegate,
         GlobalMaterialLocalizations.delegate,
         GlobalWidgetsLocalizations.delegate,
         GlobalCupertinoLocalizations.delegate,
       ],
-      supportedLocales: const [
-        Locale('ru'),
-        Locale('en'),
-      ],
-      locale: const Locale('ru'),
+      supportedLocales: AppLocalizations.supportedLocales,
+      locale: locale,
       home: const HomeScreen(),
     );
   }

@@ -1,0 +1,70 @@
+{
+  "@@locale": "en",
+  "appTitle": "Touch NoteBook",
+  "drawerMain": "Main Screen",
+  "drawerSettings": "Settings",
+  "drawerSupport": "Support",
+  "telegramNotInstalled": "Telegram is not installed, opening in browser",
+  "cannotOpenLink": "Could not open link: {error}",
+  "@cannotOpenLink": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "dataLoadFailed": "Failed to load data",
+  "dataLoadError": "Data load error",
+  "contactSaved": "Contact saved",
+  "addContact": "Add contact",
+  "partnersTitle": "Partners",
+  "partnersCount": "{count, plural, one{{count} partner} other{{count} partners}}",
+  "@partnersCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "clientsTitle": "Clients",
+  "clientsCount": "{count, plural, one{{count} client} other{{count} clients}}",
+  "@clientsCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "potentialTitle": "Prospects",
+  "potentialCount": "{count, plural, one{{count} prospect} other{{count} prospects}}",
+  "category": "Category",
+  "@potentialCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "ellipsis": "…",
+  "noteSaved": "Note saved",
+  "deleteNoteQuestion": "Delete note?",
+  "deleteNoteWarning": "This action cannot be undone.",
+  "cancel": "Cancel",
+  "delete": "Delete",
+  "undo": "Undo",
+  "close": "Close",
+  "note": "Note",
+  "save": "Save",
+  "text": "Text",
+  "noteTextLabel": "Note text*",
+  "enterText": "Enter text",
+  "date": "Date",
+  "dateAdded": "Date added",
+  "deleteNote": "Delete note",
+  "noteDeleted": "Note deleted",
+  "secondsShort": "s",
+  "settingsTitle": "Settings",
+  "settingsLanguage": "Language",
+  "languageRussian": "Russian",
+  "languageEnglish": "English"
+}

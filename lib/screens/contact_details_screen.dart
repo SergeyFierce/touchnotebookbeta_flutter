@@ -13,6 +13,7 @@ import 'contact_list_screen.dart'; // переход к восстановлен
 import 'notes_list_screen.dart';
 import 'add_note_screen.dart';
 import 'note_details_screen.dart';
+import '../l10n/app_localizations.dart';
 
 class ContactDetailsScreen extends StatefulWidget {
   final Contact contact;
@@ -930,36 +931,39 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
       clipBehavior: Clip.antiAlias,
-      builder: (context) => _sheetWrap(
-        title: 'Категория',
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            _radioRow<String>(
-              value: 'Партнёр',
-              groupValue: _category,
-              title: 'Партнёр',
-              icon: Icons.handshake,
-              onSelect: () => Navigator.pop(context, 'Партнёр'),
-            ),
-            _radioRow<String>(
-              value: 'Клиент',
-              groupValue: _category,
-              title: 'Клиент',
-              icon: Icons.people,
-              onSelect: () => Navigator.pop(context, 'Клиент'),
-            ),
-            _radioRow<String>(
-              value: 'Потенциальный',
-              groupValue: _category,
-              title: 'Потенциальный',
-              icon: Icons.person_add_alt_1,
-              onSelect: () => Navigator.pop(context, 'Потенциальный'),
-              isLast: true,
-            ),
-          ],
-        ),
-      ),
+      builder: (context) {
+        final l10n = AppLocalizations.of(context)!;
+        return _sheetWrap(
+          title: l10n.category,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _radioRow<String>(
+                value: 'Партнёр',
+                groupValue: _category,
+                title: l10n.partnersTitle,
+                icon: Icons.handshake,
+                onSelect: () => Navigator.pop(context, 'Партнёр'),
+              ),
+              _radioRow<String>(
+                value: 'Клиент',
+                groupValue: _category,
+                title: l10n.clientsTitle,
+                icon: Icons.people,
+                onSelect: () => Navigator.pop(context, 'Клиент'),
+              ),
+              _radioRow<String>(
+                value: 'Потенциальный',
+                groupValue: _category,
+                title: l10n.potentialTitle,
+                icon: Icons.person_add_alt_1,
+                onSelect: () => Navigator.pop(context, 'Потенциальный'),
+                isLast: true,
+              ),
+            ],
+          ),
+        );
+      },
     );
 
 
@@ -1145,21 +1149,22 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
     _snackTimer = Timer(endTime.difference(DateTime.now()), () => controller.close());
   }
 
-  String _titleForCategory(String cat) {
+  String _titleForCategory(BuildContext context, String cat) {
+    final l10n = AppLocalizations.of(context)!;
     switch (cat) {
       case 'Партнёр':
-        return 'Партнёры';
+        return l10n.partnersTitle;
       case 'Клиент':
-        return 'Клиенты';
+        return l10n.clientsTitle;
       case 'Потенциальный':
-        return 'Потенциальные';
+        return l10n.potentialTitle;
       default:
         return cat;
     }
   }
 
   Future<void> _goToRestored(Contact restored, int restoredId) async {
-    final title = _titleForCategory(restored.category);
+    final title = _titleForCategory(context, restored.category);
     App.navigatorKey.currentState?.push(
       MaterialPageRoute(
         builder: (_) => ContactListScreen(

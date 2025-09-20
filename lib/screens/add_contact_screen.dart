@@ -6,6 +6,7 @@ import 'package:characters/characters.dart';
 
 import '../models/contact.dart';
 import '../services/contact_database.dart';
+import '../l10n/app_localizations.dart';
 
 class AddContactScreen extends StatefulWidget {
   final String? category; // preselected category (singular)
@@ -622,16 +623,19 @@ class _AddContactScreenState extends State<AddContactScreen> {
     final result = await showModalBottomSheet<String>(
       context: context,
       showDragHandle: true,
-      builder: (context) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: const [
-            _PickerTile(icon: Icons.handshake, label: 'Партнёр', value: 'Партнёр'),
-            _PickerTile(icon: Icons.people, label: 'Клиент', value: 'Клиент'),
-            _PickerTile(icon: Icons.person_add_alt_1, label: 'Потенциальный', value: 'Потенциальный'),
-          ],
-        ),
-      ),
+      builder: (context) {
+        final l10n = AppLocalizations.of(context)!;
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _PickerTile(icon: Icons.handshake, label: l10n.partnersTitle, value: 'Партнёр'),
+              _PickerTile(icon: Icons.people, label: l10n.clientsTitle, value: 'Клиент'),
+              _PickerTile(icon: Icons.person_add_alt_1, label: l10n.potentialTitle, value: 'Потенциальный'),
+            ],
+          ),
+        );
+      },
     );
 
     setState(() => _categoryOpen = false);

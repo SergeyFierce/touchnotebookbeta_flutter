@@ -1,0 +1,70 @@
+{
+  "@@locale": "ru",
+  "appTitle": "Touch NoteBook",
+  "drawerMain": "Главный экран",
+  "drawerSettings": "Настройки",
+  "drawerSupport": "Поддержка",
+  "telegramNotInstalled": "Telegram не установлен, открываем в браузере",
+  "cannotOpenLink": "Не удалось открыть ссылку: {error}",
+  "@cannotOpenLink": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "dataLoadFailed": "Не удалось загрузить данные",
+  "dataLoadError": "Ошибка загрузки данных",
+  "contactSaved": "Контакт сохранён",
+  "addContact": "Добавить контакт",
+  "partnersTitle": "Партнёры",
+  "partnersCount": "{count, plural, one{{count} партнёр} few{{count} партнёра} many{{count} партнёров} other{{count} партнёра}}",
+  "@partnersCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "clientsTitle": "Клиенты",
+  "clientsCount": "{count, plural, one{{count} клиент} few{{count} клиента} many{{count} клиентов} other{{count} клиента}}",
+  "@clientsCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "potentialTitle": "Потенциальные",
+  "potentialCount": "{count, plural, one{{count} потенциальный} few{{count} потенциальных} many{{count} потенциальных} other{{count} потенциальных}}",
+  "category": "Категория",
+  "@potentialCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "ellipsis": "…",
+  "noteSaved": "Заметка сохранена",
+  "deleteNoteQuestion": "Удалить заметку?",
+  "deleteNoteWarning": "Это действие нельзя отменить.",
+  "cancel": "Отмена",
+  "delete": "Удалить",
+  "undo": "Отменить",
+  "close": "Закрыть",
+  "note": "Заметка",
+  "save": "Сохранить",
+  "text": "Текст",
+  "noteTextLabel": "Текст заметки*",
+  "enterText": "Введите текст",
+  "date": "Дата",
+  "dateAdded": "Дата добавления",
+  "deleteNote": "Удалить заметку",
+  "noteDeleted": "Заметка удалена",
+  "secondsShort": "с",
+  "settingsTitle": "Настройки",
+  "settingsLanguage": "Язык",
+  "languageRussian": "Русский",
+  "languageEnglish": "Английский"
+}
