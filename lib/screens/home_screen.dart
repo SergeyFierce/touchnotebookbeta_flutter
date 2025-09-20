@@ -133,6 +133,12 @@ class _HomeScreenState extends State<HomeScreen> {
                     WidgetsBinding.instance.addPostFrameCallback((_) {
                       if (!mounted) return;
                       ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Не удалось загрузить данные')),
+                      );
+                    });
+                    return const Center(child: Text('Ошибка загрузки данных'));
+                  }
+
                         SnackBar(content: Text(l10n.dataLoadFailed)),
                       );
                     });
