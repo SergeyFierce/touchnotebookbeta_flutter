@@ -8,11 +8,56 @@ import 'add_contact_screen.dart';
 import 'contact_details_screen.dart';
 import 'package:characters/characters.dart';
 
+// Утилитный класс для цветов статусов и тегов (остаёмся на статической палитре как в основе)
+class ContactColors {
+  static Color statusColor(String status) {
+    switch (status) {
+      case 'Активный':
+        return Colors.green;
+      case 'Пассивный':
+        return Colors.orange;
+      case 'Потерянный':
+        return Colors.red;
+      case 'Холодный':
+        return Colors.cyan;
+      case 'Тёплый':
+        return Colors.pink;
+      default:
+        return Colors.grey;
+    }
+  }
+
+  static Color tagColor(String tag) {
+    switch (tag) {
+      case 'Новый':
+        return Colors.white;
+      case 'Напомнить':
+        return Colors.purple;
+      case 'VIP':
+        return Colors.yellow;
+      default:
+        return Colors.grey.shade200;
+    }
+  }
+
+  static Color tagTextColor(String tag) {
+    switch (tag) {
+      case 'Новый':
+        return Colors.black;
+      case 'Напомнить':
+        return Colors.white;
+      case 'VIP':
+        return Colors.black;
+      default:
+        return Colors.black;
+    }
+  }
+}
+
 class ContactListScreen extends StatefulWidget {
   final String category; // singular value for DB
-  final String title;    // display title
+  final String title; // display title
   final int? scrollToId; // к какому id проскроллить/подсветить при открытии
-
   const ContactListScreen({
     super.key,
     required this.category,
@@ -46,7 +91,6 @@ class ContactListScreen extends StatefulWidget {
       existing._restoreLocally(restoredWithId, highlight: true);
       return;
     }
-
     final title = _titleForCategory(restored.category);
     App.navigatorKey.currentState?.push(
       MaterialPageRoute(
@@ -68,17 +112,22 @@ class _ContactListScreenState extends State<ContactListScreen> {
   final TextEditingController _searchController = TextEditingController();
   final ScrollController _scroll = ScrollController();
   int _pulseSeed = 0; // триггер импульса для карточек
-
   // ключи карточек по id для ensureVisible
   final Map<int, GlobalKey> _itemKeys = {};
 
-  // Резервная высота под FAB (кнопка + стандартный отступ)
-  static const double _fabReserve = 0;
+  // Константы для durations и резерва
+  static const double fabReserve = 56 + 16; // Высота FAB + отступ
+  static const Duration debounceDuration = Duration(milliseconds: 300);
+  static const Duration highlightDuration = Duration(milliseconds: 1800);
+  static const Duration undoDuration = Duration(seconds: 4);
+  static const Duration pulseDuration = Duration(milliseconds: 3250);
 
   Timer? _debounce;
   Timer? _snackTimer;
+  Timer? _highlightTimer;
+
   void _restoreLocally(Contact restored, {bool highlight = false}) {
-    // если вдруг уже есть с таким id — заменим
+    // если вдруг уже есть с таким id — заменим, иначе добавим
     final i = _all.indexWhere((e) => e.id == restored.id);
     setState(() {
       if (i >= 0) {
@@ -86,8 +135,8 @@ class _ContactListScreenState extends State<ContactListScreen> {
       } else {
         _all.add(restored);
       }
+      _cleanupKeys();
     });
-
     // подчёркивание — без автоскролла
     if (highlight && restored.id != null) {
       _flashHighlight(restored.id!);
@@ -96,14 +145,11 @@ class _ContactListScreenState extends State<ContactListScreen> {
 
   // подсветка восстановленного контакта
   int? _highlightId;
-  Timer? _highlightTimer;
 
   String _query = '';
   SortOption _sort = SortOption.dateDesc;
   Set<String> _statusFilters = {};
-
   List<Contact> _all = [];
-
   static const int _pageSize = 20;
   int _page = 0;
   bool _isLoading = false;
@@ -114,7 +160,6 @@ class _ContactListScreenState extends State<ContactListScreen> {
     super.initState();
     // регистрируем экран в реестре активных по категории
     ContactListScreen._mountedByCategory[widget.category] = this;
-
     _loadContacts(reset: true);
     _scroll.addListener(_onScroll);
   }
@@ -140,13 +185,11 @@ class _ContactListScreenState extends State<ContactListScreen> {
     _searchController.dispose();
     _scroll.removeListener(_onScroll);
     _scroll.dispose();
-
     // снимаем регистрацию
     final s = ContactListScreen._mountedByCategory[widget.category];
     if (identical(s, this)) {
       ContactListScreen._mountedByCategory.remove(widget.category);
     }
-
     super.dispose();
   }
 
@@ -154,6 +197,11 @@ class _ContactListScreenState extends State<ContactListScreen> {
     final id = c.id;
     if (id == null) return GlobalKey();
     return _itemKeys[id] ??= GlobalKey(debugLabel: 'contact_$id');
+  }
+
+  void _cleanupKeys() {
+    final ids = _all.map((e) => e.id).whereType<int>().toSet();
+    _itemKeys.removeWhere((k, v) => !ids.contains(k));
   }
 
   Future<void> _maybeScrollTo(int id) async {
@@ -174,10 +222,9 @@ class _ContactListScreenState extends State<ContactListScreen> {
     _highlightTimer?.cancel();
     setState(() {
       _highlightId = id;
-      _pulseSeed++; // ← новый триггер для импульса
+      _pulseSeed++; // ← новый триггер для импульса (seed меняется, чтобы перезапускать анимацию)
     });
-
-    _highlightTimer = Timer(const Duration(milliseconds: 1800), () {
+    _highlightTimer = Timer(highlightDuration, () {
       if (mounted && _highlightId == id) {
         setState(() => _highlightId = null);
       }
@@ -195,6 +242,7 @@ class _ContactListScreenState extends State<ContactListScreen> {
       _all.clear();
       _page = 0;
       _hasMore = true;
+      _cleanupKeys();
     }
     await _loadMoreContacts();
   }
@@ -202,33 +250,43 @@ class _ContactListScreenState extends State<ContactListScreen> {
   Future<void> _loadMoreContacts() async {
     if (_isLoading || !_hasMore) return;
     setState(() => _isLoading = true);
-    final contacts = await ContactDatabase.instance.contactsByCategoryPaged(
-      widget.category,
-      limit: _pageSize,
-      offset: _page * _pageSize,
-    );
-    if (!mounted) return;
-    setState(() {
-      _all.addAll(contacts);
-      _isLoading = false;
-      _page++;
-      if (contacts.length < _pageSize) {
-        _hasMore = false;
+    try {
+      final contacts = await ContactDatabase.instance.contactsByCategoryPaged(
+        widget.category,
+        limit: _pageSize,
+        offset: _page * _pageSize,
+      );
+      if (!mounted) return;
+      setState(() {
+        // защита от дублей при наложении страниц
+        final existing = _all.map((e) => e.id).toSet();
+        _all.addAll(contacts.where((e) => !existing.contains(e.id)));
+        _isLoading = false;
+        _page++;
+        _hasMore = contacts.length >= _pageSize;
+        _cleanupKeys();
+      });
+      if (widget.scrollToId != null && _all.any((e) => e.id == widget.scrollToId)) {
+        final id = widget.scrollToId!;
+        await _maybeScrollTo(id);
+        _flashHighlight(id);
       }
-    });
-
-    if (widget.scrollToId != null && _all.any((e) => e.id == widget.scrollToId)) {
-      final id = widget.scrollToId!;
-      await _maybeScrollTo(id);
-      _flashHighlight(id);
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Ошибка загрузки контактов: $e')),
+        );
+      }
     }
   }
 
   void _onSearchChanged(String value) {
     _debounce?.cancel();
-    _debounce = Timer(const Duration(milliseconds: 300), () {
+    _debounce = Timer(debounceDuration, () {
+      if (!mounted) return;
       setState(() {
-        _query = value.toLowerCase();
+        _query = value.trim().toLowerCase();
       });
     });
   }
@@ -281,9 +339,7 @@ class _ContactListScreenState extends State<ContactListScreen> {
     final List<String> statuses = (category == 'Потенциальный')
         ? const ['Холодный', 'Тёплый', 'Потерянный']
         : const ['Активный', 'Пассивный', 'Потерянный'];
-
     final selected = Set<String>.from(_statusFilters);
-
     final result = await showModalBottomSheet<Set<String>>(
       context: context,
       isScrollControlled: true,
@@ -348,7 +404,6 @@ class _ContactListScreenState extends State<ContactListScreen> {
         );
       },
     );
-
     if (result != null) {
       setState(() => _statusFilters = result);
     }
@@ -382,21 +437,21 @@ class _ContactListScreenState extends State<ContactListScreen> {
         context,
         MaterialPageRoute(builder: (context) => ContactDetailsScreen(contact: c)),
       );
-
       // ⬇️ адресное обновление вместо _loadContacts(reset: true)
       if (!mounted) return;
       if (result is Contact) {
         setState(() {
           final i = _all.indexWhere((e) => e.id == result.id);
           if (i >= 0) _all[i] = result;
+          _cleanupKeys();
         });
       } else if (result is Map && result['deletedId'] is int) {
         setState(() {
           _all.removeWhere((e) => e.id == result['deletedId']);
+          _cleanupKeys();
         });
       }
-    }
-    else if (action == 'delete') {
+    } else if (action == 'delete') {
       final confirm = await showDialog<bool>(
         context: context,
         builder: (context) => AlertDialog(
@@ -423,59 +478,75 @@ class _ContactListScreenState extends State<ContactListScreen> {
   /// Удаляет контакт и показывает SnackBar с Undo + индикатором и обратным отсчётом.
   Future<void> _deleteWithUndo(Contact c) async {
     if (c.id == null) return;
-
     final db = ContactDatabase.instance;
-
-    // 1) Снимок заметок + удаление контакта (каскад снесёт заметки)
-    final notesSnapshot = await db.deleteContactWithSnapshot(c.id!);
-
-    // 2) Убираем из локального списка
-    setState(() => _all.removeWhere((e) => e.id == c.id));
-
-    // 3) Обычный (НЕ плавающий) Snackbar у нижнего края
-    if (!mounted) return;
-    final messenger = ScaffoldMessenger.of(context);
-    const duration = Duration(seconds: 4);
-
-    messenger.clearSnackBars();
-    _snackTimer?.cancel();
-
-    final endTime = DateTime.now().add(duration);
-    final controller = messenger.showSnackBar(
-      SnackBar(
-        duration: const Duration(days: 1),
-        content: _UndoSnackContent(endTime: endTime, duration: duration),
-        action: SnackBarAction(
-          label: 'Отменить',
-          onPressed: () async {
-            _snackTimer?.cancel();
-            messenger.hideCurrentSnackBar();
-
-            // 4) Восстанавливаем контакт + все его заметки (контакт получит НОВЫЙ id)
-            final newId = await db.restoreContactWithNotes(c.copyWith(id: null), notesSnapshot);
-
-            // 5) Прокрутить/подсветить восстановленного
-            _restoreLocally(c.copyWith(id: newId), highlight: true);
-          },
+    try {
+      // 1) Снимок заметок + удаление контакта (каскад снесёт заметки)
+      final notesSnapshot = await db.deleteContactWithSnapshot(c.id!);
+      // 2) Убираем из локального списка
+      setState(() {
+        _all.removeWhere((e) => e.id == c.id);
+        _cleanupKeys();
+      });
+      // 3) Обычный (НЕ плавающий) Snackbar у нижнего края
+      if (!mounted) return;
+      final messenger = ScaffoldMessenger.of(context);
+      messenger.clearSnackBars();
+      _snackTimer?.cancel();
+      final endTime = DateTime.now().add(undoDuration);
+      final controller = messenger.showSnackBar(
+        SnackBar(
+          duration: const Duration(days: 1),
+          content: _UndoSnackContent(endTime: endTime, duration: undoDuration),
+          action: SnackBarAction(
+            label: 'Отменить',
+            onPressed: () async {
+              _snackTimer?.cancel();
+              messenger.hideCurrentSnackBar();
+              // 4) Восстанавливаем контакт + все его заметки (контакт получит НОВЫЙ id)
+              final newId = await db.restoreContactWithNotes(c.copyWith(id: null), notesSnapshot);
+              // 5) Прокрутить/подсветить восстановленного
+              _restoreLocally(c.copyWith(id: newId), highlight: true);
+            },
+          ),
         ),
-      ),
-    );
-
-    _snackTimer = Timer(endTime.difference(DateTime.now()), () => controller.close());
+      );
+      _snackTimer = Timer(endTime.difference(DateTime.now()), () => controller.close());
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Ошибка удаления: $e')),
+        );
+        // Восстанавливаем локально, если удаление не прошло
+        _restoreLocally(c);
+      }
+    }
   }
 
+  // === Поиск/сортировка === (улучшенный: имя + цифры телефона, регистронезависимая сортировка)
+  int _cmpCi(String a, String b) => a.toLowerCase().compareTo(b.toLowerCase());
+  String _digits(String s) => s.replaceAll(RegExp(r'\D'), '');
+
   List<Contact> get _filtered {
-    var list = _all.where((c) => c.name.toLowerCase().contains(_query));
+    final q = _query;
+    final qDigits = _digits(q);
+
+    Iterable<Contact> list = _all.where((c) {
+      final nameHit = c.name.toLowerCase().contains(q);
+      final phoneHit = qDigits.isEmpty ? false : _digits(c.phone).contains(qDigits);
+      return nameHit || phoneHit;
+    });
+
     if (_statusFilters.isNotEmpty) {
       list = list.where((c) => _statusFilters.contains(c.status));
     }
+
     final result = list.toList();
     switch (_sort) {
       case SortOption.nameAsc:
-        result.sort((a, b) => a.name.compareTo(b.name));
+        result.sort((a, b) => _cmpCi(a.name, b.name));
         break;
       case SortOption.nameDesc:
-        result.sort((a, b) => b.name.compareTo(a.name));
+        result.sort((a, b) => _cmpCi(b.name, a.name));
         break;
       case SortOption.dateAsc:
         result.sort((a, b) => a.createdAt.compareTo(b.createdAt));
@@ -487,52 +558,8 @@ class _ContactListScreenState extends State<ContactListScreen> {
     return result;
   }
 
-  Color _statusColor(String status) {
-    switch (status) {
-      case 'Активный':
-        return Colors.green;
-      case 'Пассивный':
-        return Colors.orange;
-      case 'Потерянный':
-        return Colors.red;
-      case 'Холодный':
-        return Colors.cyan;
-      case 'Тёплый':
-        return Colors.pink;
-      default:
-        return Colors.grey;
-    }
-  }
-
-  Color _tagColor(String tag) {
-    switch (tag) {
-      case 'Новый':
-        return Colors.white;
-      case 'Напомнить':
-        return Colors.purple;
-      case 'VIP':
-        return Colors.yellow;
-      default:
-        return Colors.grey.shade200;
-    }
-  }
-
-  Color _tagTextColor(String tag) {
-    switch (tag) {
-      case 'Новый':
-        return Colors.black;
-      case 'Напомнить':
-        return Colors.white;
-      case 'VIP':
-        return Colors.black;
-      default:
-        return Colors.black;
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
-    final contacts = _filtered;
     final bottomInset = MediaQuery.of(context).padding.bottom; // жестовая зона / home indicator
     final viewInsets = MediaQuery.of(context).viewInsets.bottom;
     final keyboardShown = viewInsets > 0;
@@ -559,121 +586,39 @@ class _ContactListScreenState extends State<ContactListScreen> {
           children: [
             Padding(
               padding: const EdgeInsets.all(16),
-              child: TextField(
-                controller: _searchController,
-                onChanged: _onSearchChanged,
-                decoration: InputDecoration(
-                  hintText: 'Поиск',
-                  prefixIcon: const Icon(Icons.search),
-                  suffixIcon: _searchController.text.isEmpty
-                      ? null
-                      : IconButton(
-                    icon: const Icon(Icons.close),
-                    onPressed: () {
-                      _searchController.clear();
-                      setState(() => _query = '');
-                    },
-                  ),
-                  filled: true,
-                  fillColor: Theme.of(context).colorScheme.surfaceVariant,
-                  border: OutlineInputBorder(
-                    borderSide: BorderSide.none,
-                    borderRadius: BorderRadius.circular(28), // капсула
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderSide: BorderSide.none,
-                    borderRadius: BorderRadius.circular(28),
-                  ),
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
-                ),
-              ),
-            ),
-            Expanded(
-              child: contacts.isEmpty
-                  ? Center(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Text('Ничего не найдено'),
-                    if (_statusFilters.isNotEmpty || _query.isNotEmpty)
-                      TextButton(
-                        onPressed: () {
-                          setState(() {
-                            _query = '';
-                            _searchController.clear();
-                            _statusFilters.clear();
-                          });
-                        },
-                        child: const Text('Сбросить фильтры'),
-                      ),
-                  ],
-                ),
-              )
-                  : ListView.separated(
-                key: PageStorageKey('ContactList:${widget.category}'),
-                controller: _scroll,
-                physics: const BouncingScrollPhysics(),
-                padding: EdgeInsets.fromLTRB(
-                  16,
-                  8,
-                  16,
-                  8 + _fabReserve, // ← безопасная зона + запас под FAB
-                ),
-                itemCount: contacts.length + (_hasMore ? 1 : 0),
-                itemBuilder: (context, index) {
-                  if (index >= contacts.length) {
-                    return const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 16),
-                      child: Center(child: CircularProgressIndicator()),
-                    );
-                  }
-                  final c = contacts[index];
-                  final wrapperKey = (c.id != null) ? _keyFor(c) : null;
-                  final isHighlighted = (c.id != null && c.id == _highlightId);
-
-                  return RepaintBoundary(
-                    // изолируем перерисовку эффекта
-                    key: wrapperKey, // для ensureVisible
-                    child: _ContactCard(
-                      contact: c,
-                      onTap: () async {
-                        final result = await Navigator.push(
-                          context,
-                          PageRouteBuilder(
-                            pageBuilder: (_, __, ___) => ContactDetailsScreen(contact: c),
-                            transitionsBuilder: (_, animation, __, child) {
-                              const begin = Offset(1.0, 0.0);
-                              const end = Offset.zero;
-                              final tween = Tween(begin: begin, end: end)
-                                  .chain(CurveTween(curve: Curves.ease));
-                              return SlideTransition(position: animation.drive(tween), child: child);
-                            },
-                          ),
-                        );
-
-                        if (!mounted) return;
-
-                        // адресное обновление
-                        if (result is Contact) {
-                          setState(() {
-                            final i = _all.indexWhere((e) => e.id == result.id);
-                            if (i >= 0) _all[i] = result;
-                          });
-                        } else if (result is Map && result['deletedId'] is int) {
-                          setState(() {
-                            _all.removeWhere((e) => e.id == result['deletedId']);
-                          });
-                        }
+              child: ValueListenableBuilder<TextEditingValue>(
+                valueListenable: _searchController,
+                builder: (_, value, __) => TextField(
+                  controller: _searchController,
+                  onChanged: _onSearchChanged,
+                  decoration: InputDecoration(
+                    hintText: 'Поиск',
+                    prefixIcon: const Icon(Icons.search),
+                    suffixIcon: value.text.isEmpty
+                        ? null
+                        : IconButton(
+                      icon: const Icon(Icons.close),
+                      onPressed: () {
+                        _searchController.clear();
+                        setState(() => _query = '');
                       },
-                      pulse: isHighlighted,
-                      pulseSeed: _pulseSeed, // эффект «нажатия без нажатия»
-                      onLongPress: () => _showContactMenu(c),
                     ),
-                  );
-                },
-                separatorBuilder: (_, __) => const SizedBox(height: 8),
+                    filled: true,
+                    fillColor: Theme.of(context).colorScheme.surfaceVariant,
+                    border: OutlineInputBorder(
+                      borderSide: BorderSide.none,
+                      borderRadius: BorderRadius.circular(28), // капсула
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderSide: BorderSide.none,
+                      borderRadius: BorderRadius.circular(28),
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+                  ),
+                ),
               ),
             ),
+            Expanded(child: _buildContactList()),
           ],
         ),
       ),
@@ -686,8 +631,7 @@ class _ContactListScreenState extends State<ContactListScreen> {
               transitionsBuilder: (_, animation, __, child) {
                 const begin = Offset(0.0, 1.0);
                 const end = Offset.zero;
-                final tween = Tween(begin: begin, end: end)
-                    .chain(CurveTween(curve: Curves.ease));
+                final tween = Tween(begin: begin, end: end).chain(CurveTween(curve: Curves.ease));
                 return SlideTransition(position: animation.drive(tween), child: child);
               },
             ),
@@ -702,8 +646,97 @@ class _ContactListScreenState extends State<ContactListScreen> {
             }
           }
         },
+        icon: const Icon(Icons.person_add),
         label: const Text('Добавить контакт'),
       ),
+    );
+  }
+
+  // Под-виджет для списка контактов
+  Widget _buildContactList() {
+    final contacts = _filtered;
+    if (contacts.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('Ничего не найдено'),
+            if (_statusFilters.isNotEmpty || _query.isNotEmpty)
+              TextButton(
+                onPressed: () {
+                  setState(() {
+                    _query = '';
+                    _searchController.clear();
+                    _statusFilters.clear();
+                  });
+                },
+                child: const Text('Сбросить фильтры'),
+              ),
+          ],
+        ),
+      );
+    }
+    return ListView.separated(
+      key: PageStorageKey('ContactList:${widget.category}'),
+      controller: _scroll,
+      physics: const BouncingScrollPhysics(),
+      padding: EdgeInsets.fromLTRB(
+        16,
+        8,
+        16,
+        8 + fabReserve, // ← безопасная зона + запас под FAB
+      ),
+      itemCount: contacts.length + (_hasMore ? 1 : 0),
+      itemBuilder: (context, index) {
+        if (index >= contacts.length) {
+          return const Padding(
+            padding: EdgeInsets.symmetric(vertical: 16),
+            child: Center(child: CircularProgressIndicator()),
+          );
+        }
+        final c = contacts[index];
+        final wrapperKey = (c.id != null) ? _keyFor(c) : null;
+        final isHighlighted = (c.id != null && c.id == _highlightId);
+        return RepaintBoundary(
+          // изолируем перерисовку эффекта
+          key: wrapperKey, // для ensureVisible
+          child: _ContactCard(
+            contact: c,
+            onTap: () async {
+              final result = await Navigator.push(
+                context,
+                PageRouteBuilder(
+                  pageBuilder: (_, __, ___) => ContactDetailsScreen(contact: c),
+                  transitionsBuilder: (_, animation, __, child) {
+                    const begin = Offset(1.0, 0.0);
+                    const end = Offset.zero;
+                    final tween = Tween(begin: begin, end: end).chain(CurveTween(curve: Curves.ease));
+                    return SlideTransition(position: animation.drive(tween), child: child);
+                  },
+                ),
+              );
+              if (!mounted) return;
+              // адресное обновление
+              if (result is Contact) {
+                setState(() {
+                  final i = _all.indexWhere((e) => e.id == result.id);
+                  if (i >= 0) _all[i] = result;
+                  _cleanupKeys();
+                });
+              } else if (result is Map && result['deletedId'] is int) {
+                setState(() {
+                  _all.removeWhere((e) => e.id == result['deletedId']);
+                  _cleanupKeys();
+                });
+              }
+            },
+            pulse: isHighlighted,
+            pulseSeed: _pulseSeed, // эффект «нажатия без нажатия»
+            onLongPress: () => _showContactMenu(c),
+          ),
+        );
+      },
+      separatorBuilder: (_, __) => const SizedBox(height: 8),
     );
   }
 }
@@ -713,14 +746,13 @@ class _ContactCard extends StatefulWidget {
   final VoidCallback? onTap;
   final VoidCallback? onLongPress;
   final bool pulse;
-  final int pulseSeed; // <- NEW
-
+  final int pulseSeed; // триггер для перезапуска анимации
   const _ContactCard({
     required this.contact,
     this.onTap,
     this.onLongPress,
     this.pulse = false,
-    required this.pulseSeed, // <- NEW (сделаем обязательным)
+    required this.pulseSeed,
   });
 
   @override
@@ -729,7 +761,6 @@ class _ContactCard extends StatefulWidget {
 
 class _ContactCardState extends State<_ContactCard> with TickerProviderStateMixin {
   bool _pressed = false;
-
   late final AnimationController _pulseCtrl;
   late final Animation<double> _scaleAnim;
   late final Animation<double> _glowAnim; // для внутреннего мягкого свечения
@@ -739,12 +770,10 @@ class _ContactCardState extends State<_ContactCard> with TickerProviderStateMixi
   @override
   void initState() {
     super.initState();
-
     _pulseCtrl = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 3250),
+      duration: _ContactListScreenState.pulseDuration,
     );
-
     // последовательность: чуть сжаться -> вернуться
     _scaleAnim = TweenSequence<double>([
       TweenSequenceItem(
@@ -756,7 +785,6 @@ class _ContactCardState extends State<_ContactCard> with TickerProviderStateMixi
         weight: 60,
       ),
     ]).animate(_pulseCtrl);
-
     // внутренний «блик» (быстрый всплеск и затухание)
     _glowAnim = TweenSequence<double>([
       TweenSequenceItem(
@@ -768,7 +796,6 @@ class _ContactCardState extends State<_ContactCard> with TickerProviderStateMixi
         weight: 65,
       ),
     ]).animate(_pulseCtrl);
-
     if (widget.pulse) {
       _pulseCtrl.forward(from: 0);
     }
@@ -797,12 +824,10 @@ class _ContactCardState extends State<_ContactCard> with TickerProviderStateMixi
     final parts = cleaned.split(RegExp(r'\s+'));
     String first = parts[0];
     String? second = parts.length > 1 ? parts[1] : null;
-
     String takeFirstLetter(String s) {
       if (s.isEmpty) return '';
       return s.characters.first.toUpperCase();
     }
-
     final a = takeFirstLetter(first);
     final b = second == null ? '' : takeFirstLetter(second);
     final res = (a + b);
@@ -823,14 +848,8 @@ class _ContactCardState extends State<_ContactCard> with TickerProviderStateMixi
     final scheme = Theme.of(context).colorScheme;
     final initials = _initialsFrom(widget.contact.name);
     final bg = _avatarBgFor(widget.contact.name, scheme);
-
-    return Container(
-      width: 44,
-      height: 44,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        border: Border.all(color: scheme.surface, width: 0),
-      ),
+    return Semantics(
+      label: 'Аватар контакта ${widget.contact.name}',
       child: CircleAvatar(
         backgroundColor: bg,
         child: Text(
@@ -845,14 +864,12 @@ class _ContactCardState extends State<_ContactCard> with TickerProviderStateMixi
   Widget build(BuildContext context) {
     final border = BorderRadius.circular(12);
     final scheme = Theme.of(context).colorScheme;
-
     return AnimatedBuilder(
       animation: _pulseCtrl,
       builder: (context, child) {
         final glow = scheme.primary.withOpacity(0.14 * _glowAnim.value);
         final shadowColor = scheme.primary.withOpacity(0.20 * _glowAnim.value);
         final blur = 24 * _glowAnim.value + 0.0;
-
         return Transform.scale(
           scale: _scaleAnim.value,
           child: Container(
@@ -872,15 +889,9 @@ class _ContactCardState extends State<_ContactCard> with TickerProviderStateMixi
               children: [
                 _buildCard(context, border),
                 if (_glowAnim.value > 0)
-                  Positioned.fill(
-                    child: IgnorePointer(
-                      child: Container(
-                        decoration: BoxDecoration(
-                          borderRadius: border,
-                          color: glow,
-                        ),
-                      ),
-                    ),
+                  PositionedFill(
+                    border: border,
+                    color: glow,
                   ),
               ],
             ),
@@ -892,7 +903,6 @@ class _ContactCardState extends State<_ContactCard> with TickerProviderStateMixi
 
   Widget _buildCard(BuildContext context, BorderRadius border) {
     const double kStatusReserve = 120;
-
     return AnimatedScale(
       scale: _pressed ? 0.98 : 1.0,
       duration: const Duration(milliseconds: 100),
@@ -902,7 +912,10 @@ class _ContactCardState extends State<_ContactCard> with TickerProviderStateMixi
         elevation: 2,
         child: InkWell(
           borderRadius: border,
-          onTap: () { _set(false); widget.onTap?.call(); },
+          onTap: () {
+            _set(false);
+            widget.onTap?.call();
+          },
           onLongPress: () {
             _set(false);
             widget.onLongPress?.call();
@@ -946,17 +959,23 @@ class _ContactCardState extends State<_ContactCard> with TickerProviderStateMixi
                         runSpacing: 4,
                         children: [
                           for (final tag in widget.contact.tags)
-                            Chip(
-                              label: Text(
-                                tag,
-                                style: Theme.of(context).textTheme.bodySmall?.copyWith(fontSize: 10, color: _tagTextColor(tag)),
-                              ),
-                              backgroundColor: _tagColor(tag),
-                              visualDensity: const VisualDensity(horizontal: -4, vertical: -4),
-                              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 0),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(30),
+                            Semantics(
+                              label: 'Тег $tag',
+                              child: Chip(
+                                label: Text(
+                                  tag,
+                                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                    fontSize: 10,
+                                    color: ContactColors.tagTextColor(tag),
+                                  ),
+                                ),
+                                backgroundColor: ContactColors.tagColor(tag),
+                                visualDensity: const VisualDensity(horizontal: -4, vertical: -4),
+                                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 0),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(30),
+                                ),
                               ),
                             ),
                         ],
@@ -967,17 +986,23 @@ class _ContactCardState extends State<_ContactCard> with TickerProviderStateMixi
                 Positioned(
                   top: 0,
                   right: 0,
-                  child: Chip(
-                    label: Text(
-                      widget.contact.status,
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(fontSize: 10, color: Colors.white),
-                    ),
-                    backgroundColor: _statusColor(widget.contact.status),
-                    visualDensity: const VisualDensity(horizontal: -4, vertical: -4),
-                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 0),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(30),
+                  child: Semantics(
+                    label: 'Статус ${widget.contact.status}',
+                    child: Chip(
+                      label: Text(
+                        widget.contact.status,
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          fontSize: 10,
+                          color: Colors.white,
+                        ),
+                      ),
+                      backgroundColor: ContactColors.statusColor(widget.contact.status),
+                      visualDensity: const VisualDensity(horizontal: -4, vertical: -4),
+                      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 0),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(30),
+                      ),
                     ),
                   ),
                 ),
@@ -988,48 +1013,25 @@ class _ContactCardState extends State<_ContactCard> with TickerProviderStateMixi
       ),
     );
   }
+}
 
-  Color _statusColor(String status) {
-    switch (status) {
-      case 'Активный':
-        return Colors.green;
-      case 'Пассивный':
-        return Colors.orange;
-      case 'Потерянный':
-        return Colors.red;
-      case 'Холодный':
-        return Colors.cyan;
-      case 'Тёплый':
-        return Colors.pink;
-      default:
-        return Colors.grey;
-    }
-  }
-
-  Color _tagColor(String tag) {
-    switch (tag) {
-      case 'Новый':
-        return Colors.white;
-      case 'Напомнить':
-        return Colors.purple;
-      case 'VIP':
-        return Colors.yellow;
-      default:
-        return Colors.grey.shade200;
-    }
-  }
-
-  Color _tagTextColor(String tag) {
-    switch (tag) {
-      case 'Новый':
-        return Colors.black;
-      case 'Напомнить':
-        return Colors.white;
-      case 'VIP':
-        return Colors.black;
-      default:
-        return Colors.black;
-    }
+/// Простая обёртка для позиционирования свечения (чтобы не дублировать BoxDecoration)
+class PositionedFill extends StatelessWidget {
+  final BorderRadius border;
+  final Color color;
+  const PositionedFill({super.key, required this.border, required this.color});
+  @override
+  Widget build(BuildContext context) {
+    return Positioned.fill(
+      child: IgnorePointer(
+        child: Container(
+          decoration: BoxDecoration(
+            borderRadius: border,
+            color: color,
+          ),
+        ),
+      ),
+    );
   }
 }
 
@@ -1043,8 +1045,7 @@ class _UndoSnackContent extends StatefulWidget {
   State<_UndoSnackContent> createState() => _UndoSnackContentState();
 }
 
-class _UndoSnackContentState extends State<_UndoSnackContent>
-    with SingleTickerProviderStateMixin {
+class _UndoSnackContentState extends State<_UndoSnackContent> with SingleTickerProviderStateMixin {
   late AnimationController _ctrl;
 
   double _fractionRemaining(DateTime now) {
@@ -1058,7 +1059,6 @@ class _UndoSnackContentState extends State<_UndoSnackContent>
     final now = DateTime.now();
     final frac = _fractionRemaining(now); // 0..1
     final msLeft = (widget.duration.inMilliseconds * frac).round();
-
     _ctrl.stop();
     _ctrl.value = frac; // мгновенно, без «вспышки»
     if (msLeft > 0) {

@@ -755,43 +755,6 @@ class _SummaryCard extends StatelessWidget {
               style: textTheme.bodyMedium
                   ?.copyWith(color: colorScheme.onSurfaceVariant),
             ),
-            kGap12,
-            Text(
-              R.quickActions,
-              style: textTheme.labelMedium
-                  ?.copyWith(color: colorScheme.onSurfaceVariant),
-            ),
-            kGap8,
-            Wrap(
-              spacing: 12,
-              runSpacing: 8,
-              children: [
-                Tooltip(
-                  message: 'Добавить новый контакт',
-                  child: FilledButton.icon(
-                    onPressed: onAddContact,
-                    icon: const Icon(Icons.person_add),
-                    label: const Text(R.addContact),
-                  ),
-                ),
-                Tooltip(
-                  message: 'Открыть настройки',
-                  child: OutlinedButton.icon(
-                    onPressed: onOpenSettings,
-                    icon: const Icon(Icons.settings),
-                    label: const Text(R.settings),
-                  ),
-                ),
-                Tooltip(
-                  message: 'Связаться с поддержкой',
-                  child: OutlinedButton.icon(
-                    onPressed: onOpenSupport,
-                    icon: const Icon(Icons.support_agent),
-                    label: const Text(R.support),
-                  ),
-                ),
-              ],
-            ),
           ],
         ),
       ),
