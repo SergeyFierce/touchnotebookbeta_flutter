@@ -6,15 +6,16 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:characters/characters.dart';
 import 'package:overlay_support/overlay_support.dart';
 
+
 import '../app.dart'; // для App.navigatorKey (глобальная навигация)
 import '../models/contact.dart';
 import '../models/note.dart';
 import '../services/contact_database.dart';
 import '../widgets/system_notifications.dart';
-import 'contact_list_screen.dart'; // переход к восстановленному контакту
 import 'notes_list_screen.dart';
 import 'add_note_screen.dart';
 import 'note_details_screen.dart';
+import 'contact_list_screen.dart';
 
 class ContactDetailsScreen extends StatefulWidget {
   final Contact contact;
@@ -1104,8 +1105,10 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
 
     final db = ContactDatabase.instance;
 
+    // Удаляем контакт и забираем снапшот заметок для возможного Undo
     final notesSnapshot = await db.deleteContactWithSnapshot(c.id!);
 
+    // Показываем баннер с Undo
     _undoBanner?.dismiss();
     const duration = Duration(seconds: 4);
     _undoBanner = showUndoBanner(
@@ -1114,14 +1117,22 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
       icon: Icons.delete_outline,
       onUndo: () async {
         _undoBanner = null;
-        final newId =
-            await db.restoreContactWithNotes(c.copyWith(id: null), notesSnapshot);
-        await ContactListScreen.goToRestored(c, newId);
+        final newId = await db.restoreContactWithNotes(c.copyWith(id: null), notesSnapshot);
+
+        // Сообщаем открытому списку: локально добавить и подсветить (без автоскролла)
+        ContactListScreen.notifyRestoredIfMounted(c, newId);
+        showSystemNotification(
+        'Контакт восстановлен',
+        style: SystemNotificationStyle.success,
+        iconOverride: Icons.undo,
+        );
       },
     );
 
+    // Закрываем экран деталей и пробрасываем инфо об удалении
     if (mounted) Navigator.pop(context, {'deletedId': c.id});
   }
+
 
   String _titleForCategory(String cat) {
     switch (cat) {
@@ -1134,18 +1145,6 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
       default:
         return cat;
     }
-  }
-
-  Future<void> _goToRestored(Contact restored, int restoredId) async {
-    final title = _titleForCategory(restored.category);
-    App.navigatorKey.currentState?.push(
-      MaterialPageRoute(
-        builder: (_) => ContactListScreen(
-          category: restored.category,
-          title: title,
-        ),
-      ),
-    );
   }
 
   Future<void> _delete() async {

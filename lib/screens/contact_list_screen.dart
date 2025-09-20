@@ -105,6 +105,14 @@ class ContactListScreen extends StatefulWidget {
       ),
     );
   }
+// Внутри класса ContactListScreen:
+  static void notifyRestoredIfMounted(Contact restored, int restoredId) {
+    final existing = _mountedByCategory[restored.category];
+    if (existing != null && existing.mounted) {
+      final restoredWithId = restored.copyWith(id: restoredId);
+      existing._restoreLocally(restoredWithId, highlight: true);
+    }
+  }
 
   @override
   State<ContactListScreen> createState() => _ContactListScreenState();
@@ -182,8 +190,6 @@ class _ContactListScreenState extends State<ContactListScreen> {
   @override
   void dispose() {
     _debounce?.cancel();
-    _undoBanner = null;
-    _undoBanner?.dismiss();
     _highlightTimer?.cancel();
     _searchController.dispose();
     _scroll.removeListener(_onScroll);
@@ -193,6 +199,8 @@ class _ContactListScreenState extends State<ContactListScreen> {
     if (identical(s, this)) {
       ContactListScreen._mountedByCategory.remove(widget.category);
     }
+    _undoBanner = null;
+    _undoBanner?.dismiss();
     super.dispose();
   }
 
@@ -886,6 +894,32 @@ class _ContactCardState extends State<_ContactCard> with TickerProviderStateMixi
     );
   }
 
+  // Универсальный форматтер RU-номера для отображения.
+// Принимает строку с чем угодно, достаёт цифры и возвращает человекочитаемый формат.
+// Поддерживает:
+// - 10 цифр (локальный без кода страны) -> +7 (XXX) XXX-XX-XX
+// - 11 цифр, начинающихся с 7 или 8 -> +7 (XXX) XXX-XX-XX
+// Иначе — возвращает исходную строку как есть.
+  String formatRuPhoneDisplay(String raw) {
+    final digits = raw.replaceAll(RegExp(r'\D'), '');
+
+    String ten;
+    if (digits.length == 10) {
+      ten = digits;
+    } else if (digits.length == 11 && (digits.startsWith('7') || digits.startsWith('8'))) {
+      ten = digits.substring(1);
+    } else {
+      // Неподдержанный формат — вернём оригинал (чтобы не терять данные)
+      return raw;
+    }
+
+    final p1 = ten.substring(0, 3);
+    final p2 = ten.substring(3, 6);
+    final p3 = ten.substring(6, 8);
+    final p4 = ten.substring(8, 10);
+    return '+7 ($p1) $p2-$p3-$p4';
+  }
+
   Widget _buildCard(BuildContext context, BorderRadius border) {
     const double kStatusReserve = 120;
     return AnimatedScale(
@@ -935,7 +969,7 @@ class _ContactCardState extends State<_ContactCard> with TickerProviderStateMixi
                       ),
                       const SizedBox(height: 6),
                       Text(
-                        widget.contact.phone,
+                        formatRuPhoneDisplay(widget.contact.phone),
                         style: Theme.of(context).textTheme.bodyMedium,
                       ),
                       const SizedBox(height: 8),
