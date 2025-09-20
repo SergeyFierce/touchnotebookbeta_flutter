@@ -1,9 +1,10 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import '../app.dart'; // для App.navigatorKey
+import 'package:overlay_support/overlay_support.dart';
 import '../models/note.dart';
 import '../services/contact_database.dart';
+import '../widgets/system_notifications.dart';
 
 class NoteDetailsScreen extends StatefulWidget {
   final Note note;
@@ -23,7 +24,7 @@ class _NoteDetailsScreenState extends State<NoteDetailsScreen>
   DateTime _date = DateTime.now();
 
   bool _isEditing = false;
-  Timer? _snackTimer;
+  OverlaySupportEntry? _undoBanner;
 
   @override
   void initState() {
@@ -35,7 +36,7 @@ class _NoteDetailsScreenState extends State<NoteDetailsScreen>
   @override
   void dispose() {
     _textController.dispose();
-    _snackTimer?.cancel();
+    _undoBanner = null;
     super.dispose();
   }
 
@@ -148,13 +149,7 @@ class _NoteDetailsScreenState extends State<NoteDetailsScreen>
     _savedSnapshot = updated;
     setState(() => _isEditing = false);
 
-    // ✅ показываем SnackBar так, чтобы он остался после pop
-    final rootCtx = App.navigatorKey.currentContext;
-    if (rootCtx != null) {
-      ScaffoldMessenger.of(rootCtx).showSnackBar(
-        const SnackBar(content: Text('Заметка сохранена')),
-      );
-    }
+    showSuccessBanner('Заметка сохранена');
 
     if (!mounted) return;
     Navigator.pop(context, {'updated': true});
@@ -180,41 +175,30 @@ class _NoteDetailsScreenState extends State<NoteDetailsScreen>
     }
 
     const duration = Duration(seconds: 4);
-    final messenger = ScaffoldMessenger.of(context);
-    messenger.clearSnackBars();
-    _snackTimer?.cancel();
+    _undoBanner?.dismiss();
 
-    final endTime = DateTime.now().add(duration);
-    final controller = messenger.showSnackBar(
-      SnackBar(
-        duration: const Duration(days: 1),
-        content: _UndoSnackContentLocal(endTime: endTime, duration: duration),
-        action: SnackBarAction(
-          label: 'Отменить',
-          onPressed: () async {
-            _snackTimer?.cancel();
-            messenger.hideCurrentSnackBar();
-
-            final newId = await ContactDatabase.instance.insertNote(
-              _note.copyWith(id: null),
-            );
-            _note = _note.copyWith(id: newId);
-            _savedSnapshot = _note;
-            setState(() {
-              _isEditing = false;
-            });
-            if (mounted) {
-              Navigator.pop(context, {'restored': _note});
-            }
-          },
-        ),
-      ),
+    _undoBanner = showUndoBanner(
+      message: 'Заметка удалена',
+      duration: duration,
+      icon: Icons.delete_outline,
+      onUndo: () async {
+        _undoBanner = null;
+        final newId = await ContactDatabase.instance.insertNote(
+          _note.copyWith(id: null),
+        );
+        _note = _note.copyWith(id: newId);
+        _savedSnapshot = _note;
+        if (!mounted) return;
+        setState(() {
+          _isEditing = false;
+        });
+        Navigator.pop(context, {'restored': _note});
+      },
     );
-
-    _snackTimer = Timer(endTime.difference(DateTime.now()), () => controller.close());
 
     Future.delayed(duration, () {
       if (mounted) {
+        _undoBanner = null;
         Navigator.pop(context, {'deleted': _note});
       }
     });
@@ -309,79 +293,3 @@ class _NoteDetailsScreenState extends State<NoteDetailsScreen>
   }
 }
 
-/// Локальный контент SnackBar с обратным отсчётом (экран деталей заметки)
-class _UndoSnackContentLocal extends StatefulWidget {
-  final DateTime endTime;
-  final Duration duration;
-  const _UndoSnackContentLocal({required this.endTime, required this.duration});
-
-  @override
-  State<_UndoSnackContentLocal> createState() => _UndoSnackContentLocalState();
-}
-
-class _UndoSnackContentLocalState extends State<_UndoSnackContentLocal>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _ctrl;
-
-  double _fractionRemaining(DateTime now) {
-    final total = widget.duration.inMilliseconds;
-    final left = widget.endTime.difference(now).inMilliseconds;
-    if (total <= 0) return 0;
-    return left <= 0 ? 0 : (left / total).clamp(0.0, 1.0);
-  }
-
-  void _syncAndRun() {
-    final now = DateTime.now();
-    final frac = _fractionRemaining(now);
-    final msLeft = (widget.duration.inMilliseconds * frac).round();
-
-    _ctrl.stop();
-    _ctrl.value = frac;
-    if (msLeft > 0) {
-      _ctrl.animateTo(0.0, duration: Duration(milliseconds: msLeft), curve: Curves.linear);
-    }
-  }
-
-  @override
-  void initState() {
-    super.initState();
-    _ctrl = AnimationController(
-      vsync: this,
-      value: 1.0,
-      lowerBound: 0.0,
-      upperBound: 1.0,
-    )..addListener(() {
-      if (mounted) setState(() {});
-    });
-    _syncAndRun();
-  }
-
-  @override
-  void didUpdateWidget(covariant _UndoSnackContentLocal oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.endTime != widget.endTime || oldWidget.duration != widget.duration) {
-      _syncAndRun();
-    }
-  }
-
-  @override
-  void dispose() {
-    _ctrl.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final value = _ctrl.value;
-    final secondsLeft = (value * widget.duration.inSeconds).ceil().clamp(0, 999);
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(children: [const Expanded(child: Text('Заметка удалена')), Text('$secondsLeft c')]),
-        const SizedBox(height: 4),
-        LinearProgressIndicator(value: value),
-      ],
-    );
-  }
-}

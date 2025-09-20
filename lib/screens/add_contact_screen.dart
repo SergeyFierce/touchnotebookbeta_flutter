@@ -6,6 +6,7 @@ import 'package:characters/characters.dart';
 
 import '../models/contact.dart';
 import '../services/contact_database.dart';
+import '../widgets/system_notifications.dart';
 
 /// Словари (централизовано, без «магических» строк)
 abstract class Dict {
@@ -750,9 +751,7 @@ class _AddContactScreenState extends State<AddContactScreen> {
       Navigator.pop(context, true);
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Не удалось сохранить. Возможно, контакт с таким телефоном уже существует.')),
-      );
+      showErrorBanner('Не удалось сохранить. Возможно, контакт с таким телефоном уже существует.');
       setState(() => _saving = false);
     }
   }

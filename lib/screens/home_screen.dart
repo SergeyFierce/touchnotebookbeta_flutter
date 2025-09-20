@@ -11,6 +11,7 @@ import 'add_contact_screen.dart';
 import 'settings_screen.dart';
 import 'contact_list_screen.dart';
 import '../services/contact_database.dart';
+import '../widgets/system_notifications.dart';
 
 /// ---------------------
 /// Строки (русская локаль)
@@ -260,12 +261,7 @@ class _HomeScreenState extends State<HomeScreen> with RestorationMixin {
     if (_loadErrorShown) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(R.loadError),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+      showErrorBanner(R.loadError);
     });
     _loadErrorShown = true;
   }
@@ -283,34 +279,19 @@ class _HomeScreenState extends State<HomeScreen> with RestorationMixin {
         await launchUrl(tgUri, mode: LaunchMode.externalApplication);
       } else {
         if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(R.telegramNotInstalled),
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
+        showWarningBanner(R.telegramNotInstalled);
         await launchUrl(webUri, mode: LaunchMode.externalApplication);
       }
     } catch (e, s) {
       debugPrint('openSupport error: $e\n$s');
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(R.telegramOpenFailed),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+      showErrorBanner(R.telegramOpenFailed);
       // мягкий fallback — скопируем ссылку
       await Clipboard.setData(
         const ClipboardData(text: 'https://t.me/touchnotebook'),
       );
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(R.linkCopied),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+      showInfoBanner(R.linkCopied);
     }
   }
 
@@ -321,12 +302,7 @@ class _HomeScreenState extends State<HomeScreen> with RestorationMixin {
       MaterialPageRoute(builder: (_) => const AddContactScreen()),
     );
     if (saved == true && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(R.contactSaved),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+      showSuccessBanner(R.contactSaved);
     }
   }
 
@@ -372,12 +348,9 @@ class _HomeScreenState extends State<HomeScreen> with RestorationMixin {
 
     // уведомляем, если ранее были неизвестные и стало меньше неизвестных
     if (last.unknownCount > 0 && newCounts.unknownCount < last.unknownCount) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(R.dataUpdated),
-          behavior: SnackBarBehavior.floating,
-          duration: Duration(milliseconds: 1500),
-        ),
+      showInfoBanner(
+        R.dataUpdated,
+        duration: const Duration(milliseconds: 1500),
       );
     }
     _lastCountsShown = newCounts;

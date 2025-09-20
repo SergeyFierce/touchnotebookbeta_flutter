@@ -1,9 +1,11 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:overlay_support/overlay_support.dart';
 
 import '../app.dart'; // для App.navigatorKey
 import '../models/contact.dart';
 import '../services/contact_database.dart';
+import '../widgets/system_notifications.dart';
 import 'add_contact_screen.dart';
 import 'contact_details_screen.dart';
 import 'package:characters/characters.dart';
@@ -123,7 +125,7 @@ class _ContactListScreenState extends State<ContactListScreen> {
   static const Duration pulseDuration = Duration(milliseconds: 3250);
 
   Timer? _debounce;
-  Timer? _snackTimer;
+  OverlaySupportEntry? _undoBanner;
   Timer? _highlightTimer;
 
   void _restoreLocally(Contact restored, {bool highlight = false}) {
@@ -180,7 +182,7 @@ class _ContactListScreenState extends State<ContactListScreen> {
   @override
   void dispose() {
     _debounce?.cancel();
-    _snackTimer?.cancel();
+    _undoBanner = null;
     _highlightTimer?.cancel();
     _searchController.dispose();
     _scroll.removeListener(_onScroll);
@@ -274,9 +276,7 @@ class _ContactListScreenState extends State<ContactListScreen> {
     } catch (e) {
       if (mounted) {
         setState(() => _isLoading = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Ошибка загрузки контактов: $e')),
-        );
+        showErrorBanner('Ошибка загрузки контактов: $e');
       }
     }
   }
@@ -475,7 +475,7 @@ class _ContactListScreenState extends State<ContactListScreen> {
     }
   }
 
-  /// Удаляет контакт и показывает SnackBar с Undo + индикатором и обратным отсчётом.
+  /// Удаляет контакт и показывает баннер с Undo + индикатором и обратным отсчётом.
   Future<void> _deleteWithUndo(Contact c) async {
     if (c.id == null) return;
     final db = ContactDatabase.instance;
@@ -487,35 +487,22 @@ class _ContactListScreenState extends State<ContactListScreen> {
         _all.removeWhere((e) => e.id == c.id);
         _cleanupKeys();
       });
-      // 3) Обычный (НЕ плавающий) Snackbar у нижнего края
-      if (!mounted) return;
-      final messenger = ScaffoldMessenger.of(context);
-      messenger.clearSnackBars();
-      _snackTimer?.cancel();
-      final endTime = DateTime.now().add(undoDuration);
-      final controller = messenger.showSnackBar(
-        SnackBar(
-          duration: const Duration(days: 1),
-          content: _UndoSnackContent(endTime: endTime, duration: undoDuration),
-          action: SnackBarAction(
-            label: 'Отменить',
-            onPressed: () async {
-              _snackTimer?.cancel();
-              messenger.hideCurrentSnackBar();
-              // 4) Восстанавливаем контакт + все его заметки (контакт получит НОВЫЙ id)
-              final newId = await db.restoreContactWithNotes(c.copyWith(id: null), notesSnapshot);
-              // 5) Прокрутить/подсветить восстановленного
-              _restoreLocally(c.copyWith(id: newId), highlight: true);
-            },
-          ),
-        ),
+      // 3) Баннера с возможностью отмены
+      _undoBanner?.dismiss();
+      _undoBanner = showUndoBanner(
+        message: 'Контакт удалён',
+        duration: undoDuration,
+        icon: Icons.delete_outline,
+        onUndo: () async {
+          _undoBanner = null;
+          final newId =
+              await db.restoreContactWithNotes(c.copyWith(id: null), notesSnapshot);
+          _restoreLocally(c.copyWith(id: newId), highlight: true);
+        },
       );
-      _snackTimer = Timer(endTime.difference(DateTime.now()), () => controller.close());
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Ошибка удаления: $e')),
-        );
+        showErrorBanner('Ошибка удаления: $e');
         // Восстанавливаем локально, если удаление не прошло
         _restoreLocally(c);
       }
@@ -639,10 +626,7 @@ class _ContactListScreenState extends State<ContactListScreen> {
           if (saved == true) {
             await _loadContacts(reset: true);
             if (mounted) {
-              // Обычный (не плавающий) Snackbar
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Контакт сохранён')),
-              );
+              showSuccessBanner('Контакт сохранён');
             }
           }
         },
@@ -1031,90 +1015,6 @@ class PositionedFill extends StatelessWidget {
           ),
         ),
       ),
-    );
-  }
-}
-
-/// Контент SnackBar с обратным отсчётом и прогресс-баром.
-class _UndoSnackContent extends StatefulWidget {
-  final DateTime endTime;
-  final Duration duration;
-  const _UndoSnackContent({required this.endTime, required this.duration});
-
-  @override
-  State<_UndoSnackContent> createState() => _UndoSnackContentState();
-}
-
-class _UndoSnackContentState extends State<_UndoSnackContent> with SingleTickerProviderStateMixin {
-  late AnimationController _ctrl;
-
-  double _fractionRemaining(DateTime now) {
-    final total = widget.duration.inMilliseconds;
-    final left = widget.endTime.difference(now).inMilliseconds;
-    if (total <= 0) return 0;
-    return left <= 0 ? 0 : (left / total).clamp(0.0, 1.0);
-  }
-
-  void _syncAndRun() {
-    final now = DateTime.now();
-    final frac = _fractionRemaining(now); // 0..1
-    final msLeft = (widget.duration.inMilliseconds * frac).round();
-    _ctrl.stop();
-    _ctrl.value = frac; // мгновенно, без «вспышки»
-    if (msLeft > 0) {
-      _ctrl.animateTo(
-        0.0,
-        duration: Duration(milliseconds: msLeft),
-        curve: Curves.linear,
-      );
-    }
-  }
-
-  @override
-  void initState() {
-    super.initState();
-    _ctrl = AnimationController(
-      vsync: this,
-      value: 1.0,
-      lowerBound: 0.0,
-      upperBound: 1.0,
-    )..addListener(() {
-      if (mounted) setState(() {});
-    });
-    _syncAndRun();
-  }
-
-  @override
-  void didUpdateWidget(covariant _UndoSnackContent oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.endTime != widget.endTime || oldWidget.duration != widget.duration) {
-      _syncAndRun();
-    }
-  }
-
-  @override
-  void dispose() {
-    _ctrl.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final value = _ctrl.value; // 1.0 -> 0.0
-    final secondsLeft = (value * widget.duration.inSeconds).ceil().clamp(0, 999);
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            const Expanded(child: Text('Контакт удалён')),
-            Text('$secondsLeft c'),
-          ],
-        ),
-        const SizedBox(height: 4),
-        LinearProgressIndicator(value: value),
-      ],
     );
   }
 }
