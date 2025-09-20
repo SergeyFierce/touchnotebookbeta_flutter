@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
+import '../strings.dart';
 
 import 'add_contact_screen.dart';
 import 'settings_screen.dart';
@@ -15,162 +16,184 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
 
+  Future<List<int>> _loadCounts() async {
+    final categories = _categories();
+    return Future.wait<int>(
+      categories.map(
+        (c) => ContactDatabase.instance.countByCategory(c.value),
+      ),
+    );
+  }
+
+  Future<void> _refresh() async {
+    setState(() {});
+  }
+
   Future<void> _openSupport(BuildContext context) async {
     const group = 'touchnotebook';
     final tgUri = Uri.parse('tg://resolve?domain=$group');
     final webUri = Uri.parse('https://t.me/$group');
-    if (await canLaunchUrl(tgUri)) {
-      await launchUrl(tgUri, mode: LaunchMode.externalApplication);
-    } else {
+    try {
+      if (await canLaunchUrl(tgUri)) {
+        await launchUrl(tgUri, mode: LaunchMode.externalApplication);
+      } else {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text(Strings.telegramNotInstalled)),
+        );
+        await launchUrl(webUri, mode: LaunchMode.externalApplication);
+      }
+    } catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Telegram не установлен, открываем в браузере')),
+        SnackBar(content: Text(Strings.cannotOpenLink(e.toString()))),
       );
-      await launchUrl(webUri, mode: LaunchMode.externalApplication);
     }
-  }
-
-  String _plural(int count, List<String> forms) {
-    final mod10 = count % 10;
-    final mod100 = count % 100;
-    if (mod10 == 1 && mod100 != 11) return forms[0];
-    if (mod10 >= 2 && mod10 <= 4 && (mod100 < 10 || mod100 >= 20)) {
-      return forms[1];
-    }
-    return forms[2];
   }
 
   @override
   Widget build(BuildContext context) {
-    final categories = const [
-      _Category(
-        icon: Icons.handshake,
-        title: 'Партнёры',
-        value: 'Партнёр',
-        forms: ['партнёр', 'партнёра', 'партнёров'],
-      ),
-      _Category(
-        icon: Icons.people,
-        title: 'Клиенты',
-        value: 'Клиент',
-        forms: ['клиент', 'клиента', 'клиентов'],
-      ),
-      _Category(
-        icon: Icons.person_add_alt_1,
-        title: 'Потенциальные',
-        value: 'Потенциальный',
-        forms: ['потенциальный', 'потенциальных', 'потенциальных'],
-      ),
-    ];
+    final colorScheme = Theme.of(context).colorScheme;
+    final categories = _categories();
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Touch NoteBook'),
+        title: const Text(Strings.appTitle),
       ),
       drawer: Drawer(
-        child: ListView(
-          padding: EdgeInsets.zero,
-          children: [
-            DrawerHeader(
-              decoration: BoxDecoration(color: Theme.of(context).colorScheme.primary),
-              child: Row(
-                children: [
-                  CircleAvatar(
-                    radius: 36,
-                    backgroundColor: Theme.of(context).colorScheme.onPrimary,
-                    child: Icon(
-                      Icons.menu_book,
-                      size: 36,
-                      color: Theme.of(context).colorScheme.primary,
+        child: SafeArea(
+          child: ListView(
+            padding: EdgeInsets.zero,
+            children: [
+              DrawerHeader(
+                decoration: BoxDecoration(color: colorScheme.primary),
+                child: Row(
+                  children: [
+                    CircleAvatar(
+                      radius: 36,
+                      backgroundColor: colorScheme.onPrimary,
+                      child: Icon(
+                        Icons.menu_book,
+                        size: 36,
+                        color: colorScheme.primary,
+                      ),
                     ),
-                  ),
-                  const SizedBox(width: 16),
-                  const Text(
-                    'Touch NoteBook',
-                    style: TextStyle(fontSize: 20, color: Colors.white),
-                  ),
-                ],
+                    const SizedBox(width: 16),
+                    Text(
+                      Strings.appTitle,
+                      style: const TextStyle(fontSize: 20, color: Colors.white),
+                    ),
+                  ],
+                ),
               ),
-            ),
-            ListTile(
-              leading: const Icon(Icons.home),
-              title: const Text('Главный экран'),
-              onTap: () => Navigator.pop(context),
-            ),
-            ListTile(
-              leading: const Icon(Icons.settings),
-              title: const Text('Настройки'),
-              onTap: () {
-                Navigator.pop(context);
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => const SettingsScreen(),
-                  ),
-                );
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.support_agent),
-              title: const Text('Поддержка'),
-              onTap: () {
-                Navigator.pop(context);
-                _openSupport(context);
-              },
-            ),
-          ],
-        ),
-      ),
-      body: ValueListenableBuilder<int>(
-        valueListenable: ContactDatabase.instance.revision,
-        builder: (context, _rev, _) {
-          return ListView.separated(
-            padding: const EdgeInsets.all(16),
-            itemBuilder: (context, index) {
-              final cat = categories[index];
-              return FutureBuilder<int>(
-                future: ContactDatabase.instance.countByCategory(cat.value),
-                builder: (context, snapshot) {
-                  final count = snapshot.data ?? 0;
-                  return _CategoryCard(
-                    category: cat,
-                    subtitle: '$count ${_plural(count, cat.forms)}',
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => ContactListScreen(
-                            category: cat.value,
-                            title: cat.title,
-                          ),
-                        ),
-                      ).then((_) => setState(() {}));
-                    },
+              ListTile(
+                leading: const Icon(Icons.home),
+                title: const Text(Strings.drawerMain),
+                onTap: () => Navigator.pop(context),
+              ),
+              ListTile(
+                leading: const Icon(Icons.settings),
+                title: const Text(Strings.drawerSettings),
+                onTap: () {
+                  Navigator.pop(context);
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (context) => const SettingsScreen()),
                   );
                 },
-              );
-            },
-            separatorBuilder: (_, __) => const SizedBox(height: 12),
-            itemCount: categories.length,
-          );
-        },
+              ),
+              ListTile(
+                leading: const Icon(Icons.support_agent),
+                title: const Text(Strings.drawerSupport),
+                onTap: () {
+                  Navigator.pop(context);
+                  _openSupport(context);
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+      body: SafeArea(
+        child: ValueListenableBuilder<int>(
+          valueListenable: ContactDatabase.instance.revision,
+          builder: (context, _rev, _) {
+            return RefreshIndicator(
+              onRefresh: _refresh,
+              child: FutureBuilder<List<int>>(
+                key: ValueKey(_rev),
+                future: _loadCounts(),
+                builder: (context, snapshot) {
+                  if (snapshot.hasError) {
+                    debugPrint('Error loading contact counts: ${snapshot.error}\n${snapshot.stackTrace}');
+                    WidgetsBinding.instance.addPostFrameCallback((_) {
+                      if (!mounted) return;
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text(Strings.dataLoadFailed)),
+                      );
+                    });
+                    return const Center(child: Text(Strings.dataLoadError));
+                  }
+
+                        const SnackBar(content: Text(Strings.dataLoadFailed)),
+                      );
+                    });
+                    return const Center(child: Text(Strings.dataLoadError));
+                  }
+                  final isLoading = snapshot.connectionState == ConnectionState.waiting;
+                  final counts = snapshot.data ?? const [0, 0, 0];
+
+                  return Scrollbar(
+                    child: ListView.separated(
+                      padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      itemCount: categories.length,
+                      separatorBuilder: (_, __) => const SizedBox(height: 12),
+                      itemBuilder: (context, index) {
+                        final cat = categories[index];
+                        final count = isLoading ? null : counts[index];
+                        final subtitle =
+                            count == null ? Strings.ellipsis : cat.plural(count);
+
+                        return _CategoryCard(
+                          category: cat,
+                          subtitle: subtitle,
+                          onTap: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => ContactListScreen(
+                                  category: cat.value,
+                                  title: cat.title,
+                                ),
+                              ),
+                            );
+                          },
+                        );
+                      },
+                    ),
+                  );
+                },
+              ),
+            );
+          },
+        ),
       ),
       floatingActionButton: FloatingActionButton.extended(
+        tooltip: Strings.addContact,
         onPressed: () async {
           final saved = await Navigator.push(
             context,
-            MaterialPageRoute(
-              builder: (context) => const AddContactScreen(),
-            ),
+            MaterialPageRoute(builder: (context) => const AddContactScreen()),
           );
           if (saved == true && mounted) {
-            setState(() {});
             ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Контакт сохранён')),
+              const SnackBar(content: Text(Strings.contactSaved)),
             );
           }
         },
+        label: const Text(Strings.addContact),
         icon: const Icon(Icons.add),
-        label: const Text('Добавить контакт'),
       ),
     );
   }
@@ -178,17 +201,38 @@ class _HomeScreenState extends State<HomeScreen> {
 
 class _Category {
   final IconData icon;
-  final String title; // plural title
-  final String value; // singular value for DB
-  final List<String> forms;
+  final String title;
+  final String value;
+  final String Function(int) plural;
 
   const _Category({
     required this.icon,
     required this.title,
     required this.value,
-    required this.forms,
+    required this.plural,
   });
 }
+
+List<_Category> _categories() => [
+      _Category(
+        icon: Icons.handshake,
+        title: Strings.partnersTitle,
+        value: 'Партнёр',
+        plural: Strings.partnersCount,
+      ),
+      _Category(
+        icon: Icons.people,
+        title: Strings.clientsTitle,
+        value: 'Клиент',
+        plural: Strings.clientsCount,
+      ),
+      _Category(
+        icon: Icons.person_add_alt_1,
+        title: Strings.potentialTitle,
+        value: 'Потенциальный',
+        plural: Strings.potentialCount,
+      ),
+    ];
 
 class _CategoryCard extends StatefulWidget {
   final _Category category;
@@ -216,42 +260,63 @@ class _CategoryCardState extends State<_CategoryCard> {
 
   @override
   Widget build(BuildContext context) {
-    final borderRadius = BorderRadius.circular(12);
-    return AnimatedScale(
-      scale: _pressed ? 0.98 : 1.0,
-      duration: const Duration(milliseconds: 100),
-      child: Material(
-        color: Theme.of(context).colorScheme.surfaceVariant,
-        borderRadius: borderRadius,
-        elevation: 2,
-        child: InkWell(
+    final borderRadius = BorderRadius.circular(16);
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return Semantics(
+      button: true,
+      label: widget.category.title,
+      child: AnimatedScale(
+        scale: _pressed ? 0.985 : 1.0,
+        duration: const Duration(milliseconds: 90),
+        child: Material(
+          color: colorScheme.surfaceVariant,
+          elevation: 1.5,
           borderRadius: borderRadius,
-          onTap: widget.onTap,
-          onTapDown: (_) => _setPressed(true),
-          onTapCancel: () => _setPressed(false),
-          onTapUp: (_) => _setPressed(false),
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Row(
-              children: [
-                Icon(widget.category.icon, size: 32),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        widget.category.title,
-                        style: Theme.of(context).textTheme.titleMedium,
-                      ),
-                      const SizedBox(height: 4),
-                      Text(widget.subtitle,
-                          style: Theme.of(context).textTheme.bodyMedium),
-                    ],
+          clipBehavior: Clip.antiAlias,
+          child: InkWell(
+            borderRadius: borderRadius,
+            onTap: widget.onTap,
+            onTapDown: (_) => _setPressed(true),
+            onTapCancel: () => _setPressed(false),
+            onTapUp: (_) => _setPressed(false),
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                children: [
+                  Hero(
+                    tag: 'cat:${widget.category.value}',
+                    flightShuttleBuilder: (_, __, ___, ____, _____) => Icon(
+                      widget.category.icon, size: 32, color: colorScheme.primary,
+                    ),
+                    child: Icon(widget.category.icon, size: 32, color: colorScheme.primary),
                   ),
-                ),
-                const Icon(Icons.chevron_right),
-              ],
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          widget.category.title,
+                          style: Theme.of(context).textTheme.titleMedium,
+                        ),
+                        const SizedBox(height: 4),
+                        AnimatedSwitcher(
+                          duration: const Duration(milliseconds: 200),
+                          transitionBuilder: (child, anim) =>
+                              FadeTransition(opacity: anim, child: child),
+                          child: Text(
+                            widget.subtitle,
+                            key: ValueKey(widget.subtitle),
+                            style: Theme.of(context).textTheme.bodyMedium,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const Icon(Icons.chevron_right),
+                ],
+              ),
             ),
           ),
         ),

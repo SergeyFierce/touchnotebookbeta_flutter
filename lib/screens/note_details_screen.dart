@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import '../app.dart'; // для App.navigatorKey
 import '../models/note.dart';
 import '../services/contact_database.dart';
+import '../strings.dart';
 
 class NoteDetailsScreen extends StatefulWidget {
   final Note note;
@@ -125,7 +126,7 @@ class _NoteDetailsScreenState extends State<NoteDetailsScreen>
       initialDate: _date,
       firstDate: DateTime(2000),
       lastDate: now,
-      locale: const Locale('ru'),
+      locale: Localizations.localeOf(context),
     );
     if (picked != null) {
       setState(() {
@@ -152,7 +153,7 @@ class _NoteDetailsScreenState extends State<NoteDetailsScreen>
     final rootCtx = App.navigatorKey.currentContext;
     if (rootCtx != null) {
       ScaffoldMessenger.of(rootCtx).showSnackBar(
-        const SnackBar(content: Text('Заметка сохранена')),
+        const SnackBar(content: Text(Strings.noteSaved)),
       );
     }
 
@@ -165,11 +166,14 @@ class _NoteDetailsScreenState extends State<NoteDetailsScreen>
     final ok = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Удалить заметку?'),
-        content: const Text('Это действие нельзя отменить.'),
+        title: const Text(Strings.deleteNoteQuestion),
+        content: const Text(Strings.deleteNoteWarning),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Отмена')),
-          TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('Удалить', style: TextStyle(color: Colors.red))),
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text(Strings.cancel)),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text(Strings.delete, style: TextStyle(color: Colors.red)),
+          ),
         ],
       ),
     );
@@ -190,7 +194,7 @@ class _NoteDetailsScreenState extends State<NoteDetailsScreen>
         duration: const Duration(days: 1),
         content: _UndoSnackContentLocal(endTime: endTime, duration: duration),
         action: SnackBarAction(
-          label: 'Отменить',
+          label: Strings.undo,
           onPressed: () async {
             _snackTimer?.cancel();
             messenger.hideCurrentSnackBar();
@@ -227,15 +231,15 @@ class _NoteDetailsScreenState extends State<NoteDetailsScreen>
     return Scaffold(
       appBar: AppBar(
         leading: IconButton(
-          tooltip: 'Закрыть',
+          tooltip: Strings.close,
           icon: const Icon(Icons.close),
           onPressed: () => Navigator.pop(context),
         ),
-        title: const Text('Заметка'),
+        title: const Text(Strings.note),
         actions: [
           if (_isEditing)
             IconButton(
-              tooltip: 'Сохранить',
+              tooltip: Strings.save,
               icon: const Icon(Icons.check),
               onPressed: _canSave ? _save : null,
             ),
@@ -254,7 +258,7 @@ class _NoteDetailsScreenState extends State<NoteDetailsScreen>
                 physics: const BouncingScrollPhysics(),
                 children: [
                   _sectionCard(
-                    title: 'Текст',
+                    title: Strings.text,
                     children: [
                       TextFormField(
                         controller: _textController,
@@ -262,23 +266,23 @@ class _NoteDetailsScreenState extends State<NoteDetailsScreen>
                         maxLines: null,
                         textInputAction: TextInputAction.newline,
                         decoration: _outlinedDec(
-                          label: 'Текст заметки*',
-                          hint: 'Введите текст',
+                          label: Strings.noteTextLabel,
+                          hint: Strings.enterText,
                           prefixIcon: Icons.notes_outlined,
                         ),
-                        validator: (v) => (v == null || v.trim().isEmpty) ? 'Введите текст' : null,
+                        validator: (v) => (v == null || v.trim().isEmpty) ? Strings.enterText : null,
                         onChanged: (_) => setState(() => _isEditing = _isDirty),
                       ),
                     ],
                   ),
                   _sectionCard(
-                    title: 'Дата',
+                    title: Strings.date,
                     children: [
                       _borderedTile(
                         child: ListTile(
                           contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                           leading: const Icon(Icons.event_outlined),
-                          title: const Text('Дата добавления'),
+                          title: const Text(Strings.dateAdded),
                           subtitle: Text(dateStr),
                           trailing: const Icon(Icons.arrow_drop_down),
                           onTap: _pickDate,
@@ -301,7 +305,7 @@ class _NoteDetailsScreenState extends State<NoteDetailsScreen>
             foregroundColor: Colors.white,
           ),
           onPressed: _delete,
-          child: const Text('Удалить заметку'),
+          child: const Text(Strings.deleteNote),
         ),
       ),
 
@@ -378,7 +382,10 @@ class _UndoSnackContentLocalState extends State<_UndoSnackContentLocal>
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(children: [const Expanded(child: Text('Заметка удалена')), Text('$secondsLeft c')]),
+        Row(children: [
+          const Expanded(child: Text(Strings.noteDeleted)),
+          Text('$secondsLeft ${Strings.secondsShort}')
+        ]),
         const SizedBox(height: 4),
         LinearProgressIndicator(value: value),
       ],

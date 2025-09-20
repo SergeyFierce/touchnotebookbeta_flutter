@@ -7,7 +7,8 @@ import '../models/note.dart';
 
 class ContactDatabase {
   ContactDatabase._();
-  static final ContactDatabase instance = ContactDatabase._();
+  // Made non-final to allow tests to replace with a mock implementation
+  static ContactDatabase instance = ContactDatabase._();
   Database? _db;
 
   // Ревизия для подписки экранов на изменения
@@ -107,6 +108,16 @@ class ContactDatabase {
     // Каждое открытие соединения — ещё раз страхуемся, что FK включены
     await _db!.execute('PRAGMA foreign_keys = ON');
     return _db!;
+  }
+
+  /// Закрывает подключение к базе. При следующем обращении [database]
+  /// соединение будет открыто заново. Полезно вызывать при завершении
+  /// приложения, чтобы избежать утечек ресурсов в продакшене.
+  Future<void> close() async {
+    if (_db != null) {
+      await _db!.close();
+      _db = null;
+    }
   }
 
   // ---- Вспомогательное: карта для insert без id ----
@@ -253,13 +264,24 @@ class ContactDatabase {
 
   /// Удаляет контакт (каскадно удаляются заметки) и возвращает снапшот заметок.
   /// В UI можно сохранить возвращённый список для последующего Undo.
+  ///
+  /// Операция обёрнута в транзакцию, чтобы снимок и удаление были атомарными.
   Future<List<Note>> deleteContactWithSnapshot(int contactId) async {
     final db = await database;
-    // Снимок заметок до удаления
-    final snapshot = await notesByContact(contactId);
+    final snapshot = <Note>[];
 
-    // Удаляем контакт — FK прибьёт notes
-    await db.delete('contacts', where: 'id = ?', whereArgs: [contactId]);
+    await db.transaction((txn) async {
+      final maps = await txn.query(
+        'notes',
+        where: 'contactId = ?',
+        whereArgs: [contactId],
+        orderBy: 'createdAt DESC',
+      );
+      snapshot.addAll(maps.map(Note.fromMap));
+
+      // Удаляем контакт — FK каскадно удалит связанные заметки
+      await txn.delete('contacts', where: 'id = ?', whereArgs: [contactId]);
+    });
 
     _bumpRevision();
     return snapshot;

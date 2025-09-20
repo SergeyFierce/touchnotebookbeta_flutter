@@ -351,9 +351,9 @@ class _NotesListScreenState extends State<NotesListScreen> {
         ],
       ),
       body: content,
-      floatingActionButton: FloatingActionButton(
+      floatingActionButton: FloatingActionButton.extended(
         onPressed: _addNote,
-        child: const Icon(Icons.add),
+        label: const Text('Добавить заметку'),
       ),
     );
   }
