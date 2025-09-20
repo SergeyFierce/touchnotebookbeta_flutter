@@ -139,9 +139,9 @@ class _ContactListScreenState extends State<ContactListScreen> {
       }
       _cleanupKeys();
     });
-    if (restored.id != null) {
-      // Автоскролл к восстановленной записи + подсветка (если требуется)
-      unawaited(_revealContact(restored.id!, highlight: highlight));
+    // подчёркивание — без автоскролла
+    if (highlight && restored.id != null) {
+      _flashHighlight(restored.id!);
     }
   }
 
@@ -156,7 +156,6 @@ class _ContactListScreenState extends State<ContactListScreen> {
   int _page = 0;
   bool _isLoading = false;
   bool _hasMore = true;
-  bool _initialScrollHandled = false;
 
   @override
   void initState() {
@@ -208,47 +207,17 @@ class _ContactListScreenState extends State<ContactListScreen> {
     _itemKeys.removeWhere((k, v) => !ids.contains(k));
   }
 
-  Future<bool> _maybeScrollTo(int id) async {
-    const attempts = 8;
+  Future<void> _maybeScrollTo(int id) async {
     await Future.delayed(Duration.zero); // дождаться построения
-    for (var attempt = 0; attempt < attempts && mounted; attempt++) {
-      final key = _itemKeys[id];
-      final ctx = key?.currentContext;
-      if (ctx != null) {
-        await Scrollable.ensureVisible(
-          ctx,
-          alignment: 0.1,
-          duration: const Duration(milliseconds: 400),
-          curve: Curves.easeOut,
-        );
-        return true;
-      }
-      await Future.delayed(const Duration(milliseconds: 60));
-    }
-    return false;
-  }
-
-  Future<void> _revealContact(int id, {bool highlight = false}) async {
-    var wasScrolled = await _maybeScrollTo(id);
-    if (!wasScrolled && mounted) {
-      // Дадим интерфейсу ещё один кадр — вдруг карточка дорисуется чуть позже
-      await Future.delayed(const Duration(milliseconds: 120));
-      if (mounted) {
-        final scrolledLater = await _maybeScrollTo(id);
-        wasScrolled = wasScrolled || scrolledLater;
-      }
-    }
-    if (highlight && mounted) {
-      // Даже если не удалось проскроллить (например, контакт скрыт фильтром),
-      // подсветим карточку, чтобы пользователь заметил восстановление.
-      _flashHighlight(id);
-      if (!wasScrolled && mounted) {
-        // Вторая вспышка через кадр: если карточка появится позже, эффект не потеряется
-        await Future.delayed(const Duration(milliseconds: 120));
-        if (mounted) {
-          _flashHighlight(id);
-        }
-      }
+    final key = _itemKeys[id];
+    final ctx = key?.currentContext;
+    if (ctx != null) {
+      await Scrollable.ensureVisible(
+        ctx,
+        alignment: 0.1,
+        duration: const Duration(milliseconds: 400),
+        curve: Curves.easeOut,
+      );
     }
   }
 
@@ -291,7 +260,6 @@ class _ContactListScreenState extends State<ContactListScreen> {
         offset: _page * _pageSize,
       );
       if (!mounted) return;
-      var shouldRevealInitial = false;
       setState(() {
         // защита от дублей при наложении страниц
         final existing = _all.map((e) => e.id).toSet();
@@ -300,14 +268,11 @@ class _ContactListScreenState extends State<ContactListScreen> {
         _page++;
         _hasMore = contacts.length >= _pageSize;
         _cleanupKeys();
-        if (!_initialScrollHandled && widget.scrollToId != null &&
-            _all.any((e) => e.id == widget.scrollToId)) {
-          _initialScrollHandled = true;
-          shouldRevealInitial = true;
-        }
       });
-      if (shouldRevealInitial && widget.scrollToId != null) {
-        await _revealContact(widget.scrollToId!, highlight: true);
+      if (widget.scrollToId != null && _all.any((e) => e.id == widget.scrollToId)) {
+        final id = widget.scrollToId!;
+        await _maybeScrollTo(id);
+        _flashHighlight(id);
       }
     } catch (e) {
       if (mounted) {
