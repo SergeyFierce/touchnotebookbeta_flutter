@@ -62,5 +62,9 @@
   "dateAdded": "Date added",
   "deleteNote": "Delete note",
   "noteDeleted": "Note deleted",
-  "secondsShort": "s"
+  "secondsShort": "s",
+  "settingsTitle": "Settings",
+  "settingsLanguage": "Language",
+  "languageRussian": "Russian",
+  "languageEnglish": "English"
 }

@@ -62,5 +62,9 @@
   "dateAdded": "Дата добавления",
   "deleteNote": "Удалить заметку",
   "noteDeleted": "Заметка удалена",
-  "secondsShort": "с"
+  "secondsShort": "с",
+  "settingsTitle": "Настройки",
+  "settingsLanguage": "Язык",
+  "languageRussian": "Русский",
+  "languageEnglish": "Английский"
 }
