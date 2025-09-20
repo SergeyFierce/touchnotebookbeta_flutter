@@ -7,7 +7,7 @@ import '../services/contact_database.dart';
 import 'add_contact_screen.dart';
 import 'contact_details_screen.dart';
 import 'package:characters/characters.dart';
-import '../l10n/app_localizations.dart';
+import '../strings.dart';
 
 class ContactListScreen extends StatefulWidget {
   final String category; // singular value for DB
@@ -22,16 +22,13 @@ class ContactListScreen extends StatefulWidget {
   });
 
   static String _titleForCategory(String cat) {
-    final ctx = App.navigatorKey.currentContext;
-    if (ctx == null) return cat;
-    final l10n = AppLocalizations.of(ctx)!;
     switch (cat) {
       case 'Партнёр':
-        return l10n.partnersTitle;
+        return Strings.partnersTitle;
       case 'Клиент':
-        return l10n.clientsTitle;
+        return Strings.clientsTitle;
       case 'Потенциальный':
-        return l10n.potentialTitle;
+        return Strings.potentialTitle;
       default:
         return cat;
     }

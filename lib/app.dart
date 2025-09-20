@@ -1,10 +1,8 @@
 // lib/app.dart
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
-import 'package:provider/provider.dart';
-import 'l10n/app_localizations.dart';
 import 'screens/home_screen.dart';
-import 'services/locale_notifier.dart';
+import 'strings.dart';
 
 class App extends StatelessWidget {
   const App({super.key});
@@ -15,9 +13,8 @@ class App extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final locale = context.watch<LocaleNotifier>().locale;
     return MaterialApp(
-      onGenerateTitle: (context) => AppLocalizations.of(context)!.appTitle,
+      title: Strings.appTitle,
       debugShowCheckedModeBanner: false, // 🔔 убирает "DEBUG" в углу
       navigatorKey: navigatorKey, // <-- ВАЖНО: подключили ключ
       theme: ThemeData(
@@ -40,13 +37,12 @@ class App extends StatelessWidget {
       ),
       themeMode: ThemeMode.system,
       localizationsDelegates: const [
-        AppLocalizations.delegate,
         GlobalMaterialLocalizations.delegate,
         GlobalWidgetsLocalizations.delegate,
         GlobalCupertinoLocalizations.delegate,
       ],
-      supportedLocales: AppLocalizations.supportedLocales,
-      locale: locale,
+      supportedLocales: const [Locale('ru')],
+      locale: const Locale('ru'),
       home: const HomeScreen(),
     );
   }
