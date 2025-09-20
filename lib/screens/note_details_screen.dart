@@ -36,6 +36,7 @@ class _NoteDetailsScreenState extends State<NoteDetailsScreen>
   @override
   void dispose() {
     _textController.dispose();
+    _undoBanner = null;
     _undoBanner?.dismiss();
     super.dispose();
   }

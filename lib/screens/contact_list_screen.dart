@@ -182,6 +182,7 @@ class _ContactListScreenState extends State<ContactListScreen> {
   @override
   void dispose() {
     _debounce?.cancel();
+    _undoBanner = null;
     _undoBanner?.dismiss();
     _highlightTimer?.cancel();
     _searchController.dispose();
