@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -28,13 +30,22 @@ abstract class R {
   static const loading = 'Загрузка…';
   static const unknown = 'Неизвестно';
   static const qtyLabel = 'Количество';
+  static const summaryTitle = 'Сводка по контактам';
+  static const summaryKnownLabel = 'Всего известных контактов';
+  static const summaryAllKnown = 'Все категории синхронизированы';
+  static const quickActions = 'Быстрые действия';
+
+  static String summaryUnknown(int count) {
+    if (count <= 0) return summaryAllKnown;
+    final noun = (count == 1) ? 'категории' : 'категориям';
+    return 'По $count\u00A0$noun пока нет данных';
+  }
 }
 
 /// ---------------------
 /// Константы оформления
 /// ---------------------
 const kPad16 = EdgeInsets.all(16);
-const kPadList = EdgeInsets.fromLTRB(16, 16, 16, 120);
 const kGap6 = SizedBox(height: 6);
 const kGap8 = SizedBox(height: 8);
 const kGap12 = SizedBox(height: 12);
@@ -42,6 +53,16 @@ const kGap16w = SizedBox(width: 16);
 const kDurTap = Duration(milliseconds: 90);
 const kDurFast = Duration(milliseconds: 200);
 const kBr16 = BorderRadius.all(Radius.circular(16));
+
+EdgeInsets _listPadding(BuildContext context) {
+  final mediaQuery = MediaQuery.of(context);
+  const fabEstimatedHeight = 56.0; // оценка высоты FAB.extended
+  final bottom = 16 +
+      mediaQuery.viewPadding.bottom +
+      kFloatingActionButtonMargin +
+      fabEstimatedHeight;
+  return EdgeInsets.fromLTRB(16, 16, 16, bottom);
+}
 
 /// ---------------------
 /// Типобезопасные категории
@@ -107,6 +128,16 @@ class Counts {
   int of(ContactCategory c) => _m[c] ?? 0;
 
   bool get allZero => ContactCategory.values.every((c) => of(c) == 0);
+
+  int get knownTotal {
+    return ContactCategory.values.fold<int>(0, (sum, c) {
+      final value = of(c);
+      return value >= 0 ? sum + value : sum;
+    });
+  }
+
+  int get unknownCount =>
+      ContactCategory.values.where((c) => of(c) < 0).length;
 }
 
 /// ---------------------
@@ -203,12 +234,46 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  Future<void> _openAddContact(BuildContext context) async {
+    if (!kIsWeb) HapticFeedback.selectionClick();
+    final saved = await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const AddContactScreen()),
+    );
+    if (saved == true && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text(R.contactSaved)),
+      );
+    }
+  }
+
   /// Определяем количество колонок для адаптива
   int _calcColumns(BoxConstraints c) {
     final w = c.maxWidth;
     if (w >= 1200) return 3;
     if (w >= 800) return 2;
     return 1;
+  }
+
+  double _gridChildAspectRatio(
+    BoxConstraints constraints,
+    int cols,
+    EdgeInsets listPadding,
+  ) {
+    final horizontalPadding = listPadding.left + listPadding.right;
+    const spacing = 12.0;
+    final totalSpacing = horizontalPadding + spacing * (cols - 1);
+    final availableWidth = constraints.maxWidth - totalSpacing;
+    final cellWidth = availableWidth <= 0 ? 1.0 : availableWidth / cols;
+    final viewportHeight = constraints.maxHeight;
+    final baseHeight = cellWidth / 1.9; // предпочитаем умеренно широкие карточки
+    const minHeight = 140.0;
+    final fallbackMaxHeight = cellWidth * 1.1;
+    final maxHeight = viewportHeight.isFinite
+        ? math.max(minHeight, viewportHeight * 0.6)
+        : fallbackMaxHeight;
+    final cellHeight = baseHeight.clamp(minHeight, maxHeight).toDouble();
+    return cellWidth / cellHeight;
   }
 
   @override
@@ -261,7 +326,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 _showLoadErrorOnce(context);
                 return ListView(
                   physics: const AlwaysScrollableScrollPhysics(),
-                  padding: kPadList,
+                  padding: _listPadding(context),
                   children: const [
                     _ErrorCard(),
                     kGap12,
@@ -284,7 +349,7 @@ class _HomeScreenState extends State<HomeScreen> {
               if (!isLoading && counts.allZero) {
                 return ListView(
                   physics: const AlwaysScrollableScrollPhysics(),
-                  padding: kPadList,
+                  padding: _listPadding(context),
                   children: [
                     Card(
                       child: Padding(
@@ -296,17 +361,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             const Text(R.noContacts),
                             kGap8,
                             FilledButton.icon(
-                              onPressed: () async {
-                                final saved = await Navigator.push(
-                                  context,
-                                  MaterialPageRoute(builder: (_) => const AddContactScreen()),
-                                );
-                                if (saved == true && mounted) {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(content: Text(R.contactSaved)),
-                                  );
-                                }
-                              },
+                              onPressed: () => _openAddContact(context),
                               icon: const Icon(Icons.person_add),
                               label: const Text(R.addContact),
                             ),
@@ -340,6 +395,9 @@ class _HomeScreenState extends State<HomeScreen> {
               }
 
               // Основной список/сетка
+              final showSummary = !isLoading && !counts.allZero;
+              final listPadding = _listPadding(context);
+
               return LayoutBuilder(
                 builder: (context, constraints) {
                   final cols = _calcColumns(constraints);
@@ -370,31 +428,91 @@ class _HomeScreenState extends State<HomeScreen> {
                     }).toList();
                   }
 
+                  final items = buildItems(skeleton: isLoading);
+
                   if (cols == 1) {
                     return Scrollbar(
                       child: ListView.separated(
                         physics: const AlwaysScrollableScrollPhysics(),
-                        padding: kPadList,
-                        itemCount: ContactCategory.values.length,
+                        padding: listPadding,
+                        itemCount: items.length + (showSummary ? 1 : 0),
                         separatorBuilder: (_, __) => const SizedBox(height: 12),
-                        itemBuilder: (_, i) => buildItems(skeleton: isLoading)[i],
+                        itemBuilder: (_, i) {
+                          if (showSummary && i == 0) {
+                            return _SummaryCard(
+                              knownTotal: counts.knownTotal,
+                              unknownCount: counts.unknownCount,
+                              onAddContact: () => _openAddContact(context),
+                              onOpenSettings: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(builder: (_) => const SettingsScreen()),
+                                );
+                              },
+                              onOpenSupport: () => _openSupport(context),
+                            );
+                          }
+                          final index = showSummary ? i - 1 : i;
+                          return items[index];
+                        },
                       ),
                     );
                   }
 
                   // 2–3 колонки (планшет/desktop/web)
                   return Scrollbar(
-                    child: GridView.builder(
+                    child: CustomScrollView(
                       physics: const AlwaysScrollableScrollPhysics(),
-                      padding: kPadList,
-                      itemCount: ContactCategory.values.length,
-                      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                        crossAxisCount: cols,
-                        mainAxisSpacing: 12,
-                        crossAxisSpacing: 12,
-                        childAspectRatio: 16 / 5, // широкая карточка
-                      ),
-                      itemBuilder: (_, i) => buildItems(skeleton: isLoading)[i],
+                      slivers: [
+                        if (showSummary)
+                          SliverPadding(
+                            padding: EdgeInsets.fromLTRB(
+                              listPadding.left,
+                              listPadding.top,
+                              listPadding.right,
+                              12,
+                            ),
+                            sliver: SliverToBoxAdapter(
+                              child: _SummaryCard(
+                                knownTotal: counts.knownTotal,
+                                unknownCount: counts.unknownCount,
+                                onAddContact: () => _openAddContact(context),
+                                onOpenSettings: () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                        builder: (_) => const SettingsScreen()),
+                                  );
+                                },
+                                onOpenSupport: () => _openSupport(context),
+                              ),
+                            ),
+                          ),
+                        SliverPadding(
+                          padding: EdgeInsets.fromLTRB(
+                            listPadding.left,
+                            showSummary ? 0 : listPadding.top,
+                            listPadding.right,
+                            listPadding.bottom,
+                          ),
+                          sliver: SliverGrid(
+                            delegate: SliverChildBuilderDelegate(
+                              (_, i) => items[i],
+                              childCount: items.length,
+                            ),
+                            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                              crossAxisCount: cols,
+                              mainAxisSpacing: 12,
+                              crossAxisSpacing: 12,
+                              childAspectRatio: _gridChildAspectRatio(
+                                constraints,
+                                cols,
+                                listPadding,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   );
                 },
@@ -405,18 +523,7 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
       floatingActionButton: FloatingActionButton.extended(
         tooltip: R.addContact,
-        onPressed: () async {
-          if (!kIsWeb) HapticFeedback.selectionClick();
-          final saved = await Navigator.push(
-            context,
-            MaterialPageRoute(builder: (_) => const AddContactScreen()),
-          );
-          if (saved == true && mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text(R.contactSaved)),
-            );
-          }
-        },
+        onPressed: () => _openAddContact(context),
         label: const Text(R.addContact),
         icon: const Icon(Icons.person_add),
       ),
@@ -427,6 +534,103 @@ class _HomeScreenState extends State<HomeScreen> {
 /// ---------------------
 /// Виджеты
 /// ---------------------
+
+class _SummaryCard extends StatelessWidget {
+  final int knownTotal;
+  final int unknownCount;
+  final VoidCallback onAddContact;
+  final VoidCallback onOpenSettings;
+  final VoidCallback onOpenSupport;
+
+  const _SummaryCard({
+    required this.knownTotal,
+    required this.unknownCount,
+    required this.onAddContact,
+    required this.onOpenSettings,
+    required this.onOpenSupport,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final textTheme = theme.textTheme;
+    final colorScheme = theme.colorScheme;
+    final hasUnknown = unknownCount > 0;
+
+    return Card(
+      child: Padding(
+        padding: kPad16,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(R.summaryTitle, style: textTheme.titleMedium),
+            kGap8,
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        R.summaryKnownLabel,
+                        style: textTheme.labelMedium?.copyWith(
+                          color: colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        knownTotal.toString(),
+                        style: textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.w700),
+                      ),
+                    ],
+                  ),
+                ),
+                if (hasUnknown)
+                  Padding(
+                    padding: const EdgeInsets.only(left: 12, top: 4),
+                    child: Icon(Icons.info_outline, color: colorScheme.secondary),
+                  ),
+              ],
+            ),
+            kGap8,
+            Text(
+              hasUnknown ? R.summaryUnknown(unknownCount) : R.summaryAllKnown,
+              style: textTheme.bodyMedium?.copyWith(color: colorScheme.onSurfaceVariant),
+            ),
+            kGap12,
+            Text(
+              R.quickActions,
+              style: textTheme.labelMedium?.copyWith(color: colorScheme.onSurfaceVariant),
+            ),
+            kGap8,
+            Wrap(
+              spacing: 12,
+              runSpacing: 8,
+              children: [
+                FilledButton.icon(
+                  onPressed: onAddContact,
+                  icon: const Icon(Icons.person_add),
+                  label: const Text(R.addContact),
+                ),
+                OutlinedButton.icon(
+                  onPressed: onOpenSettings,
+                  icon: const Icon(Icons.settings),
+                  label: const Text(R.settings),
+                ),
+                OutlinedButton.icon(
+                  onPressed: onOpenSupport,
+                  icon: const Icon(Icons.support_agent),
+                  label: const Text(R.support),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
 
 class _ErrorCard extends StatefulWidget {
   const _ErrorCard({super.key});
@@ -529,32 +733,32 @@ class _CategoryCardState extends State<_CategoryCard> {
       );
     }
 
-    final Widget trailingContent = widget.trailingCount == null
-        ? const Icon(Icons.chevron_right)
-        : Row(
-      key: ValueKey(widget.trailingCount), // ключ для AnimatedSwitcher
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Tooltip(
-          message: '${R.qtyLabel}: ${widget.trailingCount}',
-          child: Semantics(
-            label: '${widget.category.titlePlural}: ${R.qtyLabel.toLowerCase()}',
-            value: widget.trailingCount,
-            child: Chip(
-              label: Text(
-                widget.trailingCount!,
-                style: const TextStyle(fontWeight: FontWeight.w600),
-              ),
-              backgroundColor: colorScheme.primaryContainer,
-              side: BorderSide(color: colorScheme.outlineVariant),
-              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-              visualDensity: VisualDensity.compact,
-            ),
-          ),
-        ),
-        const Icon(Icons.chevron_right),
-      ],
-    );
+      final Widget trailingContent = widget.trailingCount == null
+          ? const Icon(Icons.chevron_right)
+          : Row(
+              key: ValueKey(widget.trailingCount), // ключ для AnimatedSwitcher
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Tooltip(
+                  message: '${R.qtyLabel}: ${widget.trailingCount}',
+                  child: Semantics(
+                    label: '${widget.category.titlePlural}: ${R.qtyLabel.toLowerCase()}',
+                    value: widget.trailingCount,
+                    child: Chip(
+                      label: Text(
+                        widget.trailingCount!,
+                        style: const TextStyle(fontWeight: FontWeight.w600),
+                      ),
+                      backgroundColor: colorScheme.primaryContainer,
+                      side: BorderSide(color: colorScheme.outlineVariant),
+                      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      visualDensity: VisualDensity.compact,
+                    ),
+                  ),
+                ),
+                const Icon(Icons.chevron_right),
+              ],
+            );
 
     return Semantics(
       button: true,
