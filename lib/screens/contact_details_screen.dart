@@ -4,11 +4,13 @@ import 'package:intl/intl.dart';
 import 'package:mask_text_input_formatter/mask_text_input_formatter.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:characters/characters.dart';
+import 'package:overlay_support/overlay_support.dart';
 
-import '../app.dart'; // для App.navigatorKey (SnackBar после pop)
+import '../app.dart'; // для App.navigatorKey (глобальная навигация)
 import '../models/contact.dart';
 import '../models/note.dart';
 import '../services/contact_database.dart';
+import '../widgets/system_notifications.dart';
 import 'contact_list_screen.dart'; // переход к восстановленному контакту
 import 'notes_list_screen.dart';
 import 'add_note_screen.dart';
@@ -575,6 +577,7 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
     _focusCategory.dispose();
     _focusStatus.dispose();
     _focusAdded.dispose();
+    _undoBanner?.dismiss();
     super.dispose();
   }
 
@@ -595,8 +598,7 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
     if (note != null) {
       await _loadNotes();
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('Заметка добавлена')));
+      showSuccessBanner('Заметка добавлена');
     }
   }
 
@@ -610,23 +612,22 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
       final deleted = result['deleted'] as Note;
       await _loadNotes();
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text('Заметка удалена'),
-          action: SnackBarAction(
-            label: 'Undo',
-            onPressed: () async {
-              final id = await ContactDatabase.instance.insertNote(deleted.copyWith(id: null));
-              await _loadNotes();
-              if (!mounted) return;
-              final restored = deleted.copyWith(id: id);
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => NoteDetailsScreen(note: restored)),
-              );
-            },
-          ),
-        ),
+      showSystemNotification(
+        'Заметка удалена',
+        style: SystemNotificationStyle.warning,
+        iconOverride: Icons.delete_outline,
+        actionLabel: 'Undo',
+        onAction: () async {
+          final id = await ContactDatabase.instance
+              .insertNote(deleted.copyWith(id: null));
+          await _loadNotes();
+          if (!mounted) return;
+          final restored = deleted.copyWith(id: id);
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => NoteDetailsScreen(note: restored)),
+          );
+        },
       );
     }
   }
@@ -980,7 +981,7 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
   Future<void> _pickStatus() async {
     if ((_category ?? '').isEmpty) {
       await _ensureVisible(_categoryKey);
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Сначала выберите категорию')));
+      showInfoBanner('Сначала выберите категорию');
       return;
     }
 
@@ -1075,9 +1076,7 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
         await _ensureVisible(_statusKey);
       } else {
         await _ensureVisible(_addedKey);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Укажите дату добавления')),
-        );
+        showWarningBanner('Укажите дату добавления');
       }
       return;
     }
@@ -1092,18 +1091,12 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
     // Выходим с результатом
     Navigator.pop(context, updated);
 
-    // Показываем снек на предыдущем экране через navigatorKey
-    final ctx = App.navigatorKey.currentContext;
-    if (ctx != null) {
-      ScaffoldMessenger.of(ctx).showSnackBar(
-        const SnackBar(content: Text('Изменения сохранены')),
-      );
-    }
+    showSuccessBanner('Изменения сохранены');
   }
 
 
-  // SnackBar с Undo — тот же, что в списке
-  Timer? _snackTimer;
+  // Баннер с Undo — тот же, что в списке
+  OverlaySupportEntry? _undoBanner;
 
   Future<void> _deleteWithUndo(Contact c) async {
     if (c.id == null) return;
@@ -1112,37 +1105,21 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
 
     final notesSnapshot = await db.deleteContactWithSnapshot(c.id!);
 
-    if (mounted) Navigator.pop(context, {'deletedId': c.id});
-
-    final ctx = App.navigatorKey.currentContext;
-    if (ctx == null) return;
-    final messenger = ScaffoldMessenger.of(ctx);
-
+    _undoBanner?.dismiss();
     const duration = Duration(seconds: 4);
-    messenger.clearSnackBars();
-    _snackTimer?.cancel();
-
-    final endTime = DateTime.now().add(duration);
-    final controller = messenger.showSnackBar(
-      SnackBar(
-        duration: const Duration(days: 1),
-        content: _UndoSnackContent(endTime: endTime, duration: duration),
-        action: SnackBarAction(
-          label: 'Отменить',
-          onPressed: () async {
-            _snackTimer?.cancel();
-            messenger.hideCurrentSnackBar();
-
-            final newId =
+    _undoBanner = showUndoBanner(
+      message: 'Контакт удалён',
+      duration: duration,
+      icon: Icons.delete_outline,
+      onUndo: () async {
+        _undoBanner = null;
+        final newId =
             await db.restoreContactWithNotes(c.copyWith(id: null), notesSnapshot);
-
-            await ContactListScreen.goToRestored(c, newId);
-          },
-        ),
-      ),
+        await ContactListScreen.goToRestored(c, newId);
+      },
     );
 
-    _snackTimer = Timer(endTime.difference(DateTime.now()), () => controller.close());
+    if (mounted) Navigator.pop(context, {'deletedId': c.id});
   }
 
   String _titleForCategory(String cat) {
@@ -1834,76 +1811,6 @@ class _PickerTile extends StatelessWidget {
       leading: Icon(icon),
       title: Text(label),
       onTap: () => Navigator.pop(context, value),
-    );
-  }
-}
-
-/// Контент SnackBar с обратным отсчётом и прогресс-баром (как в списке).
-class _UndoSnackContent extends StatefulWidget {
-  final DateTime endTime;
-  final Duration duration;
-  const _UndoSnackContent({required this.endTime, required this.duration});
-
-  @override
-  State<_UndoSnackContent> createState() => _UndoSnackContentState();
-}
-
-class _UndoSnackContentState extends State<_UndoSnackContent> with SingleTickerProviderStateMixin {
-  late AnimationController _ctrl;
-
-  double _fractionRemaining(DateTime now) {
-    final total = widget.duration.inMilliseconds;
-    final left = widget.endTime.difference(now).inMilliseconds;
-    if (total <= 0) return 0;
-    return left <= 0 ? 0 : (left / total).clamp(0.0, 1.0);
-  }
-
-  void _syncAndRun() {
-    final now = DateTime.now();
-    final frac = _fractionRemaining(now); // 0..1
-    final msLeft = (widget.duration.inMilliseconds * frac).round();
-
-    _ctrl.stop();
-    _ctrl.value = frac;
-    if (msLeft > 0) {
-      _ctrl.animateTo(0.0, duration: Duration(milliseconds: msLeft), curve: Curves.linear);
-    }
-  }
-
-  @override
-  void initState() {
-    super.initState();
-    _ctrl = AnimationController(vsync: this, value: 1.0, lowerBound: 0.0, upperBound: 1.0)
-      ..addListener(() { if (mounted) setState(() {}); });
-    _syncAndRun();
-  }
-
-  @override
-  void didUpdateWidget(covariant _UndoSnackContent oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.endTime != widget.endTime || oldWidget.duration != widget.duration) {
-      _syncAndRun();
-    }
-  }
-
-  @override
-  void dispose() {
-    _ctrl.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final value = _ctrl.value; // 1.0 -> 0.0
-    final secondsLeft = (value * widget.duration.inSeconds).ceil().clamp(0, 999);
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(children: [const Expanded(child: Text('Контакт удалён')), Text('$secondsLeft c')]),
-        const SizedBox(height: 4),
-        LinearProgressIndicator(value: value),
-      ],
     );
   }
 }

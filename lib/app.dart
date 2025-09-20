@@ -1,6 +1,7 @@
 // lib/app.dart
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:overlay_support/overlay_support.dart';
 import 'screens/home_screen.dart';
 
 class App extends StatelessWidget {
@@ -12,40 +13,42 @@ class App extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Touch NoteBook',
-      debugShowCheckedModeBanner: false, // 🔔 убирает "DEBUG" в углу
-      navigatorKey: navigatorKey, // <-- ВАЖНО: подключили ключ
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: Colors.deepPurple,
-          brightness: Brightness.light,
+    return OverlaySupport.global(
+      child: MaterialApp(
+        title: 'Touch NoteBook',
+        debugShowCheckedModeBanner: false, // 🔔 убирает "DEBUG" в углу
+        navigatorKey: navigatorKey, // <-- ВАЖНО: подключили ключ
+        theme: ThemeData(
+          colorScheme: ColorScheme.fromSeed(
+            seedColor: Colors.deepPurple,
+            brightness: Brightness.light,
+          ),
+          appBarTheme: const AppBarTheme(
+            scrolledUnderElevation: 0,
+            surfaceTintColor: Colors.transparent,
+          ),
+          useMaterial3: true,
         ),
-        appBarTheme: const AppBarTheme(
-          scrolledUnderElevation: 0,
-          surfaceTintColor: Colors.transparent,
+        darkTheme: ThemeData(
+          colorScheme: ColorScheme.fromSeed(
+            seedColor: Colors.deepPurple,
+            brightness: Brightness.dark,
+          ),
+          useMaterial3: true,
         ),
-        useMaterial3: true,
+        themeMode: ThemeMode.system,
+        localizationsDelegates: const [
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        supportedLocales: const [
+          Locale('ru'),
+          Locale('en'),
+        ],
+        locale: const Locale('ru'),
+        home: const HomeScreen(),
       ),
-      darkTheme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: Colors.deepPurple,
-          brightness: Brightness.dark,
-        ),
-        useMaterial3: true,
-      ),
-      themeMode: ThemeMode.system,
-      localizationsDelegates: const [
-        GlobalMaterialLocalizations.delegate,
-        GlobalWidgetsLocalizations.delegate,
-        GlobalCupertinoLocalizations.delegate,
-      ],
-      supportedLocales: const [
-        Locale('ru'),
-        Locale('en'),
-      ],
-      locale: const Locale('ru'),
-      home: const HomeScreen(),
     );
   }
 }
