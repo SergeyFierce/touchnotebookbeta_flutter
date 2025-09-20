@@ -128,9 +128,17 @@ class _ContactListScreenState extends State<ContactListScreen> {
   OverlaySupportEntry? _undoBanner;
   Timer? _highlightTimer;
 
+  Future<void> _scrollToAndHighlight(int id) async {
+    await _maybeScrollTo(id);
+    if (!mounted) return;
+    _flashHighlight(id);
+  }
+
   void _restoreLocally(Contact restored, {bool highlight = false}) {
     // если вдруг уже есть с таким id — заменим, иначе добавим
     final i = _all.indexWhere((e) => e.id == restored.id);
+    final shouldHighlight = highlight && restored.id != null;
+    final restoredId = restored.id;
     setState(() {
       if (i >= 0) {
         _all[i] = restored;
@@ -140,8 +148,11 @@ class _ContactListScreenState extends State<ContactListScreen> {
       _cleanupKeys();
     });
     // подчёркивание — без автоскролла
-    if (highlight && restored.id != null) {
-      _flashHighlight(restored.id!);
+    if (shouldHighlight && restoredId != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        _scrollToAndHighlight(restoredId);
+      });
     }
   }
 
@@ -271,8 +282,7 @@ class _ContactListScreenState extends State<ContactListScreen> {
       });
       if (widget.scrollToId != null && _all.any((e) => e.id == widget.scrollToId)) {
         final id = widget.scrollToId!;
-        await _maybeScrollTo(id);
-        _flashHighlight(id);
+        await _scrollToAndHighlight(id);
       }
     } catch (e) {
       if (mounted) {
