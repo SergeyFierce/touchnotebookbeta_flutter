@@ -89,6 +89,7 @@ class ContactListScreen extends StatefulWidget {
   static Future<void> goToRestored(Contact restored, int restoredId) async {
     final existing = _mountedByCategory[restored.category];
     if (existing != null && existing.mounted) {
+      existing._activateSelf();
       final restoredWithId = restored.copyWith(id: restoredId);
       existing._restoreLocally(restoredWithId, highlight: true);
       return;
@@ -116,6 +117,10 @@ class _ContactListScreenState extends State<ContactListScreen> {
   int _pulseSeed = 0; // триггер импульса для карточек
   // ключи карточек по id для ensureVisible
   final Map<int, GlobalKey> _itemKeys = {};
+  ModalRoute<dynamic>? _route;
+
+  // id контакта, к которому нужно проскроллить и подсветить
+  int? _pendingScrollToId;
 
   // Константы для durations и резерва
   static const double fabReserve = 56 + 16; // Высота FAB + отступ
@@ -139,9 +144,10 @@ class _ContactListScreenState extends State<ContactListScreen> {
       }
       _cleanupKeys();
     });
-    // подчёркивание — без автоскролла
+    // подсветка + отложенный автоскролл (если нужно)
     if (highlight && restored.id != null) {
-      _flashHighlight(restored.id!);
+      _pendingScrollToId = restored.id;
+      _schedulePendingScrollCheck();
     }
   }
 
@@ -162,6 +168,7 @@ class _ContactListScreenState extends State<ContactListScreen> {
     super.initState();
     // регистрируем экран в реестре активных по категории
     ContactListScreen._mountedByCategory[widget.category] = this;
+    _pendingScrollToId = widget.scrollToId;
     _loadContacts(reset: true);
     _scroll.addListener(_onScroll);
   }
@@ -177,6 +184,16 @@ class _ContactListScreenState extends State<ContactListScreen> {
       }
       ContactListScreen._mountedByCategory[widget.category] = this;
     }
+    if (widget.scrollToId != null && widget.scrollToId != oldWidget.scrollToId) {
+      _pendingScrollToId = widget.scrollToId;
+      _schedulePendingScrollCheck();
+    }
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _route = ModalRoute.of(context);
   }
 
   @override
@@ -205,6 +222,33 @@ class _ContactListScreenState extends State<ContactListScreen> {
   void _cleanupKeys() {
     final ids = _all.map((e) => e.id).whereType<int>().toSet();
     _itemKeys.removeWhere((k, v) => !ids.contains(k));
+  }
+
+  void _activateSelf() {
+    final route = _route;
+    route?.navigator?.popUntil((r) => identical(r, route));
+  }
+
+  void _schedulePendingScrollCheck() {
+    if (_pendingScrollToId == null || !mounted) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _tryPendingScroll();
+    });
+  }
+
+  Future<void> _tryPendingScroll() async {
+    final id = _pendingScrollToId;
+    if (id == null) return;
+    if (_all.any((e) => e.id == id)) {
+      await _maybeScrollTo(id);
+      _flashHighlight(id);
+      _pendingScrollToId = null;
+    } else if (_hasMore && !_isLoading) {
+      await _loadMoreContacts();
+    } else {
+      _pendingScrollToId = null;
+    }
   }
 
   Future<void> _maybeScrollTo(int id) async {
@@ -269,10 +313,8 @@ class _ContactListScreenState extends State<ContactListScreen> {
         _hasMore = contacts.length >= _pageSize;
         _cleanupKeys();
       });
-      if (widget.scrollToId != null && _all.any((e) => e.id == widget.scrollToId)) {
-        final id = widget.scrollToId!;
-        await _maybeScrollTo(id);
-        _flashHighlight(id);
+      if (_pendingScrollToId != null) {
+        _schedulePendingScrollCheck();
       }
     } catch (e) {
       if (mounted) {
