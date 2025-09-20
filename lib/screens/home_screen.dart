@@ -1,9 +1,11 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:intl/intl.dart';
 
 import 'add_contact_screen.dart';
 import 'settings_screen.dart';
@@ -34,6 +36,11 @@ abstract class R {
   static const summaryKnownLabel = 'Всего известных контактов';
   static const summaryAllKnown = 'Все категории синхронизированы';
   static const quickActions = 'Быстрые действия';
+  static const linkCopied = 'Ссылка скопирована';
+  static const emptyStateHelp =
+      'Создайте первый контакт. Ниже можно открыть списки по категориям.';
+  static const chipHintOpenList = 'Откройте список по категории';
+  static const dataUpdated = 'Данные обновлены';
 
   static String summaryUnknown(int count) {
     if (count <= 0) return summaryAllKnown;
@@ -50,19 +57,19 @@ const kGap6 = SizedBox(height: 6);
 const kGap8 = SizedBox(height: 8);
 const kGap12 = SizedBox(height: 12);
 const kGap16w = SizedBox(width: 16);
-const kDurTap = Duration(milliseconds: 90);
+const kDurTap = Duration(milliseconds: 120);
 const kDurFast = Duration(milliseconds: 200);
 const kBr16 = BorderRadius.all(Radius.circular(16));
 
 EdgeInsets _listPadding(BuildContext context) {
-  final mediaQuery = MediaQuery.of(context);
-  const fabEstimatedHeight = 56.0; // оценка высоты FAB.extended
-  final bottom = 16 +
-      mediaQuery.viewPadding.bottom +
-      kFloatingActionButtonMargin +
-      fabEstimatedHeight;
-  return EdgeInsets.fromLTRB(16, 16, 16, bottom);
+  // SafeArea уже обрабатывает системные отступы снизу.
+  const fabEstimatedHeight = 56.0; // высота FAB.extended
+  const bottom = 16 + kFloatingActionButtonMargin + fabEstimatedHeight;
+  return const EdgeInsets.fromLTRB(16, 16, 16, bottom);
 }
+
+/// Кешированный форматтер чисел для RU
+final NumberFormat _nfRu = NumberFormat.decimalPattern('ru');
 
 /// ---------------------
 /// Типобезопасные категории
@@ -106,14 +113,19 @@ extension ContactCategoryX on ContactCategory {
           : (m10 >= 2 && m10 <= 4 && (m100 < 10 || m100 >= 20))
           ? few
           : many;
-      return '$count\u00A0$word';
+      return '${_nfRu.format(count)}\u00A0$word';
     }
 
     return switch (this) {
-      ContactCategory.partner => pick(one: 'партнёр', few: 'партнёра', many: 'партнёров'),
-      ContactCategory.client => pick(one: 'клиент', few: 'клиента', many: 'клиентов'),
-      ContactCategory.prospect =>
-          pick(one: 'потенциальный клиент', few: 'потенциальных клиента', many: 'потенциальных клиентов'),
+      ContactCategory.partner =>
+          pick(one: 'партнёр', few: 'партнёра', many: 'партнёров'),
+      ContactCategory.client =>
+          pick(one: 'клиент', few: 'клиента', many: 'клиентов'),
+      ContactCategory.prospect => pick(
+        one: 'потенциальный клиент',
+        few: 'потенциальных клиента',
+        many: 'потенциальных клиентов',
+      ),
     };
   }
 }
@@ -136,8 +148,20 @@ class Counts {
     });
   }
 
-  int get unknownCount =>
-      ContactCategory.values.where((c) => of(c) < 0).length;
+  int get unknownCount => ContactCategory.values.where((c) => of(c) < 0).length;
+
+  @override
+  bool operator ==(Object other) {
+    if (identical(this, other)) return true;
+    if (other is! Counts) return false;
+    for (final c in ContactCategory.values) {
+      if (of(c) != other.of(c)) return false;
+    }
+    return true;
+  }
+
+  @override
+  int get hashCode => Object.hashAll(ContactCategory.values.map(of));
 }
 
 /// ---------------------
@@ -150,28 +174,51 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
+class _HomeScreenState extends State<HomeScreen> with RestorationMixin {
   late Future<Counts> _countsFuture;
   late final VoidCallback _revListener;
   bool _loadErrorShown = false;
+
+  // debounce для частых ревизий
+  Timer? _debounce;
+
+  // Для уведомления «Данные обновлены»
+  Counts? _lastCountsShown;
+
+  // Последние валидные данные для устойчивого UI во время refresh
+  Counts? _lastGoodCounts;
+
+  // Restoration
+  final RestorableInt _drawerIndex = RestorableInt(0);
+
+  @override
+  String? get restorationId => 'home_screen';
+
+  @override
+  void restoreState(RestorationBucket? oldBucket, bool initialRestore) {
+    registerForRestoration(_drawerIndex, 'home_drawer_index');
+  }
 
   @override
   void initState() {
     super.initState();
     _countsFuture = _loadCounts();
-    _revListener = _refresh;
+    _revListener = _scheduleRefresh;
     ContactDatabase.instance.revision.addListener(_revListener);
   }
 
   @override
   void dispose() {
+    _debounce?.cancel();
     ContactDatabase.instance.revision.removeListener(_revListener);
+    _drawerIndex.dispose();
     super.dispose();
   }
 
   Future<int> _safe(Future<int> f) async {
     try {
-      return await f;
+      // если источник «подвис», через 3 сек показываем «Неизвестно»
+      return await f.timeout(const Duration(seconds: 3));
     } catch (e, s) {
       debugPrint('count error: $e\n$s');
       return -1; // -1 = неизвестно
@@ -179,13 +226,26 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<Counts> _loadCounts() async {
-    final partner = await _safe(ContactDatabase.instance.countByCategory(ContactCategory.partner.dbKey));
-    final client = await _safe(ContactDatabase.instance.countByCategory(ContactCategory.client.dbKey));
-    final prospect = await _safe(ContactDatabase.instance.countByCategory(ContactCategory.prospect.dbKey));
+    final partner = await _safe(
+        ContactDatabase.instance.countByCategory(ContactCategory.partner.dbKey));
+    final client = await _safe(
+        ContactDatabase.instance.countByCategory(ContactCategory.client.dbKey));
+    final prospect = await _safe(
+        ContactDatabase.instance.countByCategory(ContactCategory.prospect.dbKey));
     return Counts({
       ContactCategory.partner: partner,
       ContactCategory.client: client,
       ContactCategory.prospect: prospect,
+    });
+  }
+
+  void _scheduleRefresh() {
+    _debounce?.cancel();
+    _debounce = Timer(const Duration(milliseconds: 200), () {
+      if (!mounted) return;
+      setState(() {
+        _countsFuture = _loadCounts();
+      });
     });
   }
 
@@ -201,7 +261,10 @@ class _HomeScreenState extends State<HomeScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text(R.loadError)),
+        const SnackBar(
+          content: Text(R.loadError),
+          behavior: SnackBarBehavior.floating,
+        ),
       );
     });
     _loadErrorShown = true;
@@ -221,7 +284,10 @@ class _HomeScreenState extends State<HomeScreen> {
       } else {
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text(R.telegramNotInstalled)),
+          const SnackBar(
+            content: Text(R.telegramNotInstalled),
+            behavior: SnackBarBehavior.floating,
+          ),
         );
         await launchUrl(webUri, mode: LaunchMode.externalApplication);
       }
@@ -229,7 +295,21 @@ class _HomeScreenState extends State<HomeScreen> {
       debugPrint('openSupport error: $e\n$s');
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text(R.telegramOpenFailed)),
+        const SnackBar(
+          content: Text(R.telegramOpenFailed),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      // мягкий fallback — скопируем ссылку
+      await Clipboard.setData(
+        const ClipboardData(text: 'https://t.me/touchnotebook'),
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(R.linkCopied),
+          behavior: SnackBarBehavior.floating,
+        ),
       );
     }
   }
@@ -242,7 +322,10 @@ class _HomeScreenState extends State<HomeScreen> {
     );
     if (saved == true && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text(R.contactSaved)),
+        const SnackBar(
+          content: Text(R.contactSaved),
+          behavior: SnackBarBehavior.floating,
+        ),
       );
     }
   }
@@ -256,17 +339,17 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   double _gridChildAspectRatio(
-    BoxConstraints constraints,
-    int cols,
-    EdgeInsets listPadding,
-  ) {
+      BoxConstraints constraints,
+      int cols,
+      EdgeInsets listPadding,
+      ) {
     final horizontalPadding = listPadding.left + listPadding.right;
     const spacing = 12.0;
     final totalSpacing = horizontalPadding + spacing * (cols - 1);
     final availableWidth = constraints.maxWidth - totalSpacing;
     final cellWidth = availableWidth <= 0 ? 1.0 : availableWidth / cols;
     final viewportHeight = constraints.maxHeight;
-    final baseHeight = cellWidth / 1.9; // предпочитаем умеренно широкие карточки
+    final baseHeight = cellWidth / 1.9; // умеренно широкие карточки
     const minHeight = 140.0;
     final fallbackMaxHeight = cellWidth * 1.1;
     final maxHeight = viewportHeight.isFinite
@@ -276,19 +359,51 @@ class _HomeScreenState extends State<HomeScreen> {
     return cellWidth / cellHeight;
   }
 
+  void _maybeNotifyUpdated(Counts newCounts) {
+    final last = _lastCountsShown;
+    if (last == null) {
+      _lastCountsShown = newCounts;
+      // кэшируем «хорошие» данные
+      if (newCounts.unknownCount == 0 || newCounts.knownTotal > 0) {
+        _lastGoodCounts = newCounts;
+      }
+      return;
+    }
+
+    // уведомляем, если ранее были неизвестные и стало меньше неизвестных
+    if (last.unknownCount > 0 && newCounts.unknownCount < last.unknownCount) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(R.dataUpdated),
+          behavior: SnackBarBehavior.floating,
+          duration: Duration(milliseconds: 1500),
+        ),
+      );
+    }
+    _lastCountsShown = newCounts;
+
+    // обновим кэш «хороших» данных
+    if (newCounts.unknownCount == 0 || newCounts.knownTotal > 0) {
+      _lastGoodCounts = newCounts;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-
     return Scaffold(
-      appBar: AppBar(title: const Text(R.appTitle)),
+      restorationId: 'home_scaffold',
+      appBar: AppBar(title: const Text(R.homeTitle)),
       drawer: NavigationDrawer(
-        selectedIndex: 0, // индекс выбранного пункта
+        selectedIndex: _drawerIndex.value,
         onDestinationSelected: (index) {
+          _drawerIndex.value = index;
           Navigator.pop(context);
           switch (index) {
             case 1:
-              Navigator.push(context, MaterialPageRoute(builder: (_) => const SettingsScreen()));
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const SettingsScreen()),
+              );
               break;
             case 2:
               _openSupport(context);
@@ -321,201 +436,194 @@ class _HomeScreenState extends State<HomeScreen> {
           child: FutureBuilder<Counts>(
             future: _countsFuture,
             builder: (context, snapshot) {
-              if (snapshot.hasError) {
-                debugPrint('Error loading contact counts: ${snapshot.error}\n${snapshot.stackTrace}');
+              final waiting = snapshot.connectionState == ConnectionState.waiting;
+              final hasSomeData = snapshot.hasData || _lastGoodCounts != null;
+
+              // если есть хоть какие-то прошлые данные — используем их
+              final counts = snapshot.data ??
+                  _lastGoodCounts ??
+                  Counts({ for (final c in ContactCategory.values) c: 0 });
+
+              // если пришла ошибка и данных нет вообще — показываем карточку ошибки
+              if (snapshot.hasError && !hasSomeData) {
+                debugPrint(
+                  'Error loading contact counts: ${snapshot.error}\n${snapshot.stackTrace}',
+                );
                 _showLoadErrorOnce(context);
                 return ListView(
+                  key: const PageStorageKey('home-error-list'),
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  padding: _listPadding(context),
+                  children: const [ _ErrorCard(onRetry: null) ],
+                );
+              }
+
+              _loadErrorShown = false;
+
+              // уведомим об обновлении (после кадра)
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                if (mounted && snapshot.hasData) _maybeNotifyUpdated(snapshot.data!);
+              });
+
+              final isInitialLoad = !hasSomeData && waiting;
+
+              // Первичная загрузка — скромный placeholder
+              if (isInitialLoad) {
+                return ListView(
+                  key: const PageStorageKey('home-initial-loading'),
                   physics: const AlwaysScrollableScrollPhysics(),
                   padding: _listPadding(context),
                   children: const [
-                    _ErrorCard(),
-                    kGap12,
-                    _CategoryCard.loading(category: ContactCategory.partner),
-                    kGap12,
-                    _CategoryCard.loading(category: ContactCategory.client),
-                    kGap12,
-                    _CategoryCard.loading(category: ContactCategory.prospect),
+                    _SkeletonLine(widthFactor: 0.9),
+                    SizedBox(height: 12),
+                    _SkeletonLine(widthFactor: 0.85),
+                    SizedBox(height: 12),
+                    _SkeletonLine(widthFactor: 0.8),
                   ],
                 );
               }
-              _loadErrorShown = false;
 
-              final isLoading = snapshot.connectionState == ConnectionState.waiting;
-              final counts = snapshot.data ?? Counts({
-                for (final c in ContactCategory.values) c: 0,
-              });
-
-              // Пустое состояние
-              if (!isLoading && counts.allZero) {
-                return ListView(
-                  physics: const AlwaysScrollableScrollPhysics(),
-                  padding: _listPadding(context),
-                  children: [
-                    Card(
-                      child: Padding(
-                        padding: kPad16,
-                        child: Column(
-                          children: [
-                            const Icon(Icons.person_off, size: 40),
-                            kGap8,
-                            const Text(R.noContacts),
-                            kGap8,
-                            FilledButton.icon(
-                              onPressed: () => _openAddContact(context),
-                              icon: const Icon(Icons.person_add),
-                              label: const Text(R.addContact),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    kGap12,
-                    // Показываем категории с "Нет данных"
-                    ...ContactCategory.values.map(
-                          (cat) => Padding(
-                        padding: const EdgeInsets.only(bottom: 12),
-                        child: _CategoryCard(
-                          category: cat,
-                          subtitle: R.noData,
-                          trailingCount: null,
-                          isLoading: false,
-                          onTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) => ContactListScreen(category: cat.dbKey, title: cat.titlePlural),
-                              ),
-                            );
-                          },
-                        ),
-                      ),
-                    ),
-                  ],
-                );
-              }
+              // Прогресс: тонкая линия сверху контента
+              final progressBar = AnimatedSwitcher(
+                duration: kDurFast,
+                child: waiting
+                    ? const LinearProgressIndicator(minHeight: 2, key: ValueKey('pb'))
+                    : const SizedBox(height: 2, key: ValueKey('spacer')),
+              );
 
               // Основной список/сетка
-              final showSummary = !isLoading && !counts.allZero;
+              final showSummary = !counts.allZero; // сводка остаётся при refresh
               final listPadding = _listPadding(context);
 
-              return LayoutBuilder(
-                builder: (context, constraints) {
-                  final cols = _calcColumns(constraints);
+              return Column(
+                children: [
+                  // тонкий индикатор обновления
+                  progressBar,
+                  Expanded(
+                    child: LayoutBuilder(
+                      builder: (context, constraints) {
+                        final cols = _calcColumns(constraints);
 
-                  List<Widget> buildItems({required bool skeleton}) {
-                    return ContactCategory.values.map((cat) {
-                      if (skeleton) return _CategoryCard.loading(category: cat);
-                      final c = counts.of(cat);
-                      final subtitle = (c < 0)
-                          ? R.unknown
-                          : cat.russianCount(c); // -1 → неизвестно, иначе склонение
-                      final chip = (c < 0) ? '—' : '$c';
-                      return _CategoryCard(
-                        category: cat,
-                        subtitle: isLoading ? R.loading : subtitle,
-                        trailingCount: isLoading ? null : chip,
-                        isLoading: isLoading,
-                        onTap: () {
-                          if (!kIsWeb) HapticFeedback.selectionClick();
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => ContactListScreen(category: cat.dbKey, title: cat.titlePlural),
+                        final items = ContactCategory.values.map((cat) {
+                          final c = counts.of(cat);
+                          final subtitle = (c < 0) ? R.unknown : cat.russianCount(c);
+                          final chip = (c < 0) ? '—' : _nfRu.format(c);
+                          return _CategoryCard(
+                            category: cat,
+                            subtitle: subtitle,
+                            trailingCount: chip,
+                            isLoading: false, // НЕ скрываем карточки при refresh
+                            onTap: () {
+                              if (!kIsWeb) HapticFeedback.selectionClick();
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => ContactListScreen(
+                                    category: cat.dbKey,
+                                    title: cat.titlePlural,
+                                  ),
+                                ),
+                              );
+                            },
+                          );
+                        }).toList(growable: false);
+
+                        if (cols == 1) {
+                          return Scrollbar(
+                            child: ListView.separated(
+                              key: const PageStorageKey('home-list'),
+                              physics: const AlwaysScrollableScrollPhysics(),
+                              padding: listPadding,
+                              itemCount: items.length + (showSummary ? 1 : 0),
+                              separatorBuilder: (_, __) => const SizedBox(height: 12),
+                              itemBuilder: (_, i) {
+                                if (showSummary && i == 0) {
+                                  return _SummaryCard(
+                                    knownTotal: counts.knownTotal,
+                                    unknownCount: counts.unknownCount,
+                                    onAddContact: () => _openAddContact(context),
+                                    onOpenSettings: () {
+                                      Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (_) => const SettingsScreen(),
+                                        ),
+                                      );
+                                    },
+                                    onOpenSupport: () => _openSupport(context),
+                                  );
+                                }
+                                final index = showSummary ? i - 1 : i;
+                                return items[index];
+                              },
                             ),
                           );
-                        },
-                      );
-                    }).toList();
-                  }
+                        }
 
-                  final items = buildItems(skeleton: isLoading);
-
-                  if (cols == 1) {
-                    return Scrollbar(
-                      child: ListView.separated(
-                        physics: const AlwaysScrollableScrollPhysics(),
-                        padding: listPadding,
-                        itemCount: items.length + (showSummary ? 1 : 0),
-                        separatorBuilder: (_, __) => const SizedBox(height: 12),
-                        itemBuilder: (_, i) {
-                          if (showSummary && i == 0) {
-                            return _SummaryCard(
-                              knownTotal: counts.knownTotal,
-                              unknownCount: counts.unknownCount,
-                              onAddContact: () => _openAddContact(context),
-                              onOpenSettings: () {
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(builder: (_) => const SettingsScreen()),
-                                );
-                              },
-                              onOpenSupport: () => _openSupport(context),
-                            );
-                          }
-                          final index = showSummary ? i - 1 : i;
-                          return items[index];
-                        },
-                      ),
-                    );
-                  }
-
-                  // 2–3 колонки (планшет/desktop/web)
-                  return Scrollbar(
-                    child: CustomScrollView(
-                      physics: const AlwaysScrollableScrollPhysics(),
-                      slivers: [
-                        if (showSummary)
-                          SliverPadding(
-                            padding: EdgeInsets.fromLTRB(
-                              listPadding.left,
-                              listPadding.top,
-                              listPadding.right,
-                              12,
-                            ),
-                            sliver: SliverToBoxAdapter(
-                              child: _SummaryCard(
-                                knownTotal: counts.knownTotal,
-                                unknownCount: counts.unknownCount,
-                                onAddContact: () => _openAddContact(context),
-                                onOpenSettings: () {
-                                  Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                        builder: (_) => const SettingsScreen()),
-                                  );
-                                },
-                                onOpenSupport: () => _openSupport(context),
+                        // 2–3 колонки (планшет/desktop/web)
+                        return Scrollbar(
+                          thumbVisibility: true,
+                          child: CustomScrollView(
+                            key: const PageStorageKey('home-grid'),
+                            physics: const AlwaysScrollableScrollPhysics(),
+                            slivers: [
+                              if (showSummary)
+                                SliverPadding(
+                                  padding: EdgeInsets.fromLTRB(
+                                    listPadding.left,
+                                    listPadding.top,
+                                    listPadding.right,
+                                    12,
+                                  ),
+                                  sliver: SliverToBoxAdapter(
+                                    child: _SummaryCard(
+                                      knownTotal: counts.knownTotal,
+                                      unknownCount: counts.unknownCount,
+                                      onAddContact: () => _openAddContact(context),
+                                      onOpenSettings: () {
+                                        Navigator.push(
+                                          context,
+                                          MaterialPageRoute(
+                                            builder: (_) => const SettingsScreen(),
+                                          ),
+                                        );
+                                      },
+                                      onOpenSupport: () => _openSupport(context),
+                                    ),
+                                  ),
+                                ),
+                              SliverPadding(
+                                padding: EdgeInsets.fromLTRB(
+                                  listPadding.left,
+                                  showSummary ? 0 : listPadding.top,
+                                  listPadding.right,
+                                  listPadding.bottom,
+                                ),
+                                sliver: SliverGrid(
+                                  delegate: SliverChildBuilderDelegate(
+                                        (_, i) => RepaintBoundary(child: items[i]),
+                                    childCount: items.length,
+                                  ),
+                                  gridDelegate:
+                                  SliverGridDelegateWithFixedCrossAxisCount(
+                                    crossAxisCount: cols,
+                                    mainAxisSpacing: 12,
+                                    crossAxisSpacing: 12,
+                                    childAspectRatio: _gridChildAspectRatio(
+                                      constraints,
+                                      cols,
+                                      listPadding,
+                                    ),
+                                  ),
+                                ),
                               ),
-                            ),
+                            ],
                           ),
-                        SliverPadding(
-                          padding: EdgeInsets.fromLTRB(
-                            listPadding.left,
-                            showSummary ? 0 : listPadding.top,
-                            listPadding.right,
-                            listPadding.bottom,
-                          ),
-                          sliver: SliverGrid(
-                            delegate: SliverChildBuilderDelegate(
-                              (_, i) => items[i],
-                              childCount: items.length,
-                            ),
-                            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                              crossAxisCount: cols,
-                              mainAxisSpacing: 12,
-                              crossAxisSpacing: 12,
-                              childAspectRatio: _gridChildAspectRatio(
-                                constraints,
-                                cols,
-                                listPadding,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
+                        );
+                      },
                     ),
-                  );
-                },
+                  ),
+                ],
               );
             },
           ),
@@ -534,6 +642,49 @@ class _HomeScreenState extends State<HomeScreen> {
 /// ---------------------
 /// Виджеты
 /// ---------------------
+
+class _EmptyStateCard extends StatelessWidget {
+  const _EmptyStateCard();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Card(
+      child: Padding(
+        padding: kPad16,
+        child: Column(
+          children: [
+            Icon(Icons.person_off, size: 40),
+            kGap8,
+            Text(R.noContacts),
+            kGap8,
+            Text(
+              R.emptyStateHelp,
+              textAlign: TextAlign.center,
+            ),
+            kGap8,
+            _AddContactButton(),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _AddContactButton extends StatelessWidget {
+  const _AddContactButton();
+
+  @override
+  Widget build(BuildContext context) {
+    return FilledButton.icon(
+      onPressed: () {
+        final state = context.findAncestorStateOfType<_HomeScreenState>();
+        state?._openAddContact(context);
+      },
+      icon: const Icon(Icons.person_add),
+      label: const Text(R.addContact),
+    );
+  }
+}
 
 class _SummaryCard extends StatelessWidget {
   final int knownTotal;
@@ -580,48 +731,64 @@ class _SummaryCard extends StatelessWidget {
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        knownTotal.toString(),
-                        style: textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.w700),
+                        _nfRu.format(knownTotal),
+                        style: textTheme.headlineMedium
+                            ?.copyWith(fontWeight: FontWeight.w700),
                       ),
                     ],
                   ),
                 ),
                 if (hasUnknown)
-                  Padding(
-                    padding: const EdgeInsets.only(left: 12, top: 4),
-                    child: Icon(Icons.info_outline, color: colorScheme.secondary),
+                  Semantics(
+                    label: 'Есть неизвестные категории',
+                    child: Padding(
+                      padding: const EdgeInsets.only(left: 12, top: 4),
+                      child: Icon(Icons.info_outline,
+                          color: colorScheme.secondary),
+                    ),
                   ),
               ],
             ),
             kGap8,
             Text(
               hasUnknown ? R.summaryUnknown(unknownCount) : R.summaryAllKnown,
-              style: textTheme.bodyMedium?.copyWith(color: colorScheme.onSurfaceVariant),
+              style: textTheme.bodyMedium
+                  ?.copyWith(color: colorScheme.onSurfaceVariant),
             ),
             kGap12,
             Text(
               R.quickActions,
-              style: textTheme.labelMedium?.copyWith(color: colorScheme.onSurfaceVariant),
+              style: textTheme.labelMedium
+                  ?.copyWith(color: colorScheme.onSurfaceVariant),
             ),
             kGap8,
             Wrap(
               spacing: 12,
               runSpacing: 8,
               children: [
-                FilledButton.icon(
-                  onPressed: onAddContact,
-                  icon: const Icon(Icons.person_add),
-                  label: const Text(R.addContact),
+                Tooltip(
+                  message: 'Добавить новый контакт',
+                  child: FilledButton.icon(
+                    onPressed: onAddContact,
+                    icon: const Icon(Icons.person_add),
+                    label: const Text(R.addContact),
+                  ),
                 ),
-                OutlinedButton.icon(
-                  onPressed: onOpenSettings,
-                  icon: const Icon(Icons.settings),
-                  label: const Text(R.settings),
+                Tooltip(
+                  message: 'Открыть настройки',
+                  child: OutlinedButton.icon(
+                    onPressed: onOpenSettings,
+                    icon: const Icon(Icons.settings),
+                    label: const Text(R.settings),
+                  ),
                 ),
-                OutlinedButton.icon(
-                  onPressed: onOpenSupport,
-                  icon: const Icon(Icons.support_agent),
-                  label: const Text(R.support),
+                Tooltip(
+                  message: 'Связаться с поддержкой',
+                  child: OutlinedButton.icon(
+                    onPressed: onOpenSupport,
+                    icon: const Icon(Icons.support_agent),
+                    label: const Text(R.support),
+                  ),
                 ),
               ],
             ),
@@ -633,7 +800,8 @@ class _SummaryCard extends StatelessWidget {
 }
 
 class _ErrorCard extends StatefulWidget {
-  const _ErrorCard({super.key});
+  final Future<void> Function()? onRetry;
+  const _ErrorCard({super.key, required this.onRetry});
 
   @override
   State<_ErrorCard> createState() => _ErrorCardState();
@@ -644,6 +812,7 @@ class _ErrorCardState extends State<_ErrorCard> {
 
   @override
   Widget build(BuildContext context) {
+    final onRetry = widget.onRetry;
     return Card(
       child: Padding(
         padding: kPad16,
@@ -655,17 +824,19 @@ class _ErrorCardState extends State<_ErrorCard> {
             const Text(R.checkNetwork),
             kGap8,
             FilledButton.icon(
-              onPressed: _busy
+              onPressed: _busy || onRetry == null
                   ? null
                   : () async {
                 setState(() => _busy = true);
-                // Найдём ближайший RefreshIndicator и дёрнем refresh
-                final state = context.findAncestorStateOfType<_HomeScreenState>();
-                await state?._refresh();
+                await onRetry();
                 if (mounted) setState(() => _busy = false);
               },
               icon: _busy
-                  ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                  ? const SizedBox(
+                width: 18,
+                height: 18,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              )
                   : const Icon(Icons.refresh),
               label: Text(_busy ? R.loading : R.tryAgain),
             ),
@@ -708,16 +879,18 @@ class _CategoryCardState extends State<_CategoryCard> {
   bool _pressed = false;
 
   void _setPressed(bool value) {
-    if (widget.isLoading) return;
+    if (widget.isLoading || _pressed == value) return;
     setState(() => _pressed = value);
   }
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
     final isLoading = widget.isLoading;
 
-    Widget leadingIcon = Icon(widget.category.icon, size: 32, color: colorScheme.primary);
+    Widget leadingIcon =
+    Icon(widget.category.icon, size: 32, color: colorScheme.primary);
 
     if (!isLoading) {
       leadingIcon = Hero(
@@ -725,40 +898,55 @@ class _CategoryCardState extends State<_CategoryCard> {
         transitionOnUserGestures: true,
         flightShuttleBuilder: (ctx, anim, dir, fromCtx, toCtx) {
           return ScaleTransition(
-            scale: anim.drive(Tween(begin: 0.9, end: 1.0).chain(CurveTween(curve: Curves.easeOut))),
-            child: Icon(widget.category.icon, size: 32, color: colorScheme.primary),
+            scale: anim
+                .drive(Tween(begin: 0.9, end: 1.0).chain(CurveTween(curve: Curves.easeOut))),
+            child:
+            Icon(widget.category.icon, size: 32, color: colorScheme.primary),
           );
         },
         child: leadingIcon,
       );
     }
 
-      final Widget trailingContent = widget.trailingCount == null
-          ? const Icon(Icons.chevron_right)
-          : Row(
-              key: ValueKey(widget.trailingCount), // ключ для AnimatedSwitcher
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Tooltip(
-                  message: '${R.qtyLabel}: ${widget.trailingCount}',
-                  child: Semantics(
-                    label: '${widget.category.titlePlural}: ${R.qtyLabel.toLowerCase()}',
-                    value: widget.trailingCount,
-                    child: Chip(
-                      label: Text(
-                        widget.trailingCount!,
-                        style: const TextStyle(fontWeight: FontWeight.w600),
-                      ),
-                      backgroundColor: colorScheme.primaryContainer,
-                      side: BorderSide(color: colorScheme.outlineVariant),
-                      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      visualDensity: VisualDensity.compact,
-                    ),
-                  ),
-                ),
-                const Icon(Icons.chevron_right),
-              ],
-            );
+    final String? countStr = widget.trailingCount;
+    final bool isUnknown = countStr == '—';
+
+    final Widget trailingContent = countStr == null
+        ? const Icon(Icons.chevron_right)
+        : Row(
+      key: ValueKey(countStr), // ключ для AnimatedSwitcher
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Tooltip(
+          message: isUnknown
+              ? 'Количество неизвестно — данные обновятся автоматически'
+              : '${R.qtyLabel}: $countStr',
+          child: Semantics(
+            label:
+            '${widget.category.titlePlural}: ${R.qtyLabel.toLowerCase()}',
+            value: isUnknown ? R.unknown : countStr,
+            hint: '${R.chipHintOpenList}: ${widget.category.titlePlural}',
+            child: Chip(
+              label: Text(
+                countStr,
+                style: const TextStyle(fontWeight: FontWeight.w600),
+              ),
+              backgroundColor: isUnknown
+                  ? colorScheme.surfaceVariant
+                  : colorScheme.primaryContainer,
+              side: BorderSide(
+                color: isUnknown
+                    ? colorScheme.outline
+                    : colorScheme.outlineVariant,
+              ),
+              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              visualDensity: VisualDensity.compact,
+            ),
+          ),
+        ),
+        const Icon(Icons.chevron_right),
+      ],
+    );
 
     return Semantics(
       button: true,
@@ -768,40 +956,47 @@ class _CategoryCardState extends State<_CategoryCard> {
         scale: _pressed ? 0.985 : 1.0,
         duration: kDurTap,
         child: Material(
-          color: colorScheme.surfaceVariant,
-          elevation: 1.5,
+          color: theme.colorScheme.surfaceContainerHigh, // контрастнее, чем surfaceVariant
+          elevation: 2,
           borderRadius: kBr16,
           clipBehavior: Clip.antiAlias,
-          child: InkWell(
-            borderRadius: kBr16,
-            onTap: isLoading
-                ? null
-                : () {
-              if (!kIsWeb) HapticFeedback.selectionClick();
-              widget.onTap();
-            },
-            onTapDown: (_) => _setPressed(true),
-            onTapCancel: () => _setPressed(false),
-            onTapUp: (_) => _setPressed(false),
-            child: Padding(
-              padding: kPad16,
-              child: Row(
-                children: [
-                  leadingIcon,
-                  kGap16w,
-                  Expanded(
-                    child: _TitleAndSubtitle(
-                      title: widget.category.titlePlural,
-                      subtitle: widget.subtitle,
-                      isLoading: isLoading,
+          child: MouseRegion(
+            cursor: SystemMouseCursors.click,
+            child: InkWell(
+              focusColor: kIsWeb ? theme.focusColor : Colors.transparent,
+              hoverColor: kIsWeb ? theme.hoverColor : Colors.transparent,
+              borderRadius: kBr16,
+              canRequestFocus: !isLoading,
+              onTap: isLoading
+                  ? null
+                  : () {
+                if (!kIsWeb) HapticFeedback.selectionClick();
+                widget.onTap();
+              },
+              onTapDown: (_) => _setPressed(true),
+              onTapCancel: () => _setPressed(false),
+              onTapUp: (_) => _setPressed(false),
+              child: Padding(
+                padding: kPad16,
+                child: Row(
+                  children: [
+                    leadingIcon,
+                    kGap16w,
+                    Expanded(
+                      child: _TitleAndSubtitle(
+                        title: widget.category.titlePlural,
+                        subtitle: widget.subtitle,
+                        isLoading: isLoading,
+                      ),
                     ),
-                  ),
-                  AnimatedSwitcher(
-                    duration: kDurFast,
-                    transitionBuilder: (child, anim) => FadeTransition(opacity: anim, child: child),
-                    child: trailingContent,
-                  ),
-                ],
+                    AnimatedSwitcher(
+                      duration: kDurFast,
+                      transitionBuilder: (child, anim) =>
+                          FadeTransition(opacity: anim, child: child),
+                      child: trailingContent,
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
@@ -828,9 +1023,9 @@ class _TitleAndSubtitle extends StatelessWidget {
     final textTheme = Theme.of(context).textTheme;
 
     if (isLoading) {
-      return Column(
+      return const Column(
         crossAxisAlignment: CrossAxisAlignment.start,
-        children: const [
+        children: [
           _SkeletonLine(widthFactor: 0.5),
           kGap6,
           _SkeletonLine(widthFactor: 0.35),
@@ -841,11 +1036,15 @@ class _TitleAndSubtitle extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(title, style: textTheme.titleMedium, maxLines: 1, overflow: TextOverflow.ellipsis),
+        Text(title,
+            style: textTheme.titleMedium,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis),
         const SizedBox(height: 4),
         AnimatedSwitcher(
           duration: kDurFast,
-          transitionBuilder: (child, anim) => FadeTransition(opacity: anim, child: child),
+          transitionBuilder: (child, anim) =>
+              FadeTransition(opacity: anim, child: child),
           child: Text(
             subtitle,
             key: ValueKey(subtitle),
