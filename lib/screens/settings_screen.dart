@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+
+import '../l10n/app_localizations.dart';
 import '../services/locale_notifier.dart';
 
 class SettingsScreen extends StatelessWidget {
@@ -7,14 +9,15 @@ class SettingsScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     final locale = context.watch<LocaleNotifier>().locale;
     return Scaffold(
-      appBar: AppBar(title: const Text('Настройки')),
+      appBar: AppBar(title: Text(l10n.settingsTitle)),
       body: ListView(
         children: [
-          const ListTile(title: Text('Язык')),
+          ListTile(title: Text(l10n.settingsLanguage)),
           RadioListTile<Locale>(
-            title: const Text('Русский'),
+            title: Text(l10n.languageRussian),
             value: const Locale('ru'),
             groupValue: locale,
             onChanged: (value) {
@@ -24,7 +27,7 @@ class SettingsScreen extends StatelessWidget {
             },
           ),
           RadioListTile<Locale>(
-            title: const Text('English'),
+            title: Text(l10n.languageEnglish),
             value: const Locale('en'),
             groupValue: locale,
             onChanged: (value) {
