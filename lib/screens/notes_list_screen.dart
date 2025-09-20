@@ -51,6 +51,7 @@ class _NotesListScreenState extends State<NotesListScreen> {
     _scroll.removeListener(_onScroll);
     _scroll.dispose();
     _undoBanner = null;
+    _undoBanner?.dismiss();
     super.dispose();
   }
 

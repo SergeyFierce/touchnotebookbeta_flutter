@@ -578,6 +578,7 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
     _focusStatus.dispose();
     _focusAdded.dispose();
     _undoBanner = null;
+    _undoBanner?.dismiss();
     super.dispose();
   }
 
