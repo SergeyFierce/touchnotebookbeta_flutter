@@ -1655,36 +1655,51 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
                   },
                   headerActions: [
                     const Spacer(),
-                    if (_notes.isEmpty)
-                      TextButton.icon(
-                        onPressed: _contact.id == null ? null : _addNote,
-                        label: const Text('Добавить заметку'),
-                      )
-                    else
-                      TextButton(
-                        onPressed: () async {
-                          if (_contact.id == null) return;
-                          await Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => NotesListScreen(
-                                contact: _contact,
-                                onNoteRestored: (_) => _loadNotes(),
-                              ),
-                            ),
-                          );
-                          await _loadNotes();
-                        },
-                        child: const Text('Все заметки'),
-                      ),
+                    TextButton(
+                      onPressed: _contact.id == null
+                          ? null
+                          : () async {
+                              await Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => NotesListScreen(
+                                    contact: _contact,
+                                    onNoteRestored: (_) => _loadNotes(),
+                                  ),
+                                ),
+                              );
+                              await _loadNotes();
+                            },
+                      child: const Text('Все заметки'),
+                    ),
                   ],
                   children: _notes.isEmpty
-                      ? const [
+                      ? [
                     Card(
                       elevation: 0,
-                      child: ListTile(
-                        leading: Icon(Icons.sticky_note_2_outlined),
-                        title: Text('Нет заметок'),
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(24, 32, 24, 24),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(
+                              Icons.sticky_note_2_outlined,
+                              size: 48,
+                            ),
+                            const SizedBox(height: 12),
+                            Text(
+                              'Нет заметок',
+                              style: Theme.of(context).textTheme.titleMedium,
+                              textAlign: TextAlign.center,
+                            ),
+                            const SizedBox(height: 24),
+                            FilledButton.icon(
+                              onPressed: _contact.id == null ? null : _addNote,
+                              icon: const Icon(Icons.add),
+                              label: const Text('Добавить заметку'),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   ]

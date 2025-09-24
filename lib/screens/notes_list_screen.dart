@@ -71,15 +71,11 @@ class _NotesListScreenState extends State<NotesListScreen> {
 
   Future<void> _loadNotes({bool reset = false}) async {
     if (reset) {
-      setState(() {
-        _notes.clear();
-        _sortedNotes = const [];
-        _page = 0;
-        _hasMore = true;
-        _itemKeys.clear();
-      });
+      _page = 0;
+      _hasMore = true;
+      _itemKeys.clear();
     }
-    await _loadMoreNotes();
+    await _loadMoreNotes(reset: reset);
   }
 
   void _onScroll() {
@@ -88,8 +84,9 @@ class _NotesListScreenState extends State<NotesListScreen> {
     }
   }
 
-  Future<void> _loadMoreNotes() async {
-    if (widget.contact.id == null || _isLoading || !_hasMore) return;
+  Future<void> _loadMoreNotes({bool reset = false}) async {
+    if (widget.contact.id == null || _isLoading) return;
+    if (!reset && !_hasMore) return;
 
     setState(() => _isLoading = true);
 
@@ -107,13 +104,20 @@ class _NotesListScreenState extends State<NotesListScreen> {
     if (!mounted) return;
 
     setState(() {
-      final existingIds = _notes.map((e) => e.id).toSet();
-      final unique = pageNotes.where((n) => !existingIds.contains(n.id)).toList();
+      if (reset) {
+        _notes = [...pageNotes];
+        _page = 1;
+        _hasMore = pageNotes.length >= _pageSize;
+      } else {
+        final existingIds = _notes.map((e) => e.id).toSet();
+        final unique =
+            pageNotes.where((n) => !existingIds.contains(n.id)).toList();
 
-      _notes.addAll(unique);
-      _page++;
+        _notes.addAll(unique);
+        _page++;
+        if (pageNotes.length < _pageSize) _hasMore = false;
+      }
       _isLoading = false;
-      if (pageNotes.length < _pageSize) _hasMore = false;
 
       _rebuildSorted();
     });
