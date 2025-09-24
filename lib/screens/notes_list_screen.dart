@@ -14,7 +14,9 @@ import '../widgets/system_notifications.dart';
 
 class NotesListScreen extends StatefulWidget {
   final Contact contact;
-  const NotesListScreen({super.key, required this.contact});
+  final ValueChanged<Note>? onNoteRestored;
+
+  const NotesListScreen({super.key, required this.contact, this.onNoteRestored});
 
   @override
   State<NotesListScreen> createState() => _NotesListScreenState();
@@ -242,11 +244,15 @@ class _NotesListScreenState extends State<NotesListScreen> {
       } else if (result['restored'] is Note) {
         final restored = result['restored'] as Note;
         await _loadNotes(reset: true);
-        if (!mounted) return;
+        if (!mounted) {
+          widget.onNoteRestored?.call(restored);
+          return;
+        }
         if (restored.id != null) {
           await _maybeScrollTo(restored.id!);
           _flashHighlight(restored.id!);
         }
+        widget.onNoteRestored?.call(restored);
       } else if (result['updated'] == true) {
         await _loadNotes(reset: true);
       }
@@ -281,10 +287,19 @@ class _NotesListScreenState extends State<NotesListScreen> {
         _undoBanner = null;
         try {
           final id = await _db.insertNote(n.copyWith(id: null));
+          final restored = n.copyWith(id: id);
+          if (!mounted) {
+            widget.onNoteRestored?.call(restored);
+            return;
+          }
           await _loadNotes(reset: true);
-          if (!mounted) return;
+          if (!mounted) {
+            widget.onNoteRestored?.call(restored);
+            return;
+          }
           await _maybeScrollTo(id);
           _flashHighlight(id);
+          widget.onNoteRestored?.call(restored);
         } catch (_) {
           _showErrorBanner('Не удалось восстановить заметку');
         }
