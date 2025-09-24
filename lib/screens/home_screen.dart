@@ -456,147 +456,130 @@ class _HomeScreenState extends State<HomeScreen> with RestorationMixin {
                 );
               }
 
-              // Прогресс: тонкая линия сверху контента
-              final progressBar = AnimatedSwitcher(
-                duration: kDurFast,
-                child: waiting
-                    ? const LinearProgressIndicator(minHeight: 2, key: ValueKey('pb'))
-                    : const SizedBox(height: 2, key: ValueKey('spacer')),
-              );
-
               // Основной список/сетка
               final showSummary = !counts.allZero; // сводка остаётся при refresh
               final listPadding = _listPadding(context);
 
-              return Column(
-                children: [
-                  // тонкий индикатор обновления
-                  progressBar,
-                  Expanded(
-                    child: LayoutBuilder(
-                      builder: (context, constraints) {
-                        final cols = _calcColumns(constraints);
+              return LayoutBuilder(
+                builder: (context, constraints) {
+                  final cols = _calcColumns(constraints);
 
-                        final items = ContactCategory.values.map((cat) {
-                          final c = counts.of(cat);
-                          final subtitle = (c < 0) ? R.unknown : cat.russianCount(c);
-                          final chip = (c < 0) ? '—' : _nfRu.format(c);
-                          return _CategoryCard(
-                            category: cat,
-                            subtitle: subtitle,
-                            trailingCount: chip,
-                            isLoading: false, // НЕ скрываем карточки при refresh
-                            onTap: () {
-                              if (!kIsWeb) HapticFeedback.selectionClick();
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) => ContactListScreen(
-                                    category: cat.dbKey,
-                                    title: cat.titlePlural,
-                                  ),
-                                ),
-                              );
-                            },
-                          );
-                        }).toList(growable: false);
-
-                        if (cols == 1) {
-                          return Scrollbar(
-                            child: ListView.separated(
-                              key: const PageStorageKey('home-list'),
-                              physics: const AlwaysScrollableScrollPhysics(),
-                              padding: listPadding,
-                              itemCount: items.length + (showSummary ? 1 : 0),
-                              separatorBuilder: (_, __) => const SizedBox(height: 12),
-                              itemBuilder: (_, i) {
-                                if (showSummary && i == 0) {
-                                  return _SummaryCard(
-                                    knownTotal: counts.knownTotal,
-                                    unknownCount: counts.unknownCount,
-                                    onAddContact: () => _openAddContact(context),
-                                    onOpenSettings: () {
-                                      Navigator.push(
-                                        context,
-                                        MaterialPageRoute(
-                                          builder: (_) => const SettingsScreen(),
-                                        ),
-                                      );
-                                    },
-                                    onOpenSupport: () => _openSupport(context),
-                                  );
-                                }
-                                final index = showSummary ? i - 1 : i;
-                                return items[index];
-                              },
+                  final items = ContactCategory.values.map((cat) {
+                    final c = counts.of(cat);
+                    final subtitle = (c < 0) ? R.unknown : cat.russianCount(c);
+                    final chip = (c < 0) ? '—' : _nfRu.format(c);
+                    return _CategoryCard(
+                      category: cat,
+                      subtitle: subtitle,
+                      trailingCount: chip,
+                      isLoading: false, // НЕ скрываем карточки при refresh
+                      onTap: () {
+                        if (!kIsWeb) HapticFeedback.selectionClick();
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => ContactListScreen(
+                              category: cat.dbKey,
+                              title: cat.titlePlural,
                             ),
-                          );
-                        }
-
-                        // 2–3 колонки (планшет/desktop/web)
-                        return Scrollbar(
-                          thumbVisibility: true,
-                          child: CustomScrollView(
-                            key: const PageStorageKey('home-grid'),
-                            physics: const AlwaysScrollableScrollPhysics(),
-                            slivers: [
-                              if (showSummary)
-                                SliverPadding(
-                                  padding: EdgeInsets.fromLTRB(
-                                    listPadding.left,
-                                    listPadding.top,
-                                    listPadding.right,
-                                    12,
-                                  ),
-                                  sliver: SliverToBoxAdapter(
-                                    child: _SummaryCard(
-                                      knownTotal: counts.knownTotal,
-                                      unknownCount: counts.unknownCount,
-                                      onAddContact: () => _openAddContact(context),
-                                      onOpenSettings: () {
-                                        Navigator.push(
-                                          context,
-                                          MaterialPageRoute(
-                                            builder: (_) => const SettingsScreen(),
-                                          ),
-                                        );
-                                      },
-                                      onOpenSupport: () => _openSupport(context),
-                                    ),
-                                  ),
-                                ),
-                              SliverPadding(
-                                padding: EdgeInsets.fromLTRB(
-                                  listPadding.left,
-                                  showSummary ? 0 : listPadding.top,
-                                  listPadding.right,
-                                  listPadding.bottom,
-                                ),
-                                sliver: SliverGrid(
-                                  delegate: SliverChildBuilderDelegate(
-                                        (_, i) => RepaintBoundary(child: items[i]),
-                                    childCount: items.length,
-                                  ),
-                                  gridDelegate:
-                                  SliverGridDelegateWithFixedCrossAxisCount(
-                                    crossAxisCount: cols,
-                                    mainAxisSpacing: 12,
-                                    crossAxisSpacing: 12,
-                                    childAspectRatio: _gridChildAspectRatio(
-                                      constraints,
-                                      cols,
-                                      listPadding,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ],
                           ),
                         );
                       },
+                    );
+                  }).toList(growable: false);
+
+                  if (cols == 1) {
+                    return Scrollbar(
+                      child: ListView.separated(
+                        key: const PageStorageKey('home-list'),
+                        physics: const AlwaysScrollableScrollPhysics(),
+                        padding: listPadding,
+                        itemCount: items.length + (showSummary ? 1 : 0),
+                        separatorBuilder: (_, __) => const SizedBox(height: 12),
+                        itemBuilder: (_, i) {
+                          if (showSummary && i == 0) {
+                            return _SummaryCard(
+                              knownTotal: counts.knownTotal,
+                              unknownCount: counts.unknownCount,
+                              onAddContact: () => _openAddContact(context),
+                              onOpenSettings: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => const SettingsScreen(),
+                                  ),
+                                );
+                              },
+                              onOpenSupport: () => _openSupport(context),
+                            );
+                          }
+                          final index = showSummary ? i - 1 : i;
+                          return items[index];
+                        },
+                      ),
+                    );
+                  }
+
+                  // 2–3 колонки (планшет/desktop/web)
+                  return Scrollbar(
+                    thumbVisibility: true,
+                    child: CustomScrollView(
+                      key: const PageStorageKey('home-grid'),
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      slivers: [
+                        if (showSummary)
+                          SliverPadding(
+                            padding: EdgeInsets.fromLTRB(
+                              listPadding.left,
+                              listPadding.top,
+                              listPadding.right,
+                              12,
+                            ),
+                            sliver: SliverToBoxAdapter(
+                              child: _SummaryCard(
+                                knownTotal: counts.knownTotal,
+                                unknownCount: counts.unknownCount,
+                                onAddContact: () => _openAddContact(context),
+                                onOpenSettings: () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) => const SettingsScreen(),
+                                    ),
+                                  );
+                                },
+                                onOpenSupport: () => _openSupport(context),
+                              ),
+                            ),
+                          ),
+                        SliverPadding(
+                          padding: EdgeInsets.fromLTRB(
+                            listPadding.left,
+                            showSummary ? 0 : listPadding.top,
+                            listPadding.right,
+                            listPadding.bottom,
+                          ),
+                          sliver: SliverGrid(
+                            delegate: SliverChildBuilderDelegate(
+                              (_, i) => RepaintBoundary(child: items[i]),
+                              childCount: items.length,
+                            ),
+                            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                              crossAxisCount: cols,
+                              mainAxisSpacing: 12,
+                              crossAxisSpacing: 12,
+                              childAspectRatio: _gridChildAspectRatio(
+                                constraints,
+                                cols,
+                                listPadding,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
-                  ),
-                ],
+                  );
+                },
               );
             },
           ),

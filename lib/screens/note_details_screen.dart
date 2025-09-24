@@ -242,21 +242,19 @@ class _NoteDetailsScreenState extends State<NoteDetailsScreen>
                       ),
                     ],
                   ),
+                  const SizedBox(height: 8),
+                  ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.red,
+                      foregroundColor: Colors.white,
+                    ),
+                    onPressed: _delete,
+                    child: const Text('Удалить заметку'),
+                  ),
                 ],
               ),
             ),
           ),
-        ),
-      ),
-      bottomNavigationBar: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-        child: ElevatedButton(
-          style: ElevatedButton.styleFrom(
-            backgroundColor: Colors.red,
-            foregroundColor: Colors.white,
-          ),
-          onPressed: _delete,
-          child: const Text('Удалить заметку'),
         ),
       ),
 
