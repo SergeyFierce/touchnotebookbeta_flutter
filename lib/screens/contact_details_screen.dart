@@ -1653,56 +1653,38 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
                     setState(() => _notesExpanded = v);
                     if (v) _scrollToCard(_notesCardKey);
                   },
-                  headerActions: _notes.isNotEmpty
-                      ? [
+                  headerActions: [
                     const Spacer(),
-                    TextButton(
-                      onPressed: () async {
-                        if (_contact.id == null) return;
-                        await Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => NotesListScreen(
-                              contact: _contact,
-                              onNoteRestored: (_) => _loadNotes(),
+                    if (_notes.isEmpty)
+                      TextButton.icon(
+                        onPressed: _contact.id == null ? null : _addNote,
+                        label: const Text('Добавить заметку'),
+                      )
+                    else
+                      TextButton(
+                        onPressed: () async {
+                          if (_contact.id == null) return;
+                          await Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => NotesListScreen(
+                                contact: _contact,
+                                onNoteRestored: (_) => _loadNotes(),
+                              ),
                             ),
-                          ),
-                        );
-                        await _loadNotes();
-                      },
-                      child: const Text('Все заметки'),
-                    ),
-                  ]
-                      : const [],
+                          );
+                          await _loadNotes();
+                        },
+                        child: const Text('Все заметки'),
+                      ),
+                  ],
                   children: _notes.isEmpty
-                      ? [
+                      ? const [
                     Card(
                       elevation: 0,
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          crossAxisAlignment: CrossAxisAlignment.center,
-                          children: [
-                            Icon(
-                              Icons.sticky_note_2_outlined,
-                              size: 40,
-                              color: Theme.of(context).hintColor,
-                            ),
-                            const SizedBox(height: 12),
-                            const Text(
-                              'Нет заметок',
-                              textAlign: TextAlign.center,
-                            ),
-                            const SizedBox(height: 20),
-                            ElevatedButton.icon(
-                              onPressed: _contact.id == null ? null : _addNote,
-                              icon: const Icon(Icons.add),
-                              label: const Text('Добавить заметку'),
-                            ),
-                          ],
-                        ),
+                      child: ListTile(
+                        leading: Icon(Icons.sticky_note_2_outlined),
+                        title: Text('Нет заметок'),
                       ),
                     ),
                   ]
