@@ -1262,31 +1262,33 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
           childrenPadding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
           onExpansionChanged: onChanged,
           maintainState: true,
-          trailing: const SizedBox.shrink(),
+
+          // ← стрелка теперь внутри заголовка
           title: Row(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              Expanded(
-                child: Row(
-                  children: [
-                    Text(
-                      title,
-                      style: Theme.of(context)
-                          .textTheme
-                          .titleMedium
-                          ?.copyWith(fontWeight: FontWeight.w700),
-                    ),
-                    const SizedBox(width: 8),
-                    AnimatedRotation(
-                      turns: expanded ? 0.5 : 0.0,
-                      duration: const Duration(milliseconds: 200),
-                      child: const Icon(Icons.expand_more),
-                    ),
-                  ],
-                ),
+              Text(
+                title,
+                style: Theme.of(context)
+                    .textTheme
+                    .titleMedium
+                    ?.copyWith(fontWeight: FontWeight.w700),
               ),
-              ...headerActions,
+              const SizedBox(width: 8),
+              AnimatedRotation(
+                turns: expanded ? 0.5 : 0.0,
+                duration: const Duration(milliseconds: 200),
+                child: const Icon(Icons.expand_more),
+              ),
             ],
           ),
+
+          // ← а actions (например «Все заметки») идут справа
+          trailing: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: headerActions,
+          ),
+
           children: children,
         ),
       ),
@@ -1654,22 +1656,21 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
                     if (v) _scrollToCard(_notesCardKey);
                   },
                   headerActions: [
-                    const Spacer(),
                     TextButton(
                       onPressed: _contact.id == null
                           ? null
                           : () async {
-                              await Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) => NotesListScreen(
-                                    contact: _contact,
-                                    onNoteRestored: (_) => _loadNotes(),
-                                  ),
-                                ),
-                              );
-                              await _loadNotes();
-                            },
+                        await Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => NotesListScreen(
+                              contact: _contact,
+                              onNoteRestored: (_) => _loadNotes(),
+                            ),
+                          ),
+                        );
+                        await _loadNotes();
+                      },
                       child: const Text('Все заметки'),
                     ),
                   ],
