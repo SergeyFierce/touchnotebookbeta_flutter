@@ -1,5 +1,7 @@
 import 'dart:async';
+import 'dart:collection';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:overlay_support/overlay_support.dart';
 
@@ -18,10 +20,14 @@ class NotesListScreen extends StatefulWidget {
   State<NotesListScreen> createState() => _NotesListScreenState();
 }
 
-enum SortNotesOption { dateDesc, dateAsc, textAsc, textDesc }
+// Оставляем только два варианта сортировки
+enum SortNotesOption { dateDesc, dateAsc }
 
 class _NotesListScreenState extends State<NotesListScreen> {
   final _db = ContactDatabase.instance;
+  final ScrollController _scroll = ScrollController();
+
+  // === данные ===
   List<Note> _notes = [];
 
   static const int _pageSize = 20;
@@ -32,11 +38,16 @@ class _NotesListScreenState extends State<NotesListScreen> {
   // --- сортировка ---
   SortNotesOption _sort = SortNotesOption.dateDesc;
 
-  // --- для эффекта подсветки и автоскролла (как в ContactList) ---
-  final ScrollController _scroll = ScrollController();
-  final Map<int, GlobalKey> _itemKeys = {};
+  // Кэш отсортированного списка, чтобы не пересортировывать на каждый build
+  List<Note> _sortedNotes = const [];
+
+  // --- подсветка и автоскролл ---
+  final LinkedHashMap<int, GlobalKey> _itemKeys = LinkedHashMap<int, GlobalKey>();
+  static const int _maxKeys = 300;
   int? _highlightId;
   int _pulseSeed = 0;
+
+  // overlay_support баннер для Undo; НЕ закрываем принудительно в dispose
   OverlaySupportEntry? _undoBanner;
 
   @override
@@ -50,47 +61,64 @@ class _NotesListScreenState extends State<NotesListScreen> {
   void dispose() {
     _scroll.removeListener(_onScroll);
     _scroll.dispose();
-    _undoBanner = null;
-    _undoBanner?.dismiss();
+    // Раньше тут был _undoBanner?.dismiss(); — удалили, чтобы баннер не исчезал при переходе
     super.dispose();
   }
 
+  // === загрузка ===
+
   Future<void> _loadNotes({bool reset = false}) async {
     if (reset) {
-      _notes.clear();
-      _page = 0;
-      _hasMore = true;
+      setState(() {
+        _notes.clear();
+        _sortedNotes = const [];
+        _page = 0;
+        _hasMore = true;
+        _itemKeys.clear();
+      });
     }
     await _loadMoreNotes();
   }
 
   void _onScroll() {
-    if (_scroll.position.pixels >=
-        _scroll.position.maxScrollExtent - 200) {
+    if (_scroll.position.pixels >= _scroll.position.maxScrollExtent - 200) {
       _loadMoreNotes();
     }
   }
 
   Future<void> _loadMoreNotes() async {
     if (widget.contact.id == null || _isLoading || !_hasMore) return;
+
     setState(() => _isLoading = true);
-    final notes = await _db.notesByContactPaged(
-      widget.contact.id!,
-      limit: _pageSize,
-      offset: _page * _pageSize,
-    );
+
+    List<Note> pageNotes = [];
+    try {
+      pageNotes = await _db.notesByContactPaged(
+        widget.contact.id!,
+        limit: _pageSize,
+        offset: _page * _pageSize,
+      );
+    } catch (e) {
+      _showErrorBanner('Не удалось загрузить заметки');
+    }
+
+    if (!mounted) return;
+
     setState(() {
-      _notes.addAll(notes);
-      _isLoading = false;
+      final existingIds = _notes.map((e) => e.id).toSet();
+      final unique = pageNotes.where((n) => !existingIds.contains(n.id)).toList();
+
+      _notes.addAll(unique);
       _page++;
-      if (notes.length < _pageSize) {
-        _hasMore = false;
-      }
+      _isLoading = false;
+      if (pageNotes.length < _pageSize) _hasMore = false;
+
+      _rebuildSorted();
     });
   }
 
-  // ----- сортировка -----
-  List<Note> get _sorted {
+  // ----- сортировка (кэшируем результат) -----
+  void _rebuildSorted() {
     final list = [..._notes];
     switch (_sort) {
       case SortNotesOption.dateDesc:
@@ -99,14 +127,8 @@ class _NotesListScreenState extends State<NotesListScreen> {
       case SortNotesOption.dateAsc:
         list.sort((a, b) => a.createdAt.compareTo(b.createdAt));
         break;
-      case SortNotesOption.textAsc:
-        list.sort((a, b) => a.text.toLowerCase().compareTo(b.text.toLowerCase()));
-        break;
-      case SortNotesOption.textDesc:
-        list.sort((a, b) => b.text.toLowerCase().compareTo(a.text.toLowerCase()));
-        break;
     }
-    return list;
+    _sortedNotes = list;
   }
 
   Future<void> _openSort() async {
@@ -118,26 +140,14 @@ class _NotesListScreenState extends State<NotesListScreen> {
             mainAxisSize: MainAxisSize.min,
             children: [
               RadioListTile<SortNotesOption>(
-                title: const Text('Новые сверху'),
+                title: const Text('Сначала новые'),
                 value: SortNotesOption.dateDesc,
                 groupValue: _sort,
                 onChanged: (v) => Navigator.pop(context, v),
               ),
               RadioListTile<SortNotesOption>(
-                title: const Text('Старые сверху'),
+                title: const Text('Сначала старые'),
                 value: SortNotesOption.dateAsc,
-                groupValue: _sort,
-                onChanged: (v) => Navigator.pop(context, v),
-              ),
-              RadioListTile<SortNotesOption>(
-                title: const Text('Текст A→Я'),
-                value: SortNotesOption.textAsc,
-                groupValue: _sort,
-                onChanged: (v) => Navigator.pop(context, v),
-              ),
-              RadioListTile<SortNotesOption>(
-                title: const Text('Текст Я→A'),
-                value: SortNotesOption.textDesc,
                 groupValue: _sort,
                 onChanged: (v) => Navigator.pop(context, v),
               ),
@@ -147,12 +157,19 @@ class _NotesListScreenState extends State<NotesListScreen> {
       },
     );
     if (result != null) {
-      setState(() => _sort = result);
+      setState(() {
+        _sort = result;
+        _rebuildSorted();
+      });
     }
   }
 
   GlobalKey _keyFor(Note n) {
     if (n.id == null) return GlobalKey();
+    if (_itemKeys.length >= _maxKeys && !_itemKeys.containsKey(n.id)) {
+      final oldestKey = _itemKeys.keys.first;
+      _itemKeys.remove(oldestKey);
+    }
     return _itemKeys[n.id!] ??= GlobalKey(debugLabel: 'note_${n.id}');
   }
 
@@ -191,8 +208,8 @@ class _NotesListScreenState extends State<NotesListScreen> {
         transitionsBuilder: (_, animation, __, child) {
           const begin = Offset(0.0, 1.0);
           const end = Offset.zero;
-          final tween = Tween(begin: begin, end: end)
-              .chain(CurveTween(curve: Curves.ease));
+          final tween =
+          Tween(begin: begin, end: end).chain(CurveTween(curve: Curves.ease));
           return SlideTransition(position: animation.drive(tween), child: child);
         },
       ),
@@ -200,8 +217,7 @@ class _NotesListScreenState extends State<NotesListScreen> {
     if (note != null) {
       await _loadNotes(reset: true);
       if (!mounted) return;
-      showSuccessBanner('Заметка добавлена');
-      // скролл и подсветка новой заметки (если у неё есть id)
+      showSuccessBanner('Заметка добавлена'); // overlay_support — живёт через роуты
       if (note.id != null) {
         await _maybeScrollTo(note.id!);
         _flashHighlight(note.id!);
@@ -219,7 +235,6 @@ class _NotesListScreenState extends State<NotesListScreen> {
       ),
     );
 
-    // поддержка трёх сценариев: удалено, восстановлено, обновлено
     if (result is Map && result.isNotEmpty) {
       if (result['deleted'] is Note) {
         await _loadNotes(reset: true);
@@ -240,12 +255,22 @@ class _NotesListScreenState extends State<NotesListScreen> {
 
   Future<void> _deleteNoteWithUndo(Note n) async {
     if (n.id != null) {
-      await _db.deleteNote(n.id!);
+      try {
+        await _db.deleteNote(n.id!);
+      } catch (_) {
+        _showErrorBanner('Не удалось удалить заметку');
+        return;
+      }
     }
-    setState(() => _notes.removeWhere((e) => e.id == n.id));
+    setState(() {
+      _notes.removeWhere((e) => e.id == n.id);
+      _rebuildSorted();
+    });
 
     if (!mounted) return;
     const duration = Duration(seconds: 4);
+
+    // Закроем предыдущий, если есть
     _undoBanner?.dismiss();
 
     _undoBanner = showUndoBanner(
@@ -254,13 +279,19 @@ class _NotesListScreenState extends State<NotesListScreen> {
       icon: Icons.delete_outline,
       onUndo: () async {
         _undoBanner = null;
-        final id = await _db.insertNote(n.copyWith(id: null));
-        await _loadNotes(reset: true);
-        if (!mounted) return;
-        await _maybeScrollTo(id);
-        _flashHighlight(id);
+        try {
+          final id = await _db.insertNote(n.copyWith(id: null));
+          await _loadNotes(reset: true);
+          if (!mounted) return;
+          await _maybeScrollTo(id);
+          _flashHighlight(id);
+        } catch (_) {
+          _showErrorBanner('Не удалось восстановить заметку');
+        }
       },
     );
+
+    HapticFeedback.mediumImpact();
   }
 
   Future<void> _showNoteMenu(Note n) async {
@@ -270,6 +301,7 @@ class _NotesListScreenState extends State<NotesListScreen> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            // Оставляем только «Детали заметки» и «Удалить»
             ListTile(
               leading: const Icon(Icons.info_outline),
               title: const Text('Детали заметки'),
@@ -288,19 +320,41 @@ class _NotesListScreenState extends State<NotesListScreen> {
     if (action == 'details') {
       await _openDetails(n);
     } else if (action == 'delete') {
+      HapticFeedback.selectionClick();
       await _deleteNoteWithUndo(n);
     }
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final data = _sorted;
-
-    final content = data.isEmpty
-        ? const Center(child: Text('Нет заметок'))
+  Widget _buildList(List<Note> data) {
+    final listView = data.isEmpty
+        ? ListView(
+      controller: _scroll,
+      physics: const AlwaysScrollableScrollPhysics(
+        parent: BouncingScrollPhysics(),
+      ),
+      padding: const EdgeInsets.fromLTRB(16, 24, 16, 16),
+      children: [
+        const SizedBox(height: 32),
+        Center(
+          child: Column(
+            children: [
+              const Text('Нет заметок'),
+              const SizedBox(height: 12),
+              ElevatedButton.icon(
+                onPressed: _addNote,
+                icon: const Icon(Icons.add),
+                label: const Text('Добавить заметку'),
+              ),
+            ],
+          ),
+        ),
+      ],
+    )
         : ListView.separated(
       controller: _scroll,
-      physics: const BouncingScrollPhysics(),
+      physics: const AlwaysScrollableScrollPhysics(
+        parent: BouncingScrollPhysics(),
+      ),
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
       itemCount: data.length + (_hasMore ? 1 : 0),
       separatorBuilder: (_, __) => const SizedBox(height: 8),
@@ -321,11 +375,24 @@ class _NotesListScreenState extends State<NotesListScreen> {
             pulse: isHighlighted,
             pulseSeed: _pulseSeed,
             onTap: () => _openDetails(n),
-            onLongPress: () => _showNoteMenu(n),
+            onLongPress: () {
+              HapticFeedback.selectionClick();
+              _showNoteMenu(n);
+            },
           ),
         );
       },
     );
+
+    return RefreshIndicator(
+      onRefresh: () => _loadNotes(reset: true),
+      child: listView,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final data = _sortedNotes;
 
     return Scaffold(
       appBar: AppBar(
@@ -338,11 +405,24 @@ class _NotesListScreenState extends State<NotesListScreen> {
           ),
         ],
       ),
-      body: content,
+      body: _buildList(data),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _addNote,
         label: const Text('Добавить заметку'),
       ),
+    );
+  }
+
+  void _showErrorBanner(String message) {
+    // overlay_support уведомление — не зависит от текущего экрана
+    showSimpleNotification(
+      Text(message),
+      background: Theme.of(context).colorScheme.error,
+      foreground: Theme.of(context).colorScheme.onError,
+      leading: const Icon(Icons.error_outline),
+      elevation: 2,
+      autoDismiss: true,
+      slideDismissDirection: DismissDirection.up,
     );
   }
 }
@@ -438,12 +518,12 @@ class _NoteCardState extends State<_NoteCard> with TickerProviderStateMixin {
       side: BorderSide(color: Theme.of(context).dividerColor),
     );
 
-    final date = DateFormat('dd.MM.yyyy').format(widget.note.createdAt); // без времени
+    // Русская локаль + время
+    final date = DateFormat('dd.MM.yyyy HH:mm', 'ru').format(widget.note.createdAt);
 
     return AnimatedBuilder(
       animation: _pulseCtrl,
       builder: (context, child) {
-        final glow = scheme.primary.withOpacity(0.14 * _glowAnim.value);
         final shadowColor = scheme.primary.withOpacity(0.20 * _glowAnim.value);
         final blur = 24 * _glowAnim.value + 0.0;
 
@@ -516,4 +596,3 @@ class _NoteCardState extends State<_NoteCard> with TickerProviderStateMixin {
     );
   }
 }
-
