@@ -1,28 +1,25 @@
-import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../models/note.dart';
 import '../services/contact_database.dart';
-import '../widgets/system_notifications.dart';
 
 class NoteDetailsScreen extends StatefulWidget {
   final Note note;
+
   const NoteDetailsScreen({super.key, required this.note});
 
   @override
   State<NoteDetailsScreen> createState() => _NoteDetailsScreenState();
 }
 
-class _NoteDetailsScreenState extends State<NoteDetailsScreen>
-    with SingleTickerProviderStateMixin {
-  late Note _note;          // актуальная заметка на экране
-  late Note _savedSnapshot; // «последняя сохранённая» версия
+class _NoteDetailsScreenState extends State<NoteDetailsScreen> {
+  late Note _note;
+  late Note _savedSnapshot;
 
   final _formKey = GlobalKey<FormState>();
   final _textController = TextEditingController();
   DateTime _date = DateTime.now();
 
-  bool _isEditing = false;
   @override
   void initState() {
     super.initState();
@@ -36,143 +33,78 @@ class _NoteDetailsScreenState extends State<NoteDetailsScreen>
     super.dispose();
   }
 
-  // ==== UI helpers (как в AddNote) ====
-
-  InputDecoration _outlinedDec({
-    required String label,
-    String? hint,
-    IconData? prefixIcon,
-  }) {
-    final theme = Theme.of(context);
-    return InputDecoration(
-      labelText: label,
-      hintText: hint,
-      prefixIcon: prefixIcon != null ? Icon(prefixIcon) : null,
-      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-      enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
-        borderSide: BorderSide(color: theme.dividerColor),
-      ),
-      isDense: true,
-      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
-    );
-  }
-
-  Widget _sectionCard({required String title, required List<Widget> children}) {
-    final theme = Theme.of(context);
-    return Card(
-      elevation: 0,
-      margin: const EdgeInsets.only(bottom: 16),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      clipBehavior: Clip.antiAlias,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(title, style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
-            const SizedBox(height: 12),
-            ...children,
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _borderedTile({required Widget child}) {
-    final theme = Theme.of(context);
-    return Material(
-      color: Colors.transparent,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      clipBehavior: Clip.antiAlias,
-      child: Container(
-        decoration: BoxDecoration(
-          border: Border.all(color: theme.dividerColor),
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: child,
-      ),
-    );
-  }
-
-  // ==== загрузка/состояние ====
-
   void _loadFromNote() {
     _textController.text = _note.text;
     _date = _note.createdAt;
-    _savedSnapshot = _note;
-    _isEditing = false; // режим просмотра по умолчанию
+    _savedSnapshot = _note.copyWith(); // копия снапшота
     setState(() {});
   }
 
-  bool get _isDirty {
-    return _textController.text.trim() != _savedSnapshot.text ||
-        !_sameDay(_date, _savedSnapshot.createdAt);
-  }
+  bool get _isDirty =>
+      _textController.text.trim() != _savedSnapshot.text ||
+          !DateUtils.isSameDay(_date, _savedSnapshot.createdAt);
 
-  bool _sameDay(DateTime a, DateTime b) =>
-      a.year == b.year && a.month == b.month && a.day == b.day;
-
-  // ==== действия ====
+  bool get _canSave =>
+      _isDirty && (_formKey.currentState?.validate() ?? false);
 
   Future<void> _pickDate() async {
-    final now = DateTime.now();
     final picked = await showDatePicker(
       context: context,
       initialDate: _date,
       firstDate: DateTime(2000),
-      lastDate: now,
+      lastDate: DateTime.now(),
       locale: const Locale('ru'),
     );
     if (picked != null) {
-      setState(() {
-        _date = DateTime(picked.year, picked.month, picked.day); // только дата
-        _isEditing = _isDirty;
-      });
+      setState(() => _date = DateTime(picked.year, picked.month, picked.day));
     }
   }
 
-  bool get _canSave => _isDirty && (_formKey.currentState?.validate() ?? false);
-
   Future<void> _save() async {
     if (!_canSave) return;
+
     final updated = _note.copyWith(
       text: _textController.text.trim(),
       createdAt: _date,
     );
-    await ContactDatabase.instance.updateNote(updated);
-    _note = updated;
-    _savedSnapshot = updated;
-    setState(() => _isEditing = false);
 
-    showSuccessBanner('Заметка сохранена');
+    try {
+      await ContactDatabase.instance.updateNote(updated);
+      _note = updated;
+      _savedSnapshot = updated.copyWith();
 
-    if (!mounted) return;
-    Navigator.pop(context, {'updated': true});
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Заметка сохранена')),
+      );
+      Navigator.pop(context, {'updated': true});
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Ошибка при сохранении: $e')),
+      );
+    }
   }
-
 
   Future<void> _delete() async {
     final ok = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Удалить заметку?'),
-        content: const Text('Это действие нельзя отменить.'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Отмена')),
-          TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('Удалить', style: TextStyle(color: Colors.red))),
-        ],
-      ),
+      builder: (context) => const _DeleteDialog(),
     );
     if (ok != true) return;
 
-    if (_note.id != null) {
-      await ContactDatabase.instance.deleteNote(_note.id!);
+    try {
+      if (_note.id != null) {
+        await ContactDatabase.instance.deleteNote(_note.id!);
+      }
+      if (!mounted) return;
+      Navigator.pop(context, {'deleted': _note});
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Ошибка при удалении: $e')),
+      );
     }
-
-    if (!mounted) return;
-
-    Navigator.pop(context, {'deleted': _note});
   }
 
   @override
@@ -182,13 +114,19 @@ class _NoteDetailsScreenState extends State<NoteDetailsScreen>
     return Scaffold(
       appBar: AppBar(
         leading: IconButton(
-          tooltip: 'Закрыть',
-          icon: const Icon(Icons.close),
-          onPressed: () => Navigator.pop(context),
+          tooltip: _isDirty ? 'Отменить изменения' : 'Назад',
+          icon: Icon(_isDirty ? Icons.close : Icons.arrow_back),
+          onPressed: () {
+            if (_isDirty) {
+              _loadFromNote(); // откат изменений
+            } else {
+              Navigator.pop(context); // обычный выход
+            }
+          },
         ),
         title: const Text('Заметка'),
         actions: [
-          if (_isEditing)
+          if (_isDirty)
             IconButton(
               tooltip: 'Сохранить',
               icon: const Icon(Icons.check),
@@ -208,39 +146,40 @@ class _NoteDetailsScreenState extends State<NoteDetailsScreen>
               child: ListView(
                 physics: const BouncingScrollPhysics(),
                 children: [
-                  _sectionCard(
+                  SectionCard(
                     title: 'Текст',
-                    children: [
-                      TextFormField(
-                        controller: _textController,
-                        minLines: 1,
-                        maxLines: null,
-                        textInputAction: TextInputAction.newline,
-                        decoration: _outlinedDec(
-                          label: 'Текст заметки*',
-                          hint: 'Введите текст',
-                          prefixIcon: Icons.notes_outlined,
-                        ),
-                        validator: (v) => (v == null || v.trim().isEmpty) ? 'Введите текст' : null,
-                        onChanged: (_) => setState(() => _isEditing = _isDirty),
+                    child: TextFormField(
+                      controller: _textController,
+                      minLines: 1,
+                      maxLines: null,
+                      textInputAction: TextInputAction.newline,
+                      decoration: AppDecorations.input(
+                        'Текст заметки*',
+                        hint: 'Введите текст',
+                        prefixIcon: Icons.notes,
                       ),
-                    ],
+                      validator: _validateNotEmpty,
+                      onChanged: (_) => setState(() {}),
+                    ),
                   ),
-                  _sectionCard(
+                  SectionCard(
                     title: 'Дата',
-                    children: [
-                      _borderedTile(
-                        child: ListTile(
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                          leading: const Icon(Icons.event_outlined),
-                          title: const Text('Дата добавления'),
-                          subtitle: Text(dateStr),
-                          trailing: const Icon(Icons.arrow_drop_down),
-                          onTap: _pickDate,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    child: BorderedTile(
+                      child: ListTile(
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 4,
+                        ),
+                        leading: const Icon(Icons.event_outlined),
+                        title: const Text('Дата добавления'),
+                        subtitle: Text(dateStr),
+                        trailing: const Icon(Icons.arrow_drop_down),
+                        onTap: _pickDate,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
                         ),
                       ),
-                    ],
+                    ),
                   ),
                   const SizedBox(height: 8),
                   ElevatedButton(
@@ -257,8 +196,102 @@ class _NoteDetailsScreenState extends State<NoteDetailsScreen>
           ),
         ),
       ),
+    );
+  }
 
+  String? _validateNotEmpty(String? v) =>
+      (v == null || v.trim().isEmpty) ? 'Введите текст' : null;
+}
+
+// ==== Дополнительные виджеты/утилиты ====
+
+class AppDecorations {
+  static InputDecoration input(
+      String label, {
+        String? hint,
+        IconData? prefixIcon,
+      }) {
+    return InputDecoration(
+      labelText: label,
+      hintText: hint,
+      prefixIcon: prefixIcon != null ? Icon(prefixIcon) : null,
+      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+      isDense: true,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
     );
   }
 }
 
+class SectionCard extends StatelessWidget {
+  final String title;
+  final Widget child;
+
+  const SectionCard({super.key, required this.title, required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Card(
+      margin: const EdgeInsets.only(bottom: 16),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              title,
+              style: theme.textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 12),
+            child,
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class BorderedTile extends StatelessWidget {
+  final Widget child;
+  const BorderedTile({super.key, required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      decoration: BoxDecoration(
+        border: Border.all(color: theme.dividerColor),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: child,
+    );
+  }
+}
+
+class _DeleteDialog extends StatelessWidget {
+  const _DeleteDialog();
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Удалить заметку?'),
+      content: const Text('Это действие нельзя отменить.'),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context, false),
+          child: const Text('Отмена'),
+        ),
+        TextButton(
+          onPressed: () => Navigator.pop(context, true),
+          child: const Text(
+            'Удалить',
+            style: TextStyle(color: Colors.red),
+          ),
+        ),
+      ],
+    );
+  }
+}

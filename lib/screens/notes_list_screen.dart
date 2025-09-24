@@ -356,20 +356,10 @@ class _NotesListScreenState extends State<NotesListScreen> {
         parent: BouncingScrollPhysics(),
       ),
       padding: const EdgeInsets.fromLTRB(16, 24, 16, 16),
-      children: [
-        const SizedBox(height: 32),
+      children: const [
+        SizedBox(height: 32),
         Center(
-          child: Column(
-            children: [
-              const Text('Нет заметок'),
-              const SizedBox(height: 12),
-              ElevatedButton.icon(
-                onPressed: _addNote,
-                icon: const Icon(Icons.add),
-                label: const Text('Добавить заметку'),
-              ),
-            ],
-          ),
+          child: Text('Нет заметок'),
         ),
       ],
     )
