@@ -243,8 +243,10 @@ class _NotesListScreenState extends State<NotesListScreen> {
 
     if (result is Map && result.isNotEmpty) {
       if (result['deleted'] is Note) {
+        final deleted = result['deleted'] as Note;
         await _loadNotes(reset: true);
         if (!mounted) return;
+        _showUndoBannerForDeleted(deleted);
       } else if (result['restored'] is Note) {
         final restored = result['restored'] as Note;
         await _loadNotes(reset: true);
@@ -278,9 +280,13 @@ class _NotesListScreenState extends State<NotesListScreen> {
     });
 
     if (!mounted) return;
+    _showUndoBannerForDeleted(n);
+    HapticFeedback.mediumImpact();
+  }
+
+  void _showUndoBannerForDeleted(Note snapshot) {
     const duration = Duration(seconds: 4);
 
-    // Закроем предыдущий, если есть
     _undoBanner?.dismiss();
 
     _undoBanner = showUndoBanner(
@@ -290,8 +296,8 @@ class _NotesListScreenState extends State<NotesListScreen> {
       onUndo: () async {
         _undoBanner = null;
         try {
-          final id = await _db.insertNote(n.copyWith(id: null));
-          final restored = n.copyWith(id: id);
+          final id = await _db.insertNote(snapshot.copyWith(id: null));
+          final restored = snapshot.copyWith(id: id);
           if (!mounted) {
             widget.onNoteRestored?.call(restored);
             return;
@@ -309,8 +315,6 @@ class _NotesListScreenState extends State<NotesListScreen> {
         }
       },
     );
-
-    HapticFeedback.mediumImpact();
   }
 
   Future<void> _showNoteMenu(Note n) async {
