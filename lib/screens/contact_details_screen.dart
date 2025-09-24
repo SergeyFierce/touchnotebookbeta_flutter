@@ -6,15 +6,12 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:characters/characters.dart';
 import 'package:overlay_support/overlay_support.dart';
 
-
-import '../app.dart'; // для App.navigatorKey (глобальная навигация)
 import '../models/contact.dart';
 import '../models/note.dart';
 import '../services/contact_database.dart';
 import '../widgets/system_notifications.dart';
 import 'notes_list_screen.dart';
 import 'add_note_screen.dart';
-import 'note_details_screen.dart';
 import 'contact_list_screen.dart';
 
 class ContactDetailsScreen extends StatefulWidget {
@@ -87,7 +84,7 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
           ),
         ],
       ),
-      onTap: () => _openNote(note),
+      onTap: null,
       isLast: isLast,
     );
   }
@@ -95,7 +92,7 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
   Widget _sheetRow({
     required Widget leading,
     required Widget right,
-    required VoidCallback onTap,
+    VoidCallback? onTap,
     bool isLast = false,
   }) {
     final theme = Theme.of(context);
@@ -601,36 +598,6 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
       await _loadNotes();
       if (!mounted) return;
       showSuccessBanner('Заметка добавлена');
-    }
-  }
-
-  Future<void> _openNote(Note note) async {
-    final result = await Navigator.push(
-      context,
-      MaterialPageRoute(builder: (_) => NoteDetailsScreen(note: note)),
-    );
-
-    if (result is Map && result['deleted'] is Note) {
-      final deleted = result['deleted'] as Note;
-      await _loadNotes();
-      if (!mounted) return;
-      showSystemNotification(
-        'Заметка удалена',
-        style: SystemNotificationStyle.warning,
-        iconOverride: Icons.delete_outline,
-        actionLabel: 'Undo',
-        onAction: () async {
-          final id = await ContactDatabase.instance
-              .insertNote(deleted.copyWith(id: null));
-          await _loadNotes();
-          if (!mounted) return;
-          final restored = deleted.copyWith(id: id);
-          Navigator.push(
-            context,
-            MaterialPageRoute(builder: (_) => NoteDetailsScreen(note: restored)),
-          );
-        },
-      );
     }
   }
 

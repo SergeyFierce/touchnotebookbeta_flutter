@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import 'package:overlay_support/overlay_support.dart';
 import '../models/note.dart';
 import '../services/contact_database.dart';
 import '../widgets/system_notifications.dart';
@@ -24,8 +23,6 @@ class _NoteDetailsScreenState extends State<NoteDetailsScreen>
   DateTime _date = DateTime.now();
 
   bool _isEditing = false;
-  OverlaySupportEntry? _undoBanner;
-
   @override
   void initState() {
     super.initState();
@@ -36,8 +33,6 @@ class _NoteDetailsScreenState extends State<NoteDetailsScreen>
   @override
   void dispose() {
     _textController.dispose();
-    _undoBanner = null;
-    _undoBanner?.dismiss();
     super.dispose();
   }
 
@@ -175,34 +170,9 @@ class _NoteDetailsScreenState extends State<NoteDetailsScreen>
       await ContactDatabase.instance.deleteNote(_note.id!);
     }
 
-    const duration = Duration(seconds: 4);
-    _undoBanner?.dismiss();
+    if (!mounted) return;
 
-    _undoBanner = showUndoBanner(
-      message: 'Заметка удалена',
-      duration: duration,
-      icon: Icons.delete_outline,
-      onUndo: () async {
-        _undoBanner = null;
-        final newId = await ContactDatabase.instance.insertNote(
-          _note.copyWith(id: null),
-        );
-        _note = _note.copyWith(id: newId);
-        _savedSnapshot = _note;
-        if (!mounted) return;
-        setState(() {
-          _isEditing = false;
-        });
-        Navigator.pop(context, {'restored': _note});
-      },
-    );
-
-    Future.delayed(duration, () {
-      if (mounted) {
-        _undoBanner = null;
-        Navigator.pop(context, {'deleted': _note});
-      }
-    });
+    Navigator.pop(context, {'deleted': _note});
   }
 
   @override
