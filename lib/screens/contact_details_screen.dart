@@ -1666,7 +1666,10 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
                           await Navigator.push(
                             context,
                             MaterialPageRoute(
-                              builder: (_) => NotesListScreen(contact: _contact),
+                              builder: (_) => NotesListScreen(
+                                contact: _contact,
+                                onNoteRestored: (_) => _loadNotes(),
+                              ),
                             ),
                           );
                           await _loadNotes();
