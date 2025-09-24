@@ -1,5 +1,3 @@
-library add_contact_screen;
-
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:mask_text_input_formatter/mask_text_input_formatter.dart';
@@ -9,9 +7,6 @@ import 'package:characters/characters.dart';
 import '../models/contact.dart';
 import '../services/contact_database.dart';
 import '../widgets/system_notifications.dart';
-
-part 'add_contact/add_contact_controller.dart';
-part 'add_contact/add_contact_preview.dart';
 
 /// Словари (централизовано, без «магических» строк)
 abstract class Dict {
@@ -35,78 +30,35 @@ class AddContactScreen extends StatefulWidget {
 }
 
 class _AddContactScreenState extends State<AddContactScreen> {
-  late final AddContactFormController _form;
+  final _formKey = GlobalKey<FormState>();
+  final _scroll = ScrollController();
 
-  GlobalKey<FormState> get _formKey => _form.formKey;
-  ScrollController get _scroll => _form.scrollController;
+  // Keys для автоскролла к ошибкам
+  final _nameKey = GlobalKey();
+  final _phoneKey = GlobalKey();
+  final _categoryKey = GlobalKey();
+  final _statusKey = GlobalKey();
+  final _addedKey = GlobalKey();
 
-  GlobalKey get _nameKey => _form.nameKey;
-  GlobalKey get _phoneKey => _form.phoneKey;
-  GlobalKey get _categoryKey => _form.categoryKey;
-  GlobalKey get _statusKey => _form.statusKey;
-  GlobalKey get _addedKey => _form.addedKey;
-  GlobalKey get _extraCardKey => _form.extraCardKey;
+  // Controllers
+  final _nameController = TextEditingController();
+  final _birthController = TextEditingController();
+  final _professionController = TextEditingController();
+  final _cityController = TextEditingController();
+  final _phoneController = TextEditingController();
+  final _emailController = TextEditingController();
+  final _socialController = TextEditingController(); // единый источник правды
+  final _categoryController = TextEditingController();
+  final _statusController = TextEditingController();
+  final _commentController = TextEditingController();
+  final _addedController = TextEditingController();
 
-  TextEditingController get _nameController => _form.nameController;
-  TextEditingController get _birthController => _form.birthController;
-  TextEditingController get _professionController => _form.professionController;
-  TextEditingController get _cityController => _form.cityController;
-  TextEditingController get _phoneController => _form.phoneController;
-  TextEditingController get _emailController => _form.emailController;
-  TextEditingController get _socialController => _form.socialController;
-  TextEditingController get _categoryController => _form.categoryController;
-  TextEditingController get _statusController => _form.statusController;
-  TextEditingController get _commentController => _form.commentController;
-  TextEditingController get _addedController => _form.addedController;
+  // --- UI state ---
+  bool _submitted = false;
+  bool _saving = false;
 
-  bool get _submitted => _form.submitted;
-  set _submitted(bool value) => _form.setSubmitted(value);
-
-  bool get _saving => _form.saving;
-  set _saving(bool value) => _form.setSaving(value);
-
-  DateTime? get _birthDate => _form.birthDate;
-  set _birthDate(DateTime? value) => _form.setBirthDate(value);
-
-  int? get _ageManual => _form.ageManual;
-  set _ageManual(int? value) => _form.setAgeManual(value);
-
-  String? get _category => _form.category;
-  set _category(String? value) => _form.setCategory(value);
-
-  String? get _status => _form.status;
-  set _status(String? value) => _form.setStatus(value);
-
-  DateTime get _addedDate => _form.addedDate;
-  set _addedDate(DateTime value) => _form.updateAddedDate(value);
-
-  Set<String> get _tags => _form.tags;
-
-  bool get _birthOpen => _form.birthOpen;
-  set _birthOpen(bool value) => _form.setBirthOpen(value);
-
-  bool get _socialOpen => _form.socialOpen;
-  set _socialOpen(bool value) => _form.setSocialOpen(value);
-
-  bool get _categoryOpen => _form.categoryOpen;
-  set _categoryOpen(bool value) => _form.setCategoryOpen(value);
-
-  bool get _statusOpen => _form.statusOpen;
-  set _statusOpen(bool value) => _form.setStatusOpen(value);
-
-  bool get _addedOpen => _form.addedOpen;
-  set _addedOpen(bool value) => _form.setAddedOpen(value);
-
-  bool get _extraExpanded => _form.extraExpanded;
-  set _extraExpanded(bool value) => _form.setExtraExpanded(value);
-
-  FocusNode get _focusBirth => _form.focusBirth;
-  FocusNode get _focusSocial => _form.focusSocial;
-  FocusNode get _focusCategory => _form.focusCategory;
-  FocusNode get _focusStatus => _form.focusStatus;
-  FocusNode get _focusAdded => _form.focusAdded;
-
-  MaskTextInputFormatter get _phoneMask => _form.phoneMask;
+  // --- key для «Дополнительно» ---
+  final _extraCardKey = GlobalKey();
 
   Future<void> _scrollToCard(GlobalKey key) async {
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -127,32 +79,406 @@ class _AddContactScreenState extends State<AddContactScreen> {
     FocusScope.of(context).requestFocus(_focusCategory);
   }
 
-  void _onFormChanged() {
-    if (mounted) setState(() {});
+  // ==== PREVIEW HELPERS ====
+  Color _avatarBgFor(String seed, ColorScheme scheme) {
+    int h = 0;
+    for (final r in seed.runes) {
+      h = (h * 31 + r) & 0x7fffffff;
+    }
+    final hue = (h % 360).toDouble();
+    final hsl = HSLColor.fromAHSL(1.0, hue, 0.45, 0.55);
+    return hsl.toColor();
+  }
+
+  IconData _statusIcon(String s) {
+    switch (s) {
+      case 'Активный':
+        return Icons.check_circle;
+      case 'Пассивный':
+        return Icons.pause_circle;
+      case 'Потерянный':
+        return Icons.cancel;
+      case 'Холодный':
+        return Icons.ac_unit;
+      case 'Тёплый':
+        return Icons.local_fire_department;
+      default:
+        return Icons.label_outline;
+    }
+  }
+
+  IconData _categoryIcon(String? c) {
+    switch (c) {
+      case 'Партнёр':
+        return Icons.handshake;
+      case 'Клиент':
+        return Icons.people;
+      case 'Потенциальный':
+        return Icons.person_add_alt_1;
+      default:
+        return Icons.person_outline;
+    }
+  }
+
+  Color _statusColor(String status) {
+    switch (status) {
+      case 'Активный':
+        return Colors.green;
+      case 'Пассивный':
+        return Colors.orange;
+      case 'Потерянный':
+        return Colors.red;
+      case 'Холодный':
+        return Colors.cyan;
+      case 'Тёплый':
+        return Colors.pink;
+      default:
+        return Colors.grey;
+    }
+  }
+
+  // читабельный цвет текста на ярких чипах статуса
+  Color _onStatus(Color bg) {
+    final brightness = bg.computeLuminance();
+    return brightness > 0.5 ? Colors.black : Colors.white;
+  }
+
+  Color _tagColor(String tag) {
+    switch (tag) {
+      case 'Новый':
+        return Colors.white;
+      case 'Напомнить':
+        return Colors.purple;
+      case 'VIP':
+        return Colors.yellow;
+      default:
+        return Colors.grey.shade200;
+    }
+  }
+
+  Color _tagTextColor(String tag) {
+    switch (tag) {
+      case 'Новый':
+      case 'VIP':
+        return Colors.black;
+      case 'Напомнить':
+        return Colors.white;
+      default:
+        return Colors.black;
+    }
+  }
+
+  // Прогрессивная маска телефона для превью
+  String _previewPhoneMasked() {
+    final digits = _phoneMask.getUnmaskedText(); // 0..10
+    const mask = '+7 (XXX) XXX-XX-XX';
+    final buf = StringBuffer();
+    int di = 0;
+    for (int i = 0; i < mask.length; i++) {
+      final ch = mask[i];
+      if (ch == 'X') {
+        if (di < digits.length) {
+          buf.write(digits[di]);
+          di++;
+        } else {
+          buf.write('X');
+        }
+      } else {
+        buf.write(ch);
+      }
+    }
+    return buf.toString();
+  }
+
+  Widget _previewCaption(BuildContext context, {String text = 'Предпросмотр карточки'}) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(4, 0, 4, 8),
+      child: Row(
+        children: [
+          Icon(Icons.visibility_outlined, size: 16, color: theme.hintColor),
+          const SizedBox(width: 6),
+          Text(
+            text,
+            style: theme.textTheme.labelMedium?.copyWith(color: theme.hintColor),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildHeaderPreview(BuildContext context) {
+    const double kStatusReserve = 120;
+    final scheme = Theme.of(context).colorScheme;
+    final name = _nameController.text.trim().isEmpty ? 'Новый контакт' : _nameController.text.trim();
+    final statusValue = (_status ?? _statusController.text).trim();
+    final statusText = statusValue.isEmpty ? 'Статус' : statusValue;
+    final statusBg = statusValue.isEmpty ? Colors.grey : _statusColor(statusValue);
+    final onStatus = _onStatus(statusBg);
+    final tags = _tags.toList();
+
+    Widget avatar() {
+      final bg = _avatarBgFor(name, scheme);
+      final initials = _initials(name);
+      return Container(
+        width: 44,
+        height: 44,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          border: Border.all(color: scheme.surface, width: 0),
+        ),
+        child: CircleAvatar(
+          backgroundColor: bg,
+          child: Text(
+            initials.isEmpty ? '?' : initials,
+            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+              color: Colors.white,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Semantics(
+      label: 'Превью контакта. Имя: $name. Статус: $statusText. Телефон: ${_previewPhoneMasked()}.',
+      child: Card(
+        elevation: 2,
+        margin: EdgeInsets.zero,
+        color: scheme.surfaceVariant,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Stack(
+            children: [
+              Padding(
+                padding: const EdgeInsets.only(right: kStatusReserve),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        avatar(),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            name,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w600),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      _previewPhoneMasked(),
+                      style: Theme.of(context).textTheme.bodyMedium,
+                    ),
+                    const SizedBox(height: 8),
+                    if (tags.isNotEmpty)
+                      Wrap(
+                        spacing: 4,
+                        runSpacing: 4,
+                        children: [
+                          for (final tag in tags)
+                            Chip(
+                              label: Text(
+                                tag,
+                                style: Theme.of(context).textTheme.bodySmall?.copyWith(fontSize: 10, color: _tagTextColor(tag)),
+                              ),
+                              backgroundColor: _tagColor(tag),
+                              visualDensity: const VisualDensity(horizontal: -4, vertical: -4),
+                              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 0),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+                            ),
+                        ],
+                      ),
+                  ],
+                ),
+              ),
+              Positioned(
+                top: 0,
+                right: 0,
+                child: Chip(
+                  label: Text(
+                    statusText,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(fontSize: 10, color: onStatus),
+                  ),
+                  backgroundColor: statusBg,
+                  visualDensity: const VisualDensity(horizontal: -4, vertical: -4),
+                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 0),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(30),
+                    side: BorderSide(color: onStatus.withOpacity(0.25), width: 1),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ====== Состояния ======
+  DateTime? _birthDate;
+  int? _ageManual;
+  String? _category;
+  String? _status;
+  DateTime _addedDate = DateTime.now();
+  final Set<String> _tags = {};
+  bool _birthOpen = false;
+  bool _socialOpen = false;
+  bool _categoryOpen = false;
+  bool _statusOpen = false;
+  bool _addedOpen = false;
+  bool _extraExpanded = false; // «Дополнительно» изначально свёрнут
+
+  // FocusNodes — чтобы переводить фокус на «тайловые» поля
+  final FocusNode _focusBirth = FocusNode(skipTraversal: true);
+  final FocusNode _focusSocial = FocusNode(skipTraversal: true);
+  final FocusNode _focusCategory = FocusNode(skipTraversal: true);
+  final FocusNode _focusStatus = FocusNode(skipTraversal: true);
+  final FocusNode _focusAdded = FocusNode(skipTraversal: true);
+
+  final _phoneMask = MaskTextInputFormatter(
+    mask: '+7 (###) ###-##-##',
+    filter: {'#': RegExp(r'[0-9]')},
+  );
+
+  // ===== Брендовые иконки (из папки assets/) =====
+  static const Map<String, String> _brandSlug = {
+    'Telegram': 'telegram',
+    'VK': 'vk',
+    'Instagram': 'instagram',
+    'WhatsApp': 'whatsapp',
+    'TikTok': 'tiktok',
+    'Одноклассники': 'odnoklassniki',
+    'Facebook': 'facebook',
+    'Twitter': 'twitterx',
+    'X': 'twitterx',
+  };
+
+  String _brandAssetPath(String value) {
+    final slug = _brandSlug[value];
+    if (slug == null) return '';
+    return 'assets/$slug.svg';
+  }
+
+  Widget _brandIcon(String value, {double size = 24}) {
+    final path = _brandAssetPath(value);
+    if (path.isEmpty) return const Icon(Icons.public);
+    return SvgPicture.asset(
+      path,
+      width: size,
+      height: size,
+      semanticsLabel: value,
+      placeholderBuilder: (_) => const Icon(Icons.public),
+    );
   }
 
   @override
   void initState() {
     super.initState();
-    _form = AddContactFormController(initialCategory: widget.category)
-      ..addListener(_onFormChanged);
+    if (widget.category != null) {
+      _category = widget.category;
+      _categoryController.text = widget.category!;
+    }
+    _addedController.text = DateFormat('dd.MM.yyyy').format(_addedDate);
+
+    // Обновление превью по ключевым полям
+    _nameController.addListener(() => setState(() {}));
+    _phoneController.addListener(() => setState(() {}));
+    _emailController.addListener(() => setState(() {}));
+    _professionController.addListener(() => setState(() {}));
+    _cityController.addListener(() => setState(() {}));
+    _commentController.addListener(() => setState(() {}));
+
+    _focusCategory.addListener(() => setState(() {}));
+    _focusStatus.addListener(() => setState(() {}));
+    _focusSocial.addListener(() => setState(() {}));
+    _focusBirth.addListener(() => setState(() {}));
+    _focusAdded.addListener(() => setState(() {}));
   }
 
   @override
   void dispose() {
-    _form.removeListener(_onFormChanged);
-    _form.dispose();
+    _scroll.dispose();
+    _nameController.dispose();
+    _birthController.dispose();
+    _professionController.dispose();
+    _cityController.dispose();
+    _phoneController.dispose();
+    _emailController.dispose();
+    _socialController.dispose();
+    _categoryController.dispose();
+    _statusController.dispose();
+    _commentController.dispose();
+    _addedController.dispose();
+
+    _focusBirth.dispose();
+    _focusSocial.dispose();
+    _focusCategory.dispose();
+    _focusStatus.dispose();
+    _focusAdded.dispose();
     super.dispose();
   }
 
   // ==================== helpers ====================
   void _defocus() => FocusScope.of(context).unfocus();
 
-  Future<void> _ensureVisible(GlobalKey key) => _form.scrollToCard(key);
+  int _calcAge(DateTime birth) {
+    final now = DateTime.now();
+    var age = now.year - birth.year;
+    if (now.month < birth.month || (now.month == birth.month && now.day < birth.day)) {
+      age--;
+    }
+    return age;
+  }
 
-  bool get _phoneValid => _form.phoneValid;
+  String _formatAge(int age) {
+    final lastTwo = age % 100;
+    final last = age % 10;
+    if (lastTwo >= 11 && lastTwo <= 14) return '$age лет';
+    if (last == 1) return '$age год';
+    if (last >= 2 && last <= 4) return '$age года';
+    return '$age лет';
+  }
 
-  bool get _canSave => _form.canSave;
+  String _initials(String name) {
+    final parts = name.trim().split(RegExp(r'\s+')).where((e) => e.isNotEmpty).toList();
+    if (parts.isEmpty) return '';
+    if (parts.length == 1) {
+      return parts.first.characters.take(2).toString().toUpperCase();
+    }
+    return (parts.first.characters.take(1).toString() + parts[1].characters.take(1).toString()).toUpperCase();
+  }
+
+  Future<void> _ensureVisible(GlobalKey key) async {
+    final ctx = key.currentContext;
+    if (ctx != null) {
+      await Scrollable.ensureVisible(
+        ctx,
+        duration: const Duration(milliseconds: 350),
+        curve: Curves.easeOut,
+        alignment: 0.1,
+      );
+    }
+  }
+
+  bool get _phoneValid => _phoneMask.getUnmaskedText().length == 10;
+
+  bool get _canSave =>
+      _nameController.text.trim().isNotEmpty &&
+          _phoneValid &&
+          _category != null &&
+          _status != null &&
+          _addedController.text.trim().isNotEmpty &&
+          !_saving;
 
   // ==================== pickers ====================
   Future<void> _pickBirthOrAge() async {
@@ -198,10 +524,11 @@ class _AddContactScreenState extends State<AddContactScreen> {
         confirmText: 'Выбрать',
       );
       if (picked != null) {
-        setState(() {
-          _birthDate = picked;
-          _ageManual = null;
-        });
+        _birthDate = picked;
+        _ageManual = null;
+        final age = _calcAge(picked);
+        _birthController.text = '${DateFormat('dd.MM.yyyy').format(picked)} (${_formatAge(age)})';
+        setState(() {});
       }
     } else if (choice == 'age') {
       final ctrl = TextEditingController();
@@ -227,10 +554,10 @@ class _AddContactScreenState extends State<AddContactScreen> {
         ),
       );
       if (age != null) {
-        setState(() {
-          _ageManual = age;
-          _birthDate = null;
-        });
+        _ageManual = age;
+        _birthDate = null;
+        _birthController.text = 'Возраст: ${_formatAge(age)}';
+        setState(() {});
       }
     }
   }
@@ -254,14 +581,14 @@ class _AddContactScreenState extends State<AddContactScreen> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  ListTile(leading: _form.brandIcon('Telegram'), title: const Text('Telegram'), onTap: () => Navigator.pop(context, 'Telegram')),
-                  ListTile(leading: _form.brandIcon('VK'), title: const Text('VK'), onTap: () => Navigator.pop(context, 'VK')),
-                  ListTile(leading: _form.brandIcon('Instagram'), title: const Text('Instagram'), onTap: () => Navigator.pop(context, 'Instagram')),
-                  ListTile(leading: _form.brandIcon('Facebook'), title: const Text('Facebook'), onTap: () => Navigator.pop(context, 'Facebook')),
-                  ListTile(leading: _form.brandIcon('WhatsApp'), title: const Text('WhatsApp'), onTap: () => Navigator.pop(context, 'WhatsApp')),
-                  ListTile(leading: _form.brandIcon('TikTok'), title: const Text('TikTok'), onTap: () => Navigator.pop(context, 'TikTok')),
-                  ListTile(leading: _form.brandIcon('Одноклассники'), title: const Text('Одноклассники'), onTap: () => Navigator.pop(context, 'Одноклассники')),
-                  ListTile(leading: _form.brandIcon('Twitter'), title: const Text('Twitter'), onTap: () => Navigator.pop(context, 'Twitter')),
+                  ListTile(leading: _brandIcon('Telegram'), title: const Text('Telegram'), onTap: () => Navigator.pop(context, 'Telegram')),
+                  ListTile(leading: _brandIcon('VK'), title: const Text('VK'), onTap: () => Navigator.pop(context, 'VK')),
+                  ListTile(leading: _brandIcon('Instagram'), title: const Text('Instagram'), onTap: () => Navigator.pop(context, 'Instagram')),
+                  ListTile(leading: _brandIcon('Facebook'), title: const Text('Facebook'), onTap: () => Navigator.pop(context, 'Facebook')),
+                  ListTile(leading: _brandIcon('WhatsApp'), title: const Text('WhatsApp'), onTap: () => Navigator.pop(context, 'WhatsApp')),
+                  ListTile(leading: _brandIcon('TikTok'), title: const Text('TikTok'), onTap: () => Navigator.pop(context, 'TikTok')),
+                  ListTile(leading: _brandIcon('Одноклассники'), title: const Text('Одноклассники'), onTap: () => Navigator.pop(context, 'Одноклассники')),
+                  ListTile(leading: _brandIcon('Twitter'), title: const Text('Twitter'), onTap: () => Navigator.pop(context, 'Twitter')),
                 ],
               ),
             ),
@@ -302,6 +629,8 @@ class _AddContactScreenState extends State<AddContactScreen> {
       setState(() {
         _category = result;
         _status = null;
+        _categoryController.text = result;
+        _statusController.text = '';
       });
     }
   }
@@ -321,7 +650,7 @@ class _AddContactScreenState extends State<AddContactScreen> {
           children: [
             for (final s in options)
               ListTile(
-                leading: Icon(_form.statusIcon(s)),
+                leading: Icon(_statusIcon(s)),
                 title: Text(s),
                 onTap: () => Navigator.pop(context, s),
               ),
@@ -334,6 +663,7 @@ class _AddContactScreenState extends State<AddContactScreen> {
     if (result != null) {
       setState(() {
         _status = result;
+        _statusController.text = result;
       });
     }
   }
@@ -356,7 +686,10 @@ class _AddContactScreenState extends State<AddContactScreen> {
 
     setState(() => _addedOpen = false);
     if (picked != null) {
-      setState(() => _addedDate = picked);
+      setState(() {
+        _addedDate = picked;
+        _addedController.text = DateFormat('dd.MM.yyyy').format(picked);
+      });
     }
   }
 
@@ -589,7 +922,7 @@ class _AddContactScreenState extends State<AddContactScreen> {
       ).copyWith(
         prefixIcon: Padding(
           padding: const EdgeInsets.all(10),
-          child: value.isEmpty ? const Icon(Icons.public, size: 20) : _form.brandIcon(value, size: 20),
+          child: value.isEmpty ? const Icon(Icons.public, size: 20) : _brandIcon(value, size: 20),
         ),
       ),
       onTap: () {
@@ -638,9 +971,15 @@ class _AddContactScreenState extends State<AddContactScreen> {
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
               children: [
                 // ===== Превью =====
-                KeyedSubtree(
-                  key: const ValueKey('header_preview'),
-                  child: AddContactPreview(controller: _form),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _previewCaption(context),
+                    KeyedSubtree(
+                      key: const ValueKey('header_preview'),
+                      child: _buildHeaderPreview(context),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 24),
 
@@ -699,7 +1038,7 @@ class _AddContactScreenState extends State<AddContactScreen> {
                   children: [
                     _pickerField(
                       key: _categoryKey,
-                      icon: _form.categoryIcon(catValue),
+                      icon: _categoryIcon(catValue),
                       title: 'Категория*',
                       controller: _categoryController,
                       hint: 'Выберите категорию',
@@ -708,12 +1047,12 @@ class _AddContactScreenState extends State<AddContactScreen> {
                       onTap: _pickCategory,
                       requiredField: true,
                       forceFloatingLabel: categoryEmpty,
-                      prefix: Icon(_form.categoryIcon(catValue)),
+                      prefix: Icon(_categoryIcon(catValue)),
                     ),
                     const SizedBox(height: 12),
                     _pickerField(
                       key: _statusKey,
-                      icon: _form.statusIcon(statusValue.isEmpty ? 'Статус' : statusValue),
+                      icon: _statusIcon(statusValue.isEmpty ? 'Статус' : statusValue),
                       title: 'Статус*',
                       controller: _statusController,
                       hint: _category == null ? 'Сначала выберите категорию' : 'Выберите статус',
@@ -729,10 +1068,8 @@ class _AddContactScreenState extends State<AddContactScreen> {
                       requiredField: true,
                       forceFloatingLabel: statusEmpty,
                       prefix: Icon(
-                        _form.statusIcon(statusValue.isEmpty ? 'Статус' : statusValue),
-                        color: statusValue.isEmpty
-                            ? Theme.of(context).hintColor
-                            : _form.statusColor(statusValue),
+                        _statusIcon(statusValue.isEmpty ? 'Статус' : statusValue),
+                        color: statusValue.isEmpty ? Theme.of(context).hintColor : _statusColor(statusValue),
                       ),
                     ),
                   ],
@@ -751,7 +1088,13 @@ class _AddContactScreenState extends State<AddContactScreen> {
                             label: Text(label),
                             selected: _tags.contains(label),
                             onSelected: (v) {
-                              setState(() => _form.toggleTag(label));
+                              setState(() {
+                                if (v) {
+                                  _tags.add(label);
+                                } else {
+                                  _tags.remove(label);
+                                }
+                              });
                             },
                           ),
                       ],
