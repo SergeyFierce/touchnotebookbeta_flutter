@@ -4,8 +4,6 @@ import 'package:path/path.dart' as p;
 import 'package:flutter/foundation.dart';
 import '../models/contact.dart';
 import '../models/note.dart';
-import '../models/reminder.dart';
-import 'reminder_notifications.dart';
 
 class ContactDatabase {
   ContactDatabase._();
@@ -24,8 +22,8 @@ class ContactDatabase {
 
     _db = await openDatabase(
       path,
-      // ВАЖНО: поднимаем версию до 3, чтобы сработали миграции с FK и напоминаниями
-      version: 3,
+      // ВАЖНО: поднимаем версию до 2, чтобы сработала миграция с FK + CASCADE
+      version: 2,
 
       // Включаем поддержку внешних ключей (иначе SQLite их игнорирует)
       onConfigure: (db) async {
@@ -67,17 +65,6 @@ class ContactDatabase {
         await db.execute('CREATE INDEX IF NOT EXISTS idx_contacts_category_createdAt ON contacts(category, createdAt)');
         await db.execute('CREATE INDEX IF NOT EXISTS idx_contacts_name ON contacts(name)');
         await db.execute('CREATE INDEX IF NOT EXISTS idx_notes_contactId_createdAt ON notes(contactId, createdAt)');
-        await db.execute('''
-          CREATE TABLE reminders(
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            contactId INTEGER NOT NULL,
-            text TEXT NOT NULL,
-            scheduledAt INTEGER NOT NULL,
-            createdAt INTEGER NOT NULL,
-            FOREIGN KEY(contactId) REFERENCES contacts(id) ON DELETE CASCADE
-          )
-        ''');
-        await db.execute('CREATE INDEX IF NOT EXISTS idx_reminders_contactId_scheduledAt ON reminders(contactId, scheduledAt)');
       },
 
       onUpgrade: (db, oldV, newV) async {
@@ -114,20 +101,6 @@ class ContactDatabase {
           await db.execute('CREATE INDEX IF NOT EXISTS idx_notes_contactId_createdAt ON notes(contactId, createdAt)');
 
           await db.execute('PRAGMA foreign_keys = ON'); // включаем обратно
-        }
-
-        if (oldV < 3) {
-          await db.execute('''
-            CREATE TABLE IF NOT EXISTS reminders(
-              id INTEGER PRIMARY KEY AUTOINCREMENT,
-              contactId INTEGER NOT NULL,
-              text TEXT NOT NULL,
-              scheduledAt INTEGER NOT NULL,
-              createdAt INTEGER NOT NULL,
-              FOREIGN KEY(contactId) REFERENCES contacts(id) ON DELETE CASCADE
-            )
-          ''');
-          await db.execute('CREATE INDEX IF NOT EXISTS idx_reminders_contactId_scheduledAt ON reminders(contactId, scheduledAt)');
         }
       },
     );
@@ -205,7 +178,6 @@ class ContactDatabase {
 
   Future<int> delete(int id) async {
     final db = await database;
-    await cancelRemindersForContact(id);
     final rows = await db.delete('contacts', where: 'id = ?', whereArgs: [id]);
     _bumpRevision();
     return rows;
@@ -288,133 +260,6 @@ class ContactDatabase {
     return maps.map(Note.fromMap).toList();
   }
 
-  // ================= Reminders =================
-
-  Future<List<Reminder>> remindersByContact(int contactId) async {
-    final db = await database;
-    final maps = await db.query(
-      'reminders',
-      where: 'contactId = ?',
-      whereArgs: [contactId],
-      orderBy: 'scheduledAt ASC',
-    );
-    return maps.map(Reminder.fromMap).toList();
-  }
-
-  Future<List<Reminder>> upcomingRemindersByContact(int contactId, {int limit = 3}) async {
-    final db = await database;
-    final now = DateTime.now().millisecondsSinceEpoch;
-    final maps = await db.query(
-      'reminders',
-      where: 'contactId = ? AND scheduledAt >= ?',
-      whereArgs: [contactId, now - const Duration(minutes: 1).inMilliseconds],
-      orderBy: 'scheduledAt ASC',
-      limit: limit,
-    );
-    return maps.map(Reminder.fromMap).toList();
-  }
-
-  Future<int> insertReminder(Reminder reminder, {required String contactName}) async {
-    final db = await database;
-    final id = await db.insert('reminders', _mapForInsert(reminder.toMap()));
-    final stored = reminder.copyWith(id: id);
-    await ReminderNotifications.instance.scheduleReminder(stored, contactName: contactName);
-    _bumpRevision();
-    return id;
-  }
-
-  Future<int> updateReminder(Reminder reminder, {required String contactName}) async {
-    if (reminder.id == null) return 0;
-    final db = await database;
-    final rows = await db.update(
-      'reminders',
-      reminder.toMap(),
-      where: 'id = ?',
-      whereArgs: [reminder.id],
-    );
-    if (rows > 0) {
-      await ReminderNotifications.instance.scheduleReminder(reminder, contactName: contactName);
-      _bumpRevision();
-    }
-    return rows;
-  }
-
-  Future<int> deleteReminder(int id) async {
-    final db = await database;
-    final rows = await db.delete('reminders', where: 'id = ?', whereArgs: [id]);
-    if (rows > 0) {
-      await ReminderNotifications.instance.cancelReminder(id);
-      _bumpRevision();
-    }
-    return rows;
-  }
-
-  Future<void> cancelRemindersForContact(int contactId) async {
-    final db = await database;
-    final maps = await db.query(
-      'reminders',
-      columns: ['id'],
-      where: 'contactId = ?',
-      whereArgs: [contactId],
-    );
-    final ids = maps.map((e) => e['id']).whereType<int>();
-    await ReminderNotifications.instance.cancelReminders(ids);
-  }
-
-  Future<List<ReminderScheduleInfo>> _reminderScheduleEntries({int? contactId}) async {
-    final db = await database;
-    final args = <Object?>[];
-    final buffer = StringBuffer();
-    if (contactId != null) {
-      buffer.write('WHERE r.contactId = ?');
-      args.add(contactId);
-    } else {
-      buffer.write('WHERE r.scheduledAt >= ?');
-      args.add(DateTime.now().subtract(const Duration(minutes: 1)).millisecondsSinceEpoch);
-    }
-
-    final rows = await db.rawQuery('''
-      SELECT
-        r.id as id,
-        r.contactId as contactId,
-        r.text as text,
-        r.scheduledAt as scheduledAt,
-        r.createdAt as createdAt,
-        c.name as contactName
-      FROM reminders r
-      JOIN contacts c ON c.id = r.contactId
-      ${buffer.toString()}
-      ORDER BY r.scheduledAt ASC
-    ''', args);
-
-    return rows
-        .map((row) => ReminderScheduleInfo(
-              reminder: Reminder.fromMap(row),
-              contactName: row['contactName'] as String,
-            ))
-        .toList();
-  }
-
-  Future<void> reschedulePendingReminders() async {
-    final entries = await _reminderScheduleEntries();
-    for (final entry in entries) {
-      await ReminderNotifications.instance.scheduleReminder(
-        entry.reminder,
-        contactName: entry.contactName,
-      );
-    }
-  }
-
-  Future<void> rescheduleRemindersForContact(int contactId) async {
-    final entries = await _reminderScheduleEntries(contactId: contactId);
-    for (final entry in entries) {
-      await ReminderNotifications.instance.scheduleReminder(
-        entry.reminder,
-        contactName: entry.contactName,
-      );
-    }
-  }
-
   // ================= Helpers для Undo =================
 
   /// Удаляет контакт (каскадно удаляются заметки) и возвращает снапшот заметок.
@@ -424,7 +269,6 @@ class ContactDatabase {
   Future<List<Note>> deleteContactWithSnapshot(int contactId) async {
     final db = await database;
     final snapshot = <Note>[];
-    final reminderIds = <int>[];
 
     await db.transaction((txn) async {
       final maps = await txn.query(
@@ -435,21 +279,9 @@ class ContactDatabase {
       );
       snapshot.addAll(maps.map(Note.fromMap));
 
-      final reminders = await txn.query(
-        'reminders',
-        columns: ['id'],
-        where: 'contactId = ?',
-        whereArgs: [contactId],
-      );
-      reminderIds.addAll(reminders.map((e) => e['id']).whereType<int>());
-
       // Удаляем контакт — FK каскадно удалит связанные заметки
       await txn.delete('contacts', where: 'id = ?', whereArgs: [contactId]);
     });
-
-    if (reminderIds.isNotEmpty) {
-      await ReminderNotifications.instance.cancelReminders(reminderIds);
-    }
 
     _bumpRevision();
     return snapshot;
