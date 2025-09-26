@@ -8,14 +8,11 @@ import 'package:overlay_support/overlay_support.dart';
 
 import '../models/contact.dart';
 import '../models/note.dart';
-import '../models/reminder.dart';
 import '../services/contact_database.dart';
 import '../widgets/system_notifications.dart';
 import 'notes_list_screen.dart';
 import 'add_note_screen.dart';
 import 'contact_list_screen.dart';
-import 'reminder_form_screen.dart';
-import 'reminders_list_screen.dart';
 
 class ContactDetailsScreen extends StatefulWidget {
   final Contact contact;
@@ -54,7 +51,6 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
 
   // --- keys для автоскролла к самим карточкам ---
   final _extraCardKey = GlobalKey();
-  final _remindersCardKey = GlobalKey();
   final _notesCardKey = GlobalKey();
 
   IconData _statusIcon(String s) {
@@ -89,35 +85,6 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
         ],
       ),
       onTap: null,
-      isLast: isLast,
-    );
-  }
-
-  Widget _reminderRow(Reminder reminder, {bool isLast = false}) {
-    final theme = Theme.of(context);
-    final isPast = reminder.scheduledAt.isBefore(DateTime.now());
-    final icon = isPast ? Icons.history : Icons.alarm_outlined;
-    final color = isPast ? theme.colorScheme.outline : theme.colorScheme.primary;
-
-    return _sheetRow(
-      leading: Icon(icon, color: color),
-      right: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            reminder.text,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: theme.textTheme.bodyLarge,
-          ),
-          const SizedBox(height: 4),
-          Text(
-            DateFormat('dd.MM.yyyy HH:mm').format(reminder.scheduledAt),
-            style: theme.textTheme.bodySmall?.copyWith(color: theme.hintColor),
-          ),
-        ],
-      ),
-      onTap: _contact.id == null ? null : () => _editReminder(reminder),
       isLast: isLast,
     );
   }
@@ -536,9 +503,7 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
   bool _addedOpen = false;
 
   bool _extraExpanded = false; // «Дополнительно»
-  bool _remindersExpanded = true;
   bool _notesExpanded = true; // «Заметки» открыто
-  List<Reminder> _reminders = [];
   List<Note> _notes = [];
 
   // FocusNodes — для подсветки/навигации
@@ -583,7 +548,6 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
     super.initState();
     _contact = widget.contact;
     _loadFromContact();
-    _loadReminders();
     _loadNotes();
     // чтобы превью обновлялось при каждом символе
     _phoneController.addListener(() => setState(() {}));
@@ -620,60 +584,6 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
     if (_contact.id == null) return;
     final notes = await ContactDatabase.instance.lastNotesByContact(_contact.id!, limit: 3);
     if (mounted) setState(() => _notes = notes);
-  }
-
-  Future<void> _loadReminders() async {
-    if (_contact.id == null) return;
-    final reminders = await ContactDatabase.instance.upcomingRemindersByContact(_contact.id!, limit: 3);
-    if (mounted) setState(() => _reminders = reminders);
-  }
-
-  Future<void> _addReminder() async {
-    if (_contact.id == null) return;
-    final reminder = await Navigator.push<Reminder>(
-      context,
-      MaterialPageRoute(
-        builder: (_) => ReminderFormScreen(
-          contactId: _contact.id!,
-          contactName: _contact.name,
-        ),
-      ),
-    );
-    if (reminder != null) {
-      await _loadReminders();
-      if (!mounted) return;
-      showSuccessBanner('Напоминание добавлено');
-    }
-  }
-
-  Future<void> _editReminder(Reminder reminder) async {
-    if (_contact.id == null) return;
-    final updated = await Navigator.push<Reminder>(
-      context,
-      MaterialPageRoute(
-        builder: (_) => ReminderFormScreen(
-          contactId: _contact.id!,
-          contactName: _contact.name,
-          reminder: reminder,
-        ),
-      ),
-    );
-    if (updated != null) {
-      await _loadReminders();
-      if (!mounted) return;
-      showSuccessBanner('Изменения сохранены');
-    }
-  }
-
-  Future<void> _openRemindersList() async {
-    if (_contact.id == null) return;
-    await Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => RemindersListScreen(contact: _contact),
-      ),
-    );
-    await _loadReminders();
   }
 
   Future<void> _addNote() async {
@@ -1142,9 +1052,6 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
 
     final updated = _snapshot();
     await ContactDatabase.instance.update(updated);
-    if (updated.id != null) {
-      await ContactDatabase.instance.rescheduleRemindersForContact(updated.id!);
-    }
     if (!mounted) return;
 
     // Обновляем локальный снапшот (без setState — мы всё равно уходим со страницы)
@@ -1624,74 +1531,6 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
                     ],
                   ),
                 ],
-              ),
-
-              // ===== Блок: Напоминания =====
-              KeyedSubtree(
-                key: _remindersCardKey,
-                child: _collapsibleSectionCard(
-                  title: 'Напоминания',
-                  expanded: _remindersExpanded,
-                  onChanged: (v) {
-                    setState(() => _remindersExpanded = v);
-                    if (v) _scrollToCard(_remindersCardKey);
-                  },
-                  headerActions: [
-                    if (_contact.id != null)
-                      OutlinedButton(
-                        onPressed: _openRemindersList,
-                        child: const Text('Все напоминания'),
-                      ),
-                    if (_contact.id != null) const SizedBox(width: 8),
-                    if (_contact.id != null)
-                      FilledButton.icon(
-                        onPressed: _addReminder,
-                        icon: const Icon(Icons.add_alarm_outlined),
-                        label: const Text('Добавить'),
-                      ),
-                  ],
-                  children: _reminders.isEmpty
-                      ? [
-                          Card(
-                            elevation: 0,
-                            child: Padding(
-                              padding: const EdgeInsets.fromLTRB(24, 32, 24, 24),
-                              child: Column(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  const Icon(
-                                    Icons.alarm_off_outlined,
-                                    size: 48,
-                                  ),
-                                  const SizedBox(height: 12),
-                                  Text(
-                                    'Нет напоминаний',
-                                    style: Theme.of(context).textTheme.titleMedium,
-                                    textAlign: TextAlign.center,
-                                  ),
-                                  const SizedBox(height: 24),
-                                  FilledButton.icon(
-                                    onPressed: _contact.id == null ? null : _addReminder,
-                                    icon: const Icon(Icons.add),
-                                    label: const Text('Добавить напоминание'),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ]
-                      : [
-                          Card(
-                            elevation: 0,
-                            child: Column(
-                              children: [
-                                for (var i = 0; i < _reminders.length; i++)
-                                  _reminderRow(_reminders[i], isLast: i == _reminders.length - 1),
-                              ],
-                            ),
-                          ),
-                        ],
-                ),
               ),
 
               // ===== Блок: Дополнительно =====
