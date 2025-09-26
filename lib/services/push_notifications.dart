@@ -7,23 +7,6 @@ class PushNotifications {
   static final FlutterLocalNotificationsPlugin _plugin =
       FlutterLocalNotificationsPlugin();
 
-  static const AndroidNotificationDetails _androidDetails =
-      AndroidNotificationDetails(
-    'demo_push_channel',
-    'Демо уведомления',
-    channelDescription: 'Канал для тестовых push-уведомлений',
-    importance: Importance.max,
-    priority: Priority.high,
-  );
-
-  static const DarwinNotificationDetails _darwinDetails =
-      DarwinNotificationDetails();
-
-  static const NotificationDetails _notificationDetails = NotificationDetails(
-    android: _androidDetails,
-    iOS: _darwinDetails,
-    macOS: _darwinDetails,
-  );
 
   static bool _initialized = false;
 
@@ -85,39 +68,24 @@ class PushNotifications {
   }) async {
     await ensureInitialized();
 
-    try {
-      await _plugin.show(id, title, body, _notificationDetails);
-    } catch (error, stackTrace) {
-      if (kDebugMode) {
-        // ignore: avoid_print
-        print('Failed to show notification: $error\n$stackTrace');
-      }
-    }
-  }
+    const androidDetails = AndroidNotificationDetails(
+      'demo_push_channel',
+      'Демо уведомления',
+      channelDescription: 'Канал для тестовых push-уведомлений',
+      importance: Importance.max,
+      priority: Priority.high,
+    );
 
-  static Future<void> scheduleNotification({
-    required int id,
-    required String title,
-    required String body,
-    required DateTime scheduledDateTime,
-  }) async {
-    await ensureInitialized();
+    const darwinDetails = DarwinNotificationDetails();
 
-    if (scheduledDateTime.isBefore(DateTime.now())) {
-      return;
-    }
+    final details = const NotificationDetails(
+      android: androidDetails,
+      iOS: darwinDetails,
+      macOS: darwinDetails,
+    );
 
     try {
-      await _plugin.schedule(
-        id,
-        title,
-        body,
-        scheduledDateTime,
-        _notificationDetails,
-        androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
-        uiLocalNotificationDateInterpretation:
-            UILocalNotificationDateInterpretation.absoluteTime,
-      );
+      await _plugin.show(id, title, body, details);
     } catch (error, stackTrace) {
       if (kDebugMode) {
         // ignore: avoid_print

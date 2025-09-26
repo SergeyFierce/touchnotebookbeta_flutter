@@ -1,7 +1,6 @@
 plugins {
     id("com.android.application")
     id("kotlin-android")
-    // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
 }
 
@@ -13,7 +12,7 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
-        isCoreLibraryDesugaringEnabled = true   // ✅ включаем desugaring
+        isCoreLibraryDesugaringEnabled = true   // ✅ Kotlin DSL
     }
 
     kotlinOptions {
@@ -40,6 +39,6 @@ flutter {
 }
 
 dependencies {
-    implementation("androidx.core:core-ktx:1.13.1") // можно обновить при необходимости
-    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.0.4") // ✅ добавляем библиотеку
+    implementation("org.jetbrains.kotlin:kotlin-stdlib-jdk8")
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.0.4") // ✅ Kotlin DSL
 }
