@@ -9,10 +9,12 @@ import 'package:overlay_support/overlay_support.dart';
 import '../models/contact.dart';
 import '../models/note.dart';
 import '../services/contact_database.dart';
+import '../services/reminder_database_service.dart';
 import '../widgets/system_notifications.dart';
 import 'notes_list_screen.dart';
 import 'add_note_screen.dart';
 import 'contact_list_screen.dart';
+import 'reminder_list_screen.dart';
 
 class ContactDetailsScreen extends StatefulWidget {
   final Contact contact;
@@ -1071,8 +1073,10 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
     if (c.id == null) return;
 
     final db = ContactDatabase.instance;
+    final reminderService = ReminderDatabaseService.instance;
 
     // Удаляем контакт и забираем снапшот заметок для возможного Undo
+    await reminderService.deleteRemindersForContact(c.id!);
     final notesSnapshot = await db.deleteContactWithSnapshot(c.id!);
 
     // Показываем баннер с Undo
@@ -1513,7 +1517,7 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
                     spacing: 8,
                     runSpacing: 8,
                     children: [
-                      for (final label in const ['Новый', 'Напомнить', 'VIP'])
+                      for (final label in const ['Новый', 'VIP'])
                         ChoiceChip(
                           label: Text(label),
                           selected: _tags.contains(label),
@@ -1623,6 +1627,21 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
                     if (v) _scrollToCard(_notesCardKey);
                   },
                   headerActions: [
+                    TextButton(
+                      onPressed: _contact.id == null
+                          ? null
+                          : () async {
+                        await Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => ReminderListScreen(
+                              contact: _contact,
+                            ),
+                          ),
+                        );
+                      },
+                      child: const Text('Напоминания'),
+                    ),
                     TextButton(
                       onPressed: _contact.id == null
                           ? null

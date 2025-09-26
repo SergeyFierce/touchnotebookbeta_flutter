@@ -22,8 +22,8 @@ class ContactDatabase {
 
     _db = await openDatabase(
       path,
-      // ВАЖНО: поднимаем версию до 2, чтобы сработала миграция с FK + CASCADE
-      version: 2,
+      // ВАЖНО: поднимаем версию до 3, чтобы сработали миграции с FK + CASCADE и напоминаниями
+      version: 3,
 
       // Включаем поддержку внешних ключей (иначе SQLite их игнорирует)
       onConfigure: (db) async {
@@ -61,10 +61,21 @@ class ContactDatabase {
           )
         ''');
 
+        await db.execute('''
+          CREATE TABLE reminders(
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            contactId INTEGER NOT NULL,
+            title TEXT NOT NULL,
+            scheduledDateTime INTEGER NOT NULL,
+            FOREIGN KEY(contactId) REFERENCES contacts(id) ON DELETE CASCADE
+          )
+        ''');
+
         // Полезные индексы
         await db.execute('CREATE INDEX IF NOT EXISTS idx_contacts_category_createdAt ON contacts(category, createdAt)');
         await db.execute('CREATE INDEX IF NOT EXISTS idx_contacts_name ON contacts(name)');
         await db.execute('CREATE INDEX IF NOT EXISTS idx_notes_contactId_createdAt ON notes(contactId, createdAt)');
+        await db.execute('CREATE INDEX IF NOT EXISTS idx_reminders_contactId_date ON reminders(contactId, scheduledDateTime)');
       },
 
       onUpgrade: (db, oldV, newV) async {
@@ -101,6 +112,19 @@ class ContactDatabase {
           await db.execute('CREATE INDEX IF NOT EXISTS idx_notes_contactId_createdAt ON notes(contactId, createdAt)');
 
           await db.execute('PRAGMA foreign_keys = ON'); // включаем обратно
+        }
+
+        if (oldV < 3) {
+          await db.execute('''
+            CREATE TABLE IF NOT EXISTS reminders(
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              contactId INTEGER NOT NULL,
+              title TEXT NOT NULL,
+              scheduledDateTime INTEGER NOT NULL,
+              FOREIGN KEY(contactId) REFERENCES contacts(id) ON DELETE CASCADE
+            )
+          ''');
+          await db.execute('CREATE INDEX IF NOT EXISTS idx_reminders_contactId_date ON reminders(contactId, scheduledDateTime)');
         }
       },
     );
