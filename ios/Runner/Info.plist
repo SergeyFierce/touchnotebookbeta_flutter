@@ -41,11 +41,9 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
-        <key>CADisableMinimumFrameDurationOnPhone</key>
-        <true/>
-        <key>UIApplicationSupportsIndirectInputEvents</key>
-        <true/>
-        <key>NSUserNotificationUsageDescription</key>
-        <string>Напоминания помогают не забыть связаться с контактами.</string>
+	<key>CADisableMinimumFrameDurationOnPhone</key>
+	<true/>
+	<key>UIApplicationSupportsIndirectInputEvents</key>
+	<true/>
 </dict>
 </plist>
