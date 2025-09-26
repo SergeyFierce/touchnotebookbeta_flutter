@@ -12,7 +12,7 @@ import 'settings_screen.dart';
 import 'contact_list_screen.dart';
 import '../services/contact_database.dart';
 import '../services/push_notifications.dart';
-import '../widgets/system_notifications.dart';
+
 
 /// ---------------------
 /// Строки (русская локаль)
@@ -45,7 +45,6 @@ abstract class R {
   static const dataUpdated = 'Данные обновлены';
   static const showNotification = 'Показать уведомление';
   static const notificationMessage = 'Это тестовое push-уведомление.';
-  static const notificationSent = 'Системное push-уведомление отправлено';
 
   static String summaryUnknown(int count) {
     if (count <= 0) return summaryAllKnown;
@@ -265,7 +264,6 @@ class _HomeScreenState extends State<HomeScreen> with RestorationMixin {
     if (_loadErrorShown) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      showErrorBanner(R.loadError);
     });
     _loadErrorShown = true;
   }
@@ -283,19 +281,16 @@ class _HomeScreenState extends State<HomeScreen> with RestorationMixin {
         await launchUrl(tgUri, mode: LaunchMode.externalApplication);
       } else {
         if (!mounted) return;
-        showWarningBanner(R.telegramNotInstalled);
         await launchUrl(webUri, mode: LaunchMode.externalApplication);
       }
     } catch (e, s) {
       debugPrint('openSupport error: $e\n$s');
       if (!mounted) return;
-      showErrorBanner(R.telegramOpenFailed);
       // мягкий fallback — скопируем ссылку
       await Clipboard.setData(
         const ClipboardData(text: 'https://t.me/touchnotebook'),
       );
       if (!mounted) return;
-      showInfoBanner(R.linkCopied);
     }
   }
 
@@ -306,7 +301,6 @@ class _HomeScreenState extends State<HomeScreen> with RestorationMixin {
       MaterialPageRoute(builder: (_) => const AddContactScreen()),
     );
     if (saved == true && mounted) {
-      showSuccessBanner(R.contactSaved);
     }
   }
 
@@ -350,13 +344,6 @@ class _HomeScreenState extends State<HomeScreen> with RestorationMixin {
       return;
     }
 
-    // уведомляем, если ранее были неизвестные и стало меньше неизвестных
-    if (last.unknownCount > 0 && newCounts.unknownCount < last.unknownCount) {
-      showInfoBanner(
-        R.dataUpdated,
-        duration: const Duration(milliseconds: 1500),
-      );
-    }
     _lastCountsShown = newCounts;
 
     // обновим кэш «хороших» данных
@@ -614,10 +601,6 @@ class _HomeScreenState extends State<HomeScreen> with RestorationMixin {
       body: R.notificationMessage,
     );
     if (!mounted) return;
-    showInfoBanner(
-      R.notificationSent,
-      duration: const Duration(seconds: 2),
-    );
   }
 }
 
