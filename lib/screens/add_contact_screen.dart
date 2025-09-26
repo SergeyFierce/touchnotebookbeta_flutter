@@ -18,7 +18,7 @@ abstract class Dict {
     'Потенциальный': ['Холодный', 'Тёплый', 'Потерянный'],
   };
 
-  static const tags = ['Новый', 'VIP'];
+  static const tags = ['Новый', 'Напомнить', 'VIP'];
 }
 
 class AddContactScreen extends StatefulWidget {
