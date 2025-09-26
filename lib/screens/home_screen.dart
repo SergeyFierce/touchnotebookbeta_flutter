@@ -45,6 +45,14 @@ abstract class R {
   static const dataUpdated = 'Данные обновлены';
   static const showNotification = 'Показать уведомление';
   static const notificationMessage = 'Это тестовое push-уведомление.';
+  static const notificationPickDate = 'Выберите дату уведомления';
+  static const notificationPickTime = 'Выберите время уведомления';
+  static const notificationDateInPast =
+      'Выбранная дата и время уже прошли. Выберите другой момент.';
+
+  static String notificationScheduledAt(String formattedDate) {
+    return 'Уведомление запланировано на $formattedDate';
+  }
 
   static String summaryUnknown(int count) {
     if (count <= 0) return summaryAllKnown;
@@ -595,12 +603,65 @@ class _HomeScreenState extends State<HomeScreen> with RestorationMixin {
   }
 
   Future<void> _showDemoNotification() async {
-    await PushNotifications.showNotification(
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final lastDate = today.add(const Duration(days: 365));
+
+    final selectedDate = await showDatePicker(
+      context: context,
+      initialDate: today,
+      firstDate: today,
+      lastDate: lastDate,
+      helpText: R.notificationPickDate,
+    );
+
+    if (!mounted || selectedDate == null) {
+      return;
+    }
+
+    final nextMinute = now.add(const Duration(minutes: 1));
+    final initialTime = TimeOfDay(hour: nextMinute.hour, minute: nextMinute.minute);
+
+    final selectedTime = await showTimePicker(
+      context: context,
+      initialTime: initialTime,
+      helpText: R.notificationPickTime,
+    );
+
+    if (!mounted || selectedTime == null) {
+      return;
+    }
+
+    final scheduledDate = DateTime(
+      selectedDate.year,
+      selectedDate.month,
+      selectedDate.day,
+      selectedTime.hour,
+      selectedTime.minute,
+    );
+
+    if (!scheduledDate.isAfter(DateTime.now())) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text(R.notificationDateInPast)),
+      );
+      return;
+    }
+
+    await PushNotifications.scheduleNotification(
       id: 1001,
       title: R.appTitle,
       body: R.notificationMessage,
+      scheduledDate: scheduledDate,
     );
+
     if (!mounted) return;
+
+    final formatted =
+        DateFormat('d MMMM yyyy, HH:mm', 'ru').format(scheduledDate);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(R.notificationScheduledAt(formatted))),
+    );
   }
 }
 
