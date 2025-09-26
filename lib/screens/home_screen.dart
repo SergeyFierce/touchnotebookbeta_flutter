@@ -42,8 +42,6 @@ abstract class R {
       'Создайте первый контакт. Ниже можно открыть списки по категориям.';
   static const chipHintOpenList = 'Откройте список по категории';
   static const dataUpdated = 'Данные обновлены';
-  static const showNotification = 'Показать уведомление';
-  static const notificationMessage = 'Это тестовое push-уведомление.';
 
   static String summaryUnknown(int count) {
     if (count <= 0) return summaryAllKnown;
@@ -367,16 +365,7 @@ class _HomeScreenState extends State<HomeScreen> with RestorationMixin {
   Widget build(BuildContext context) {
     return Scaffold(
       restorationId: 'home_scaffold',
-      appBar: AppBar(
-        title: const Text(R.homeTitle),
-        actions: [
-          IconButton(
-            tooltip: R.showNotification,
-            icon: const Icon(Icons.notifications_active_outlined),
-            onPressed: _showDemoNotification,
-          ),
-        ],
-      ),
+      appBar: AppBar(title: const Text(R.homeTitle)),
       drawer: NavigationDrawer(
         selectedIndex: _drawerIndex.value,
         onDestinationSelected: (index) {
@@ -602,13 +591,6 @@ class _HomeScreenState extends State<HomeScreen> with RestorationMixin {
         label: const Text(R.addContact),
         icon: const Icon(Icons.person_add),
       ),
-    );
-  }
-
-  void _showDemoNotification() {
-    showSystemNotification(
-      R.notificationMessage,
-      style: SystemNotificationStyle.success,
     );
   }
 }
