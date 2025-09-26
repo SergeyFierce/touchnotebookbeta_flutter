@@ -490,7 +490,7 @@ class _ContactListScreenState extends State<ContactListScreen> {
     final db = ContactDatabase.instance;
     try {
       // 1) Снимок заметок + удаление контакта (каскад снесёт заметки)
-      final snapshot = await db.deleteContactWithSnapshot(c.id!);
+      final notesSnapshot = await db.deleteContactWithSnapshot(c.id!);
       // 2) Убираем из локального списка
       setState(() {
         _all.removeWhere((e) => e.id == c.id);
@@ -504,10 +504,8 @@ class _ContactListScreenState extends State<ContactListScreen> {
         icon: Icons.delete_outline,
         onUndo: () async {
           _undoBanner = null;
-          final newId = await db.restoreContactWithRelations(
-            c.copyWith(id: null),
-            snapshot,
-          );
+          final newId =
+              await db.restoreContactWithNotes(c.copyWith(id: null), notesSnapshot);
           _restoreLocally(c.copyWith(id: newId), highlight: true);
         },
       );
