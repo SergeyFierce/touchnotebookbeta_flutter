@@ -4,6 +4,7 @@ import 'package:path/path.dart' as p;
 import 'package:flutter/foundation.dart';
 import '../models/contact.dart';
 import '../models/note.dart';
+import '../models/reminder.dart';
 
 class ContactDatabase {
   ContactDatabase._();
@@ -22,8 +23,8 @@ class ContactDatabase {
 
     _db = await openDatabase(
       path,
-      // ВАЖНО: поднимаем версию до 2, чтобы сработала миграция с FK + CASCADE
-      version: 2,
+      // ВАЖНО: версия 3 включает напоминания и FK + CASCADE
+      version: 3,
 
       // Включаем поддержку внешних ключей (иначе SQLite их игнорирует)
       onConfigure: (db) async {
@@ -61,10 +62,21 @@ class ContactDatabase {
           )
         ''');
 
+        await db.execute('''
+          CREATE TABLE reminders(
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            contactId INTEGER NOT NULL,
+            text TEXT NOT NULL,
+            scheduledTime INTEGER NOT NULL,
+            FOREIGN KEY(contactId) REFERENCES contacts(id) ON DELETE CASCADE
+          )
+        ''');
+
         // Полезные индексы
         await db.execute('CREATE INDEX IF NOT EXISTS idx_contacts_category_createdAt ON contacts(category, createdAt)');
         await db.execute('CREATE INDEX IF NOT EXISTS idx_contacts_name ON contacts(name)');
         await db.execute('CREATE INDEX IF NOT EXISTS idx_notes_contactId_createdAt ON notes(contactId, createdAt)');
+        await db.execute('CREATE INDEX IF NOT EXISTS idx_reminders_contactId_scheduledTime ON reminders(contactId, scheduledTime)');
       },
 
       onUpgrade: (db, oldV, newV) async {
@@ -102,6 +114,18 @@ class ContactDatabase {
 
           await db.execute('PRAGMA foreign_keys = ON'); // включаем обратно
         }
+        if (oldV < 3) {
+          await db.execute('''
+            CREATE TABLE IF NOT EXISTS reminders(
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              contactId INTEGER NOT NULL,
+              text TEXT NOT NULL,
+              scheduledTime INTEGER NOT NULL,
+              FOREIGN KEY(contactId) REFERENCES contacts(id) ON DELETE CASCADE
+            )
+          ''');
+          await db.execute('CREATE INDEX IF NOT EXISTS idx_reminders_contactId_scheduledTime ON reminders(contactId, scheduledTime)');
+        }
       },
     );
 
@@ -134,6 +158,18 @@ class ContactDatabase {
     final id = await db.insert('contacts', _mapForInsert(contact.toMap()));
     _bumpRevision();
     return id;
+  }
+
+  Future<Contact?> contactById(int id) async {
+    final db = await database;
+    final maps = await db.query(
+      'contacts',
+      where: 'id = ?',
+      whereArgs: [id],
+      limit: 1,
+    );
+    if (maps.isEmpty) return null;
+    return Contact.fromMap(maps.first);
   }
 
   Future<List<Contact>> contactsByCategory(String category) async {
@@ -258,6 +294,68 @@ class ContactDatabase {
       limit: limit,
     );
     return maps.map(Note.fromMap).toList();
+  }
+
+  // ================= Reminders =================
+
+  Future<int> insertReminder(Reminder reminder) async {
+    final db = await database;
+    final id = await db.insert('reminders', _mapForInsert(reminder.toMap()));
+    _bumpRevision();
+    return id;
+  }
+
+  Future<int> updateReminder(Reminder reminder) async {
+    final db = await database;
+    final rows = await db.update(
+      'reminders',
+      reminder.toMap(),
+      where: 'id = ?',
+      whereArgs: [reminder.id],
+    );
+    _bumpRevision();
+    return rows;
+  }
+
+  Future<int> deleteReminder(int id) async {
+    final db = await database;
+    final rows = await db.delete('reminders', where: 'id = ?', whereArgs: [id]);
+    _bumpRevision();
+    return rows;
+  }
+
+  Future<List<Reminder>> remindersByContact(int contactId) async {
+    final db = await database;
+    final maps = await db.query(
+      'reminders',
+      where: 'contactId = ?',
+      whereArgs: [contactId],
+      orderBy: 'scheduledTime ASC',
+    );
+    return maps.map(Reminder.fromMap).toList();
+  }
+
+  Future<List<Reminder>> remindersScheduledAfter(DateTime threshold) async {
+    final db = await database;
+    final maps = await db.query(
+      'reminders',
+      where: 'scheduledTime >= ?',
+      whereArgs: [threshold.millisecondsSinceEpoch],
+      orderBy: 'scheduledTime ASC',
+    );
+    return maps.map(Reminder.fromMap).toList();
+  }
+
+  Future<List<Reminder>> remindersByIds(Iterable<int> ids) async {
+    if (ids.isEmpty) return [];
+    final db = await database;
+    final placeholders = List.filled(ids.length, '?').join(',');
+    final maps = await db.query(
+      'reminders',
+      where: 'id IN ($placeholders)',
+      whereArgs: ids.toList(),
+    );
+    return maps.map(Reminder.fromMap).toList();
   }
 
   // ================= Helpers для Undo =================
