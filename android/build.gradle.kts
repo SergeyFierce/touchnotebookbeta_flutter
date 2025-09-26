@@ -1,5 +1,3 @@
-import com.android.build.gradle.LibraryExtension
-
 allprojects {
     repositories {
         google()
@@ -16,15 +14,6 @@ subprojects {
 }
 subprojects {
     project.evaluationDependsOn(":app")
-}
-
-subprojects {
-    afterEvaluate {
-        if (name == "flutter_native_timezone") {
-            extensions.findByType<LibraryExtension>()?.namespace =
-                "com.wix.flutter_native_timezone"
-        }
-    }
 }
 
 tasks.register<Delete>("clean") {
