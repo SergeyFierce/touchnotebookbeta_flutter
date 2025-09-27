@@ -8,9 +8,7 @@ import 'package:overlay_support/overlay_support.dart';
 
 import '../models/contact.dart';
 import '../models/note.dart';
-import '../models/reminder.dart';
 import '../services/contact_database.dart';
-import '../services/push_notifications.dart';
 import '../widgets/system_notifications.dart';
 import 'notes_list_screen.dart';
 import 'add_note_screen.dart';
@@ -53,7 +51,6 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
 
   // --- keys для автоскролла к самим карточкам ---
   final _extraCardKey = GlobalKey();
-  final _remindersCardKey = GlobalKey();
   final _notesCardKey = GlobalKey();
 
   IconData _statusIcon(String s) {
@@ -65,49 +62,6 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
       case 'Тёплый':     return Icons.local_fire_department;
       default:           return Icons.label_outline;
     }
-  }
-
-  Widget _reminderRow(Reminder reminder, {bool isLast = false}) {
-    final theme = Theme.of(context);
-    final dateLabel = DateFormat('dd.MM.yyyy HH:mm').format(reminder.remindAt);
-    final isPast = reminder.remindAt.isBefore(DateTime.now());
-
-    return _sheetRow(
-      leading: const Icon(Icons.notifications_active_outlined),
-      right: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  reminder.text,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.bodyLarge,
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  dateLabel,
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: isPast
-                        ? theme.colorScheme.error
-                        : theme.hintColor,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          IconButton(
-            icon: const Icon(Icons.delete_outline),
-            tooltip: 'Удалить напоминание',
-            onPressed: () => _confirmDeleteReminder(reminder),
-          ),
-        ],
-      ),
-      isLast: isLast,
-    );
   }
 
   Widget _noteRow(Note note, {bool isLast = false}) {
@@ -549,8 +503,6 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
   bool _addedOpen = false;
 
   bool _extraExpanded = false; // «Дополнительно»
-  bool _remindersExpanded = true; // «Напоминания» открыто
-  List<Reminder> _reminders = [];
   bool _notesExpanded = true; // «Заметки» открыто
   List<Note> _notes = [];
 
@@ -596,7 +548,6 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
     super.initState();
     _contact = widget.contact;
     _loadFromContact();
-    _loadReminders();
     _loadNotes();
     // чтобы превью обновлялось при каждом символе
     _phoneController.addListener(() => setState(() {}));
@@ -629,13 +580,6 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
     super.dispose();
   }
 
-  Future<void> _loadReminders() async {
-    if (_contact.id == null) return;
-    final reminders =
-        await ContactDatabase.instance.remindersByContact(_contact.id!);
-    if (mounted) setState(() => _reminders = reminders);
-  }
-
   Future<void> _loadNotes() async {
     if (_contact.id == null) return;
     final notes = await ContactDatabase.instance.lastNotesByContact(_contact.id!, limit: 3);
@@ -655,190 +599,6 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
       if (!mounted) return;
       showSuccessBanner('Заметка добавлена');
     }
-  }
-
-  Future<void> _addReminder() async {
-    if (_contact.id == null) {
-      showErrorBanner('Сохраните контакт, чтобы добавить напоминание');
-      return;
-    }
-
-    final result = await _showReminderDialog();
-    if (result == null) return;
-
-    final text = result.text.trim();
-    final when = result.when;
-    if (when.isBefore(DateTime.now())) {
-      showErrorBanner('Выберите время в будущем');
-      return;
-    }
-
-    final reminder = Reminder(
-      contactId: _contact.id!,
-      text: text,
-      remindAt: when,
-      createdAt: DateTime.now(),
-    );
-
-    try {
-      final id = await ContactDatabase.instance.insertReminder(reminder);
-      final saved = reminder.copyWith(id: id);
-
-      await PushNotifications.scheduleOneTime(
-        id: saved.id!,
-        whenLocal: saved.remindAt,
-        title: 'Напоминание: ${_contact.name}',
-        body: saved.text,
-      );
-
-      await _loadReminders();
-      if (!mounted) return;
-      showSuccessBanner('Напоминание добавлено');
-    } catch (e) {
-      if (mounted) {
-        showErrorBanner('Не удалось сохранить напоминание: $e');
-      }
-    }
-  }
-
-  Future<void> _confirmDeleteReminder(Reminder reminder) async {
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Удалить напоминание?'),
-        content: const Text('Напоминание будет удалено и уведомление отменено.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Отмена'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Удалить'),
-          ),
-        ],
-      ),
-    );
-    if (ok != true) return;
-
-    final reminderId = reminder.id;
-    if (reminderId == null) return;
-
-    try {
-      await ContactDatabase.instance.deleteReminder(reminderId);
-      await PushNotifications.cancel(reminderId);
-      await _loadReminders();
-      if (!mounted) return;
-      showSuccessBanner('Напоминание удалено');
-    } catch (e) {
-      if (mounted) {
-        showErrorBanner('Не удалось удалить напоминание: $e');
-      }
-    }
-  }
-
-  Future<({String text, DateTime when})?> _showReminderDialog() async {
-    final controller = TextEditingController();
-    var selected = DateTime.now().add(const Duration(minutes: 5));
-
-    return showDialog<({String text, DateTime when})>(
-      context: context,
-      builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setState) {
-            final dateLabel = DateFormat('dd.MM.yyyy').format(selected);
-            final timeLabel = DateFormat('HH:mm').format(selected);
-
-            return AlertDialog(
-              title: const Text('Новое напоминание'),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  TextField(
-                    controller: controller,
-                    maxLines: 3,
-                    autofocus: true,
-                    decoration: const InputDecoration(
-                      labelText: 'Текст напоминания',
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    leading: const Icon(Icons.event_outlined),
-                    title: Text(dateLabel),
-                    subtitle: const Text('Дата'),
-                    onTap: () async {
-                      final picked = await showDatePicker(
-                        context: context,
-                        initialDate: selected,
-                        firstDate: DateTime.now(),
-                        lastDate: DateTime.now().add(const Duration(days: 365 * 5)),
-                        helpText: 'Выберите дату',
-                      );
-                      if (picked != null) {
-                        setState(() {
-                          selected = DateTime(
-                            picked.year,
-                            picked.month,
-                            picked.day,
-                            selected.hour,
-                            selected.minute,
-                          );
-                        });
-                      }
-                    },
-                  ),
-                  ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    leading: const Icon(Icons.schedule_outlined),
-                    title: Text(timeLabel),
-                    subtitle: const Text('Время'),
-                    onTap: () async {
-                      final picked = await showTimePicker(
-                        context: context,
-                        initialTime:
-                            TimeOfDay(hour: selected.hour, minute: selected.minute),
-                        helpText: 'Выберите время',
-                      );
-                      if (picked != null) {
-                        setState(() {
-                          selected = DateTime(
-                            selected.year,
-                            selected.month,
-                            selected.day,
-                            picked.hour,
-                            picked.minute,
-                          );
-                        });
-                      }
-                    },
-                  ),
-                ],
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text('Отмена'),
-                ),
-                TextButton(
-                  onPressed: () {
-                    final text = controller.text.trim();
-                    if (text.isEmpty) {
-                      showErrorBanner('Введите текст напоминания');
-                      return;
-                    }
-                    Navigator.pop(context, (text: text, when: selected));
-                  },
-                  child: const Text('Сохранить'),
-                ),
-              ],
-            );
-          },
-        );
-      },
-    );
   }
 
   // ==================== helpers ====================
@@ -1312,17 +1072,8 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
 
     final db = ContactDatabase.instance;
 
-    // Удаляем контакт и забираем снапшот заметок/напоминаний для возможного Undo
-    final snapshot = await db.deleteContactWithSnapshot(c.id!);
-    final notesSnapshot = snapshot.notes;
-    final remindersSnapshot = snapshot.reminders;
-
-    for (final reminder in remindersSnapshot) {
-      final reminderId = reminder.id;
-      if (reminderId != null) {
-        await PushNotifications.cancel(reminderId);
-      }
-    }
+    // Удаляем контакт и забираем снапшот заметок для возможного Undo
+    final notesSnapshot = await db.deleteContactWithSnapshot(c.id!);
 
     // Показываем баннер с Undo
     _undoBanner?.dismiss();
@@ -1333,32 +1084,14 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
       icon: Icons.delete_outline,
       onUndo: () async {
         _undoBanner = null;
-        final newId = await db.restoreContactWithNotes(
-          c.copyWith(id: null),
-          notesSnapshot,
-          remindersSnapshot,
-        );
+        final newId = await db.restoreContactWithNotes(c.copyWith(id: null), notesSnapshot);
 
         // Сообщаем открытому списку: локально добавить и подсветить (без автоскролла)
         ContactListScreen.notifyRestoredIfMounted(c, newId);
-
-        // Возвращаем напоминания
-        final restoredReminders = await db.remindersByContact(newId);
-        for (final reminder in restoredReminders) {
-          if (reminder.remindAt.isAfter(DateTime.now()) && reminder.id != null) {
-            await PushNotifications.scheduleOneTime(
-              id: reminder.id!,
-              whenLocal: reminder.remindAt,
-              title: 'Напоминание: ${c.name}',
-              body: reminder.text,
-            );
-          }
-        }
-
         showSystemNotification(
-          'Контакт восстановлен',
-          style: SystemNotificationStyle.success,
-          iconOverride: Icons.undo,
+        'Контакт восстановлен',
+        style: SystemNotificationStyle.success,
+        iconOverride: Icons.undo,
         );
       },
     );
@@ -1876,83 +1609,6 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
                     // Соцсеть — верхний хинт показываем, если пусто
                     _socialPickerField(),
                   ],
-                ),
-              ),
-
-              // ===== Блок: Напоминания =====
-              KeyedSubtree(
-                key: _remindersCardKey,
-                child: _collapsibleSectionCard(
-                  title: 'Напоминания',
-                  expanded: _remindersExpanded,
-                  onChanged: (v) {
-                    setState(() => _remindersExpanded = v);
-                    if (v) _scrollToCard(_remindersCardKey);
-                  },
-                  headerActions: [
-                    IconButton(
-                      tooltip: 'Добавить напоминание',
-                      onPressed: _contact.id == null ? null : _addReminder,
-                      icon: const Icon(Icons.add_alert_outlined),
-                    ),
-                  ],
-                  children: _reminders.isEmpty
-                      ? [
-                          Card(
-                            elevation: 0,
-                            child: Padding(
-                              padding: const EdgeInsets.fromLTRB(24, 32, 24, 24),
-                              child: Column(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  const Icon(
-                                    Icons.notifications_active_outlined,
-                                    size: 48,
-                                  ),
-                                  const SizedBox(height: 12),
-                                  Text(
-                                    _contact.id == null
-                                        ? 'Сохраните контакт, чтобы добавлять напоминания'
-                                        : 'Нет напоминаний',
-                                    style: Theme.of(context).textTheme.titleMedium,
-                                    textAlign: TextAlign.center,
-                                  ),
-                                  const SizedBox(height: 24),
-                                  FilledButton.icon(
-                                    onPressed:
-                                        _contact.id == null ? null : _addReminder,
-                                    icon: const Icon(Icons.add),
-                                    label: const Text('Добавить напоминание'),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ]
-                      : [
-                          Card(
-                            elevation: 0,
-                            child: Column(
-                              children: [
-                                for (var i = 0; i < _reminders.length; i++)
-                                  _reminderRow(
-                                    _reminders[i],
-                                    isLast: i == _reminders.length - 1,
-                                  ),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(height: 12),
-                          Align(
-                            alignment: Alignment.centerLeft,
-                            child: FilledButton.icon(
-                              onPressed:
-                                  _contact.id == null ? null : _addReminder,
-                              icon: const Icon(Icons.add),
-                              label: const Text('Добавить напоминание'),
-                            ),
-                          ),
-                        ],
                 ),
               ),
 
