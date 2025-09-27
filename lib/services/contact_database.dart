@@ -4,17 +4,6 @@ import 'package:path/path.dart' as p;
 import 'package:flutter/foundation.dart';
 import '../models/contact.dart';
 import '../models/note.dart';
-import '../models/reminder.dart';
-
-class ContactCascadeSnapshot {
-  final List<Note> notes;
-  final List<Reminder> reminders;
-
-  const ContactCascadeSnapshot({
-    this.notes = const [],
-    this.reminders = const [],
-  });
-}
 
 class ContactDatabase {
   ContactDatabase._();
@@ -33,8 +22,8 @@ class ContactDatabase {
 
     _db = await openDatabase(
       path,
-      // ВАЖНО: поднимаем версию до 3, чтобы сработали миграции с FK + CASCADE и напоминаниями
-      version: 3,
+      // ВАЖНО: поднимаем версию до 2, чтобы сработала миграция с FK + CASCADE
+      version: 2,
 
       // Включаем поддержку внешних ключей (иначе SQLite их игнорирует)
       onConfigure: (db) async {
@@ -72,22 +61,10 @@ class ContactDatabase {
           )
         ''');
 
-        await db.execute('''
-          CREATE TABLE reminders(
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            contactId INTEGER NOT NULL,
-            remindAt INTEGER NOT NULL,
-            note TEXT,
-            createdAt INTEGER NOT NULL,
-            FOREIGN KEY(contactId) REFERENCES contacts(id) ON DELETE CASCADE
-          )
-        ''');
-
         // Полезные индексы
         await db.execute('CREATE INDEX IF NOT EXISTS idx_contacts_category_createdAt ON contacts(category, createdAt)');
         await db.execute('CREATE INDEX IF NOT EXISTS idx_contacts_name ON contacts(name)');
         await db.execute('CREATE INDEX IF NOT EXISTS idx_notes_contactId_createdAt ON notes(contactId, createdAt)');
-        await db.execute('CREATE INDEX IF NOT EXISTS idx_reminders_contactId_remindAt ON reminders(contactId, remindAt)');
       },
 
       onUpgrade: (db, oldV, newV) async {
@@ -124,20 +101,6 @@ class ContactDatabase {
           await db.execute('CREATE INDEX IF NOT EXISTS idx_notes_contactId_createdAt ON notes(contactId, createdAt)');
 
           await db.execute('PRAGMA foreign_keys = ON'); // включаем обратно
-        }
-
-        if (oldV < 3) {
-          await db.execute('''
-            CREATE TABLE IF NOT EXISTS reminders(
-              id INTEGER PRIMARY KEY AUTOINCREMENT,
-              contactId INTEGER NOT NULL,
-              remindAt INTEGER NOT NULL,
-              note TEXT,
-              createdAt INTEGER NOT NULL,
-              FOREIGN KEY(contactId) REFERENCES contacts(id) ON DELETE CASCADE
-            )
-          ''');
-          await db.execute('CREATE INDEX IF NOT EXISTS idx_reminders_contactId_remindAt ON reminders(contactId, remindAt)');
         }
       },
     );
@@ -297,54 +260,15 @@ class ContactDatabase {
     return maps.map(Note.fromMap).toList();
   }
 
-  // ================= Reminders =================
-
-  Future<int> insertReminder(Reminder reminder) async {
-    final db = await database;
-    final id = await db.insert('reminders', _mapForInsert(reminder.toMap()));
-    _bumpRevision();
-    return id;
-  }
-
-  Future<int> updateReminder(Reminder reminder) async {
-    final db = await database;
-    final rows = await db.update(
-      'reminders',
-      reminder.toMap(),
-      where: 'id = ?',
-      whereArgs: [reminder.id],
-    );
-    _bumpRevision();
-    return rows;
-  }
-
-  Future<int> deleteReminder(int id) async {
-    final db = await database;
-    final rows = await db.delete('reminders', where: 'id = ?', whereArgs: [id]);
-    _bumpRevision();
-    return rows;
-  }
-
-  Future<List<Reminder>> remindersByContact(int contactId) async {
-    final db = await database;
-    final maps = await db.query(
-      'reminders',
-      where: 'contactId = ?',
-      whereArgs: [contactId],
-      orderBy: 'remindAt ASC',
-    );
-    return maps.map(Reminder.fromMap).toList();
-  }
-
   // ================= Helpers для Undo =================
 
-  /// Удаляет контакт (каскадно удаляются заметки и напоминания) и
-  /// возвращает их снапшот. В UI можно сохранить возвращённые данные для Undo.
+  /// Удаляет контакт (каскадно удаляются заметки) и возвращает снапшот заметок.
+  /// В UI можно сохранить возвращённый список для последующего Undo.
+  ///
   /// Операция обёрнута в транзакцию, чтобы снимок и удаление были атомарными.
-  Future<ContactCascadeSnapshot> deleteContactWithSnapshot(int contactId) async {
+  Future<List<Note>> deleteContactWithSnapshot(int contactId) async {
     final db = await database;
-    final notes = <Note>[];
-    final reminders = <Reminder>[];
+    final snapshot = <Note>[];
 
     await db.transaction((txn) async {
       final maps = await txn.query(
@@ -353,22 +277,14 @@ class ContactDatabase {
         whereArgs: [contactId],
         orderBy: 'createdAt DESC',
       );
-      notes.addAll(maps.map(Note.fromMap));
+      snapshot.addAll(maps.map(Note.fromMap));
 
-      final reminderMaps = await txn.query(
-        'reminders',
-        where: 'contactId = ?',
-        whereArgs: [contactId],
-        orderBy: 'remindAt ASC',
-      );
-      reminders.addAll(reminderMaps.map(Reminder.fromMap));
-
-      // Удаляем контакт — FK каскадно удалит связанные заметки и напоминания
+      // Удаляем контакт — FK каскадно удалит связанные заметки
       await txn.delete('contacts', where: 'id = ?', whereArgs: [contactId]);
     });
 
     _bumpRevision();
-    return ContactCascadeSnapshot(notes: notes, reminders: reminders);
+    return snapshot;
   }
 
   /// Восстанавливает контакт (получает НОВЫЙ id) и возвращает его.
@@ -379,12 +295,9 @@ class ContactDatabase {
     return newId;
   }
 
-  /// Восстанавливает контакт и все его заметки/напоминания за одну транзакцию.
+  /// Восстанавливает контакт и ВСЕ его заметки за одну транзакцию.
   /// Возвращает новый id контакта.
-  Future<int> restoreContactWithSnapshot(
-    Contact contact,
-    ContactCascadeSnapshot snapshot,
-  ) async {
+  Future<int> restoreContactWithNotes(Contact contact, List<Note> notes) async {
     final db = await database;
     int newContactId = 0;
 
@@ -393,26 +306,13 @@ class ContactDatabase {
       newContactId = await txn.insert('contacts', _mapForInsert(contact.toMap()));
 
       // Вставляем его заметки с новым contactId
-      for (final n in snapshot.notes) {
+      for (final n in notes) {
         final noteMap = _mapForInsert(n.copyWith(contactId: newContactId, id: null).toMap());
         await txn.insert('notes', noteMap);
-      }
-
-      for (final r in snapshot.reminders) {
-        final reminderMap =
-            _mapForInsert(r.copyWith(contactId: newContactId, id: null).toMap());
-        await txn.insert('reminders', reminderMap);
       }
     });
 
     _bumpRevision();
     return newContactId;
   }
-
-  /// Поддержка старого API: восстанавливает контакт и только заметки.
-  Future<int> restoreContactWithNotes(Contact contact, List<Note> notes) =>
-      restoreContactWithSnapshot(
-        contact,
-        ContactCascadeSnapshot(notes: notes),
-      );
 }

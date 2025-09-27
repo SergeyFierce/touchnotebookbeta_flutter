@@ -5,7 +5,6 @@ import 'package:overlay_support/overlay_support.dart';
 import '../app.dart'; // для App.navigatorKey
 import '../models/contact.dart';
 import '../services/contact_database.dart';
-import '../services/reminder_notifications.dart';
 import '../widgets/system_notifications.dart';
 import 'add_contact_screen.dart';
 import 'contact_details_screen.dart';
@@ -490,11 +489,8 @@ class _ContactListScreenState extends State<ContactListScreen> {
     if (c.id == null) return;
     final db = ContactDatabase.instance;
     try {
-      // 1) Снимок данных + удаление контакта (каскад снесёт заметки/напоминания)
-      final snapshot = await db.deleteContactWithSnapshot(c.id!);
-      for (final reminder in snapshot.reminders) {
-        await ReminderNotifications.cancel(reminder);
-      }
+      // 1) Снимок заметок + удаление контакта (каскад снесёт заметки)
+      final notesSnapshot = await db.deleteContactWithSnapshot(c.id!);
       // 2) Убираем из локального списка
       setState(() {
         _all.removeWhere((e) => e.id == c.id);
@@ -508,15 +504,9 @@ class _ContactListScreenState extends State<ContactListScreen> {
         icon: Icons.delete_outline,
         onUndo: () async {
           _undoBanner = null;
-          final baseContact = c.copyWith(id: null);
-          final newId = await db.restoreContactWithSnapshot(baseContact, snapshot);
-          final restored = c.copyWith(id: newId);
-          _restoreLocally(restored, highlight: true);
-
-          final reminders = await db.remindersByContact(newId);
-          for (final reminder in reminders) {
-            await ReminderNotifications.schedule(reminder, restored);
-          }
+          final newId =
+              await db.restoreContactWithNotes(c.copyWith(id: null), notesSnapshot);
+          _restoreLocally(c.copyWith(id: newId), highlight: true);
         },
       );
     } catch (e) {
