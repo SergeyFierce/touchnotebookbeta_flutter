@@ -203,8 +203,18 @@ class PushNotifications {
 
   }
 
-  static Future<void> cancel(int id) => _plugin.cancel(id);
-  static Future<void> cancelAll() => _plugin.cancelAll();
-  static Future<List<PendingNotificationRequest>> pending() =>
-      _plugin.pendingNotificationRequests();
+  static Future<void> cancel(int id) async {
+    await ensureInitialized();
+    await _plugin.cancel(id);
+  }
+
+  static Future<void> cancelAll() async {
+    await ensureInitialized();
+    await _plugin.cancelAll();
+  }
+
+  static Future<List<PendingNotificationRequest>> pending() async {
+    await ensureInitialized();
+    return _plugin.pendingNotificationRequests();
+  }
 }
