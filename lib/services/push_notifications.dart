@@ -203,8 +203,17 @@ class PushNotifications {
 
   }
 
-  static Future<void> cancel(int id) => _plugin.cancel(id);
+  static Future<void> cancel(int id) async {
+    await ensureInitialized();
+    try {
+      await _plugin.cancel(id);
+    } catch (e, s) {
+      if (kDebugMode) print('Failed to cancel notification: $e\n$s');
+    }
+  }
+
   static Future<void> cancelAll() => _plugin.cancelAll();
+
   static Future<List<PendingNotificationRequest>> pending() =>
       _plugin.pendingNotificationRequests();
 }
