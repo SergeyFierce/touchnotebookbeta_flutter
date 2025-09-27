@@ -21,11 +21,12 @@ android {
 
     defaultConfig {
         applicationId = "com.sergeyfierce.touchnotebookbeta_flutter"
-        minSdk = flutter.minSdkVersion
+        minSdk = 26                     // ⬅️ ОБЯЗАТЕЛЬНО
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
     }
+
 
     buildTypes {
         release {

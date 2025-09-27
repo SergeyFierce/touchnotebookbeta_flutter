@@ -352,17 +352,60 @@ class _HomeScreenState extends State<HomeScreen> with RestorationMixin {
     }
   }
 
+  Future<void> _pickAndScheduleReminder() async {
+    // 1) Выбор даты/времени
+    final now = DateTime.now();
+    final date = await showDatePicker(
+      context: context,
+      initialDate: now.add(const Duration(days: 0)),
+      firstDate: now,
+      lastDate: now.add(const Duration(days: 365)),
+      helpText: 'Выберите дату',
+    );
+    if (date == null) return;
+
+    final time = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay.fromDateTime(now.add(const Duration(minutes: 5))),
+      helpText: 'Выберите время',
+    );
+    if (time == null) return;
+
+    final when = DateTime(date.year, date.month, date.day, time.hour, time.minute);
+
+    // 2) Планируем одноразовое
+    await PushNotifications.scheduleOneTime(
+      id: 2001,
+      whenLocal: when,
+      title: R.appTitle,
+      body: 'Напоминание на ${DateFormat('d MMMM, HH:mm', 'ru').format(when)}',
+      exact: true, // если не критично — можно false, чтобы не спрашивать exact alarm
+    );
+
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Напоминание запланировано на '
+          '${DateFormat('d MMMM, HH:mm', 'ru').format(when)}')),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       restorationId: 'home_scaffold',
       appBar: AppBar(
         title: const Text(R.homeTitle),
+        // В AppBar actions:
         actions: [
           IconButton(
             tooltip: R.showNotification,
             icon: const Icon(Icons.notifications_active_outlined),
             onPressed: _showDemoNotification,
+          ),
+          IconButton(
+            tooltip: 'Запланировать напоминание',
+            icon: const Icon(Icons.schedule),
+            onPressed: _pickAndScheduleReminder,
           ),
         ],
       ),
