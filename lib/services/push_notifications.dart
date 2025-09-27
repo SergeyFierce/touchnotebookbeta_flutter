@@ -1,8 +1,8 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
-import 'package:flutter_timezone/flutter_timezone.dart';
-import 'package:timezone/data/latest_all.dart' as tz;
-import 'package:timezone/timezone.dart' as tz;
+import 'package:flutter_timezone/flutter_timezone.dart';              // NEW
+import 'package:timezone/data/latest_all.dart' as tz;               // NEW
+import 'package:timezone/timezone.dart' as tz;                      // NEW
 import 'package:flutter/material.dart' show TimeOfDay;
 class PushNotifications {
   PushNotifications._();
@@ -12,7 +12,6 @@ class PushNotifications {
 
   static bool _initialized = false;
   static bool _tzReady = false;
-  static bool _usingFallbackTz = false;
 
   static const AndroidNotificationDetails _androidDetails =
   AndroidNotificationDetails(
@@ -76,32 +75,11 @@ class PushNotifications {
 
   static Future<void> _ensureTimeZone() async {
     if (_tzReady) return;
-
+    // Загружаем базу тайзон и выставляем локальную тайзону
     tz.initializeTimeZones();
-    try {
-      final name = await FlutterTimezone.getLocalTimezone();
-      tz.setLocalLocation(tz.getLocation(name));
-      _usingFallbackTz = false;
-    } catch (e, s) {
-      // На платформах, где flutter_timezone недоступен (например, десктоп),
-      // используем UTC и поправку вручную при расчёте расписания.
-      _usingFallbackTz = true;
-      tz.setLocalLocation(tz.UTC);
-      if (kDebugMode) {
-        debugPrint('Failed to resolve local timezone, falling back to UTC: $e\n$s');
-      }
-    }
-
+    final name = await FlutterTimezone.getLocalTimezone();
+    tz.setLocalLocation(tz.getLocation(name));
     _tzReady = true;
-  }
-
-  static tz.TZDateTime _toTz(DateTime whenLocal) {
-    if (_usingFallbackTz) {
-      final offset = whenLocal.timeZoneOffset;
-      final utcTime = whenLocal.subtract(offset);
-      return tz.TZDateTime.from(utcTime, tz.local);
-    }
-    return tz.TZDateTime.from(whenLocal, tz.local);
   }
 
   /// Немедленное уведомление (у вас уже было)
@@ -129,7 +107,7 @@ class PushNotifications {
     await ensureInitialized();
     await _ensureTimeZone();
 
-    final scheduled = _toTz(whenLocal);
+    final scheduled = tz.TZDateTime.from(whenLocal, tz.local);
 
     await _plugin.zonedSchedule(
       id,
@@ -157,19 +135,18 @@ class PushNotifications {
     await ensureInitialized();
     await _ensureTimeZone();
 
-    final nowLocal = DateTime.now();
-    var firstLocal = DateTime(
-      nowLocal.year,
-      nowLocal.month,
-      nowLocal.day,
+    final now = tz.TZDateTime.now(tz.local);
+    var first = tz.TZDateTime(
+      tz.local,
+      now.year,
+      now.month,
+      now.day,
       time.hour,
       time.minute,
     );
-    if (firstLocal.isBefore(nowLocal)) {
-      firstLocal = firstLocal.add(const Duration(days: 1));
+    if (first.isBefore(now)) {
+      first = first.add(const Duration(days: 1));
     }
-
-    final first = _toTz(firstLocal);
 
     await _plugin.zonedSchedule(
       id,
@@ -197,19 +174,19 @@ class PushNotifications {
     await ensureInitialized();
     await _ensureTimeZone();
 
-    final nowLocal = DateTime.now();
-    var firstLocal = DateTime(
-      nowLocal.year,
-      nowLocal.month,
-      nowLocal.day,
+    final now = tz.TZDateTime.now(tz.local);
+    var first = tz.TZDateTime(
+      tz.local,
+      now.year,
+      now.month,
+      now.day,
       time.hour,
       time.minute,
     );
-    while (firstLocal.weekday != weekday || !firstLocal.isAfter(nowLocal)) {
-      firstLocal = firstLocal.add(const Duration(days: 1));
+    // крутим до нужного дня недели в будущем
+    while (first.weekday != weekday || !first.isAfter(now)) {
+      first = first.add(const Duration(days: 1));
     }
-
-    final first = _toTz(firstLocal);
 
     await _plugin.zonedSchedule(
       id,
@@ -226,18 +203,8 @@ class PushNotifications {
 
   }
 
-  static Future<void> cancel(int id) async {
-    await ensureInitialized();
-    await _plugin.cancel(id);
-  }
-
-  static Future<void> cancelAll() async {
-    await ensureInitialized();
-    await _plugin.cancelAll();
-  }
-
-  static Future<List<PendingNotificationRequest>> pending() async {
-    await ensureInitialized();
-    return _plugin.pendingNotificationRequests();
-  }
+  static Future<void> cancel(int id) => _plugin.cancel(id);
+  static Future<void> cancelAll() => _plugin.cancelAll();
+  static Future<List<PendingNotificationRequest>> pending() =>
+      _plugin.pendingNotificationRequests();
 }
