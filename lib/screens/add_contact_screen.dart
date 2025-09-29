@@ -18,7 +18,7 @@ abstract class Dict {
     'Потенциальный': ['Холодный', 'Тёплый', 'Потерянный'],
   };
 
-  static const tags = ['Новый', 'VIP'];
+  static const tags = ['Новый', 'Напомнить', 'VIP'];
 }
 
 class AddContactScreen extends StatefulWidget {
@@ -147,8 +147,7 @@ class _AddContactScreenState extends State<AddContactScreen> {
     switch (tag) {
       case 'Новый':
         return Colors.white;
-      case Contact.reminderTagName:
-      case Contact.legacyReminderTagName:
+      case 'Напомнить':
         return Colors.purple;
       case 'VIP':
         return Colors.yellow;
@@ -162,8 +161,7 @@ class _AddContactScreenState extends State<AddContactScreen> {
       case 'Новый':
       case 'VIP':
         return Colors.black;
-      case Contact.reminderTagName:
-      case Contact.legacyReminderTagName:
+      case 'Напомнить':
         return Colors.white;
       default:
         return Colors.black;
@@ -745,7 +743,6 @@ class _AddContactScreenState extends State<AddContactScreen> {
       tags: _tags.toList(),
       comment: _commentController.text.trim().isNotEmpty ? _commentController.text.trim() : null,
       createdAt: _addedDate,
-      activeReminderCount: 0,
     );
 
     try {
