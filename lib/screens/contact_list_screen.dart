@@ -35,7 +35,8 @@ class ContactColors {
     switch (tag) {
       case 'Новый':
         return Colors.white;
-      case 'Напомнить':
+      case Contact.reminderTagName:
+      case Contact.legacyReminderTagName:
         return Colors.purple;
       case 'VIP':
         return Colors.yellow;
@@ -48,7 +49,8 @@ class ContactColors {
     switch (tag) {
       case 'Новый':
         return Colors.black;
-      case 'Напомнить':
+      case Contact.reminderTagName:
+      case Contact.legacyReminderTagName:
         return Colors.white;
       case 'VIP':
         return Colors.black;
@@ -137,6 +139,9 @@ class _ContactListScreenState extends State<ContactListScreen> {
   Timer? _debounce;
   OverlaySupportEntry? _undoBanner;
   Timer? _highlightTimer;
+  late final VoidCallback _revisionListener;
+  Timer? _revisionDebounce;
+  bool _pendingRevisionReload = false;
 
   void _restoreLocally(Contact restored, {bool highlight = false}) {
     // если вдруг уже есть с таким id — заменим, иначе добавим
@@ -174,6 +179,21 @@ class _ContactListScreenState extends State<ContactListScreen> {
     ContactListScreen._mountedByCategory[widget.category] = this;
     _loadContacts(reset: true);
     _scroll.addListener(_onScroll);
+
+    final revision = ContactDatabase.instance.revision;
+    _revisionListener = () {
+      if (!mounted) return;
+      _revisionDebounce?.cancel();
+      _revisionDebounce = Timer(const Duration(milliseconds: 200), () {
+        if (!mounted) return;
+        if (_isLoading) {
+          _pendingRevisionReload = true;
+          return;
+        }
+        unawaited(_loadContacts(reset: true));
+      });
+    };
+    revision.addListener(_revisionListener);
   }
 
   @override
@@ -193,6 +213,8 @@ class _ContactListScreenState extends State<ContactListScreen> {
   void dispose() {
     _debounce?.cancel();
     _highlightTimer?.cancel();
+    _revisionDebounce?.cancel();
+    ContactDatabase.instance.revision.removeListener(_revisionListener);
     _searchController.dispose();
     _scroll.removeListener(_onScroll);
     _scroll.dispose();
@@ -283,6 +305,17 @@ class _ContactListScreenState extends State<ContactListScreen> {
         final id = widget.scrollToId!;
         await _maybeScrollTo(id);
         _flashHighlight(id);
+      }
+      if (_pendingRevisionReload) {
+        _pendingRevisionReload = false;
+        Future.microtask(() {
+          if (!mounted) return;
+          if (_isLoading) {
+            _pendingRevisionReload = true;
+            return;
+          }
+          unawaited(_loadContacts(reset: true));
+        });
       }
     } catch (e) {
       if (mounted) {
@@ -524,7 +557,8 @@ class _ContactListScreenState extends State<ContactListScreen> {
           _restoreLocally(c.copyWith(id: newId), highlight: true);
 
           // Восстанавливаем запланированные уведомления для будущих напоминаний
-          final restoredReminders = await db.remindersByContact(newId);
+          final restoredReminders =
+              await db.remindersByContact(newId, onlyActive: true);
           for (final reminder in restoredReminders) {
             if (reminder.remindAt.isAfter(DateTime.now()) && reminder.id != null) {
               await PushNotifications.scheduleOneTime(
@@ -881,6 +915,41 @@ class _ContactCardState extends State<_ContactCard> with TickerProviderStateMixi
     );
   }
 
+  Widget _reminderTagChip(int count) {
+    final bg = ContactColors.tagColor(Contact.reminderTagName);
+    final fg = ContactColors.tagTextColor(Contact.reminderTagName);
+    final badgeTextStyle = Theme.of(context).textTheme.bodySmall?.copyWith(
+          fontSize: 10,
+          color: bg,
+          fontWeight: FontWeight.w600,
+        );
+    return Chip(
+      label: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            Contact.reminderTagName,
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(fontSize: 10, color: fg),
+          ),
+          const SizedBox(width: 6),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Text('$count', style: badgeTextStyle),
+          ),
+        ],
+      ),
+      backgroundColor: bg,
+      visualDensity: const VisualDensity(horizontal: -4, vertical: -4),
+      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 0),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final border = BorderRadius.circular(12);
@@ -950,6 +1019,13 @@ class _ContactCardState extends State<_ContactCard> with TickerProviderStateMixi
 
   Widget _buildCard(BuildContext context, BorderRadius border) {
     const double kStatusReserve = 120;
+    final reminderCount = widget.contact.activeReminderCount;
+    final hasReminderTag = reminderCount > 0;
+    final visibleTags = widget.contact.tags
+        .where((tag) =>
+            tag != Contact.reminderTagName &&
+            tag != Contact.legacyReminderTagName)
+        .toList(growable: false);
     return AnimatedScale(
       scale: _pressed ? 0.98 : 1.0,
       duration: const Duration(milliseconds: 100),
@@ -1005,7 +1081,7 @@ class _ContactCardState extends State<_ContactCard> with TickerProviderStateMixi
                         spacing: 4,
                         runSpacing: 4,
                         children: [
-                          for (final tag in widget.contact.tags)
+                          for (final tag in visibleTags)
                             Semantics(
                               label: 'Тег $tag',
                               child: Chip(
@@ -1024,6 +1100,12 @@ class _ContactCardState extends State<_ContactCard> with TickerProviderStateMixi
                                   borderRadius: BorderRadius.circular(30),
                                 ),
                               ),
+                            ),
+                          if (hasReminderTag)
+                            Semantics(
+                              label:
+                                  'Тег ${Contact.reminderTagName} с $reminderCount активными напоминаниями',
+                              child: _reminderTagChip(reminderCount),
                             ),
                         ],
                       ),
