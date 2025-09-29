@@ -154,8 +154,15 @@ class _AllRemindersScreenState extends State<AllRemindersScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
     return Scaffold(
       appBar: AppBar(
+        backgroundColor: colorScheme.surface,
+        elevation: 0,
+        shadowColor: Colors.transparent,
+        surfaceTintColor: Colors.transparent,
+        scrolledUnderElevation: 0,
         title: const Text('Все напоминания'),
       ),
       body: _buildBody(context),
@@ -210,8 +217,12 @@ class _AllRemindersScreenState extends State<AllRemindersScreen> {
     final dateFormatter = DateFormat.yMMMMd('ru');
     final timeFormatter = DateFormat('HH:mm', 'ru');
     final completedFormatter = DateFormat('d MMMM, HH:mm', 'ru');
-    final reminderHighlightColor = theme.colorScheme.secondaryContainer;
-    final reminderHighlightTextColor = theme.colorScheme.onSecondaryContainer;
+    final colorScheme = theme.colorScheme;
+    final isDarkTheme = theme.brightness == Brightness.dark;
+    final reminderHighlightColor =
+        isDarkTheme ? colorScheme.surfaceContainerHighest : colorScheme.primary;
+    final reminderHighlightTextColor =
+        isDarkTheme ? colorScheme.onSurface : colorScheme.onPrimary;
 
     return RefreshIndicator(
       onRefresh: _onRefresh,
