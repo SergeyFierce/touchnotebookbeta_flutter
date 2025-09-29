@@ -23,8 +23,8 @@ class ContactDatabase {
 
     _db = await openDatabase(
       path,
-      // ВАЖНО: поднимаем версию до 4, чтобы сработала миграция с FK + CASCADE и напоминаниями
-      version: 4,
+      // ВАЖНО: поднимаем версию до 3, чтобы сработала миграция с FK + CASCADE и напоминаниями
+      version: 3,
 
       // Включаем поддержку внешних ключей (иначе SQLite их игнорирует)
       onConfigure: (db) async {
@@ -73,7 +73,6 @@ class ContactDatabase {
             text TEXT NOT NULL,
             remindAt INTEGER NOT NULL,
             createdAt INTEGER NOT NULL,
-            completedAt INTEGER,
             FOREIGN KEY(contactId) REFERENCES contacts(id) ON DELETE CASCADE
           )
         ''');
@@ -124,15 +123,10 @@ class ContactDatabase {
               text TEXT NOT NULL,
               remindAt INTEGER NOT NULL,
               createdAt INTEGER NOT NULL,
-              completedAt INTEGER,
               FOREIGN KEY(contactId) REFERENCES contacts(id) ON DELETE CASCADE
             )
           ''');
           await db.execute('CREATE INDEX IF NOT EXISTS idx_reminders_contactId_remindAt ON reminders(contactId, remindAt)');
-        }
-
-        if (oldV < 4) {
-          await db.execute('ALTER TABLE reminders ADD COLUMN completedAt INTEGER');
         }
       },
     );
@@ -320,35 +314,13 @@ class ContactDatabase {
     return rows;
   }
 
-  Future<List<Reminder>> remindersByContact(
-    int contactId, {
-    bool onlyActive = false,
-    bool onlyCompleted = false,
-  }) async {
-    assert(!(onlyActive && onlyCompleted),
-        'Нельзя одновременно запрашивать только активные и только завершённые напоминания');
+  Future<List<Reminder>> remindersByContact(int contactId) async {
     final db = await database;
-    final where = StringBuffer('contactId = ?');
-    final whereArgs = <Object?>[contactId];
-    var orderBy = 'remindAt ASC';
-
-    if (onlyActive) {
-      final now = DateTime.now().millisecondsSinceEpoch;
-      where
-        ..write(' AND completedAt IS NULL')
-        ..write(' AND remindAt >= ?');
-      whereArgs.add(now);
-      orderBy = 'remindAt ASC';
-    } else if (onlyCompleted) {
-      where.write(' AND completedAt IS NOT NULL');
-      orderBy = 'completedAt DESC';
-    }
-
     final maps = await db.query(
       'reminders',
-      where: where.toString(),
-      whereArgs: whereArgs,
-      orderBy: orderBy,
+      where: 'contactId = ?',
+      whereArgs: [contactId],
+      orderBy: 'remindAt ASC',
     );
     return maps.map(Reminder.fromMap).toList();
   }
