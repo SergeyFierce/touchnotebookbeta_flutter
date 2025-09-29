@@ -8,16 +8,23 @@ import 'contact_database.dart';
 import 'push_notifications.dart';
 
 class AppSettings extends ChangeNotifier {
-  AppSettings._(this._themeMode, this._notificationsEnabled);
+  AppSettings._(
+    this._themeMode,
+    this._notificationsEnabled,
+    this._policiesAccepted,
+  );
 
   static const _themeKey = 'app_theme_mode';
   static const _notificationsKey = 'app_notifications_enabled';
+  static const _policiesAcceptedKey = 'app_policies_accepted';
 
   ThemeMode _themeMode;
   bool _notificationsEnabled;
+  bool _policiesAccepted;
 
   ThemeMode get themeMode => _themeMode;
   bool get notificationsEnabled => _notificationsEnabled;
+  bool get policiesAccepted => _policiesAccepted;
 
   static Future<AppSettings> load() async {
     final prefs = await SharedPreferences.getInstance();
@@ -30,8 +37,14 @@ class AppSettings extends ChangeNotifier {
     };
     final notificationsEnabled =
         prefs.getBool(_notificationsKey) ?? true;
+    final policiesAccepted =
+        prefs.getBool(_policiesAcceptedKey) ?? false;
 
-    final settings = AppSettings._(themeMode, notificationsEnabled);
+    final settings = AppSettings._(
+      themeMode,
+      notificationsEnabled,
+      policiesAccepted,
+    );
     PushNotifications.setEnabled(notificationsEnabled);
     return settings;
   }
@@ -65,6 +78,15 @@ class AppSettings extends ChangeNotifier {
     }
 
     unawaited(_rescheduleActiveReminders());
+  }
+
+  Future<void> setPoliciesAccepted(bool value) async {
+    if (_policiesAccepted == value) return;
+    _policiesAccepted = value;
+    notifyListeners();
+
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_policiesAcceptedKey, value);
   }
 
   Future<void> _rescheduleActiveReminders() async {

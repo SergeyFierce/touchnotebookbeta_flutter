@@ -11,6 +11,9 @@ import 'add_contact_screen.dart';
 import 'settings_screen.dart';
 import 'contact_list_screen.dart';
 import 'all_reminders_screen.dart';
+import 'privacy_policy_screen.dart';
+import 'user_agreement_screen.dart';
+import '../services/app_settings.dart';
 import '../services/contact_database.dart';
 
 
@@ -210,6 +213,7 @@ class _HomeScreenState extends State<HomeScreen> with RestorationMixin {
 
   // Restoration
   final RestorableInt _drawerIndex = RestorableInt(0);
+  bool _consentDialogShown = false;
 
   @override
   String? get restorationId => 'home_screen';
@@ -226,6 +230,9 @@ class _HomeScreenState extends State<HomeScreen> with RestorationMixin {
     _revListener = _scheduleRefresh;
     ContactDatabase.instance.revision.addListener(_revListener);
     _scheduleTimeTick();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _showPoliciesConsentIfNeeded();
+    });
   }
 
   @override
@@ -355,6 +362,102 @@ class _HomeScreenState extends State<HomeScreen> with RestorationMixin {
     );
     if (saved == true && mounted) {
     }
+  }
+
+  void _showPoliciesConsentIfNeeded() {
+    if (!mounted || _consentDialogShown) return;
+    final settings = AppSettingsScope.of(context);
+    if (settings.policiesAccepted) return;
+    _consentDialogShown = true;
+    _showPoliciesConsentDialog(settings);
+  }
+
+  Future<void> _openDocumentFromDialog(
+    BuildContext dialogContext,
+    Widget screen,
+  ) {
+    return Navigator.of(dialogContext, rootNavigator: true).push(
+      MaterialPageRoute(builder: (_) => screen),
+    );
+  }
+
+  void _showPoliciesConsentDialog(AppSettings settings) {
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) {
+        bool isChecked = false;
+        return WillPopScope(
+          onWillPop: () async => false,
+          child: StatefulBuilder(
+            builder: (context, setState) {
+              return AlertDialog(
+                title: const Text('Согласие с условиями'),
+                content: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Перед началом работы подтвердите, что вы ознакомились с '
+                      'Политикой конфиденциальности и Пользовательским соглашением.',
+                    ),
+                    const SizedBox(height: 12),
+                    CheckboxListTile(
+                      value: isChecked,
+                      onChanged: (value) {
+                        setState(() {
+                          isChecked = value ?? false;
+                        });
+                      },
+                      contentPadding: EdgeInsets.zero,
+                      controlAffinity: ListTileControlAffinity.leading,
+                      title: Wrap(
+                        alignment: WrapAlignment.start,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        spacing: 4,
+                        runSpacing: 4,
+                        children: [
+                          const Text('Я соглашаюсь с'),
+                          TextButton(
+                            onPressed: () => _openDocumentFromDialog(
+                              dialogContext,
+                              const PrivacyPolicyScreen(),
+                            ),
+                            style: TextButton.styleFrom(padding: EdgeInsets.zero),
+                            child: const Text('Политикой конфиденциальности'),
+                          ),
+                          const Text('и'),
+                          TextButton(
+                            onPressed: () => _openDocumentFromDialog(
+                              dialogContext,
+                              const UserAgreementScreen(),
+                            ),
+                            style: TextButton.styleFrom(padding: EdgeInsets.zero),
+                            child: const Text('Пользовательским соглашением'),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                actions: [
+                  FilledButton(
+                    onPressed: isChecked
+                        ? () async {
+                            await settings.setPoliciesAccepted(true);
+                            if (!mounted) return;
+                            Navigator.of(dialogContext).pop();
+                          }
+                        : null,
+                    child: const Text('Принять'),
+                  ),
+                ],
+              );
+            },
+          ),
+        );
+      },
+    );
   }
 
   /// Определяем количество колонок для адаптива
