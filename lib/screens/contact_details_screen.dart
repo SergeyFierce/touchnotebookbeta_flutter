@@ -720,7 +720,6 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> with RouteA
     'WhatsApp': 'whatsapp',
     'TikTok': 'tiktok',
     'Одноклассники': 'odnoklassniki',
-    'X': 'twitterx',
   };
 
   String _brandAssetPath(String value) {

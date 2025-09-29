@@ -359,7 +359,6 @@ class _AddContactScreenState extends State<AddContactScreen> {
     'WhatsApp': 'whatsapp',
     'TikTok': 'tiktok',
     'Одноклассники': 'odnoklassniki',
-    'X': 'twitterx',
   };
 
   String _brandAssetPath(String value) {
