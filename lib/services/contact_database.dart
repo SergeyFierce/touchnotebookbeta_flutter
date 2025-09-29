@@ -444,11 +444,9 @@ class ContactDatabase {
     return maps.map(Reminder.fromMap).toList();
   }
 
-  Future<List<ReminderWithContactInfo>> remindersWithContactInfo({
-    bool onlyActive = false,
-  }) async {
+  Future<List<ReminderWithContactInfo>> remindersWithContactInfo() async {
     final db = await database;
-    final query = StringBuffer('''
+    final rows = await db.rawQuery('''
       SELECT r.id AS reminder_id,
              r.contactId AS reminder_contactId,
              r.text AS reminder_text,
@@ -459,16 +457,8 @@ class ContactDatabase {
              c.category AS contact_category
         FROM reminders r
         JOIN contacts c ON c.id = r.contactId
+       ORDER BY r.remindAt ASC, r.id ASC
     ''');
-    final args = <Object?>[];
-
-    if (onlyActive) {
-      query.write(' WHERE r.completedAt IS NULL');
-    }
-
-    query.write(' ORDER BY r.remindAt ASC, r.id ASC');
-
-    final rows = await db.rawQuery(query.toString(), args);
 
     return rows.map((row) {
       final reminder = Reminder(

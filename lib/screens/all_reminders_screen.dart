@@ -49,9 +49,15 @@ class _AllRemindersScreenState extends State<AllRemindersScreen> {
     }
 
     try {
-      final reminders =
-          await _db.remindersWithContactInfo(onlyActive: true);
-      final groups = _groupByDate(reminders);
+      final reminders = await _db.remindersWithContactInfo();
+      final now = DateTime.now();
+      final activeReminders = reminders.where((entry) {
+        final reminder = entry.reminder;
+        final isCompleted = reminder.completedAt != null;
+        final isInFuture = !reminder.remindAt.isBefore(now);
+        return !isCompleted && isInFuture;
+      }).toList(growable: false);
+      final groups = _groupByDate(activeReminders);
       if (!mounted) return;
       setState(() {
         _groups = groups;
