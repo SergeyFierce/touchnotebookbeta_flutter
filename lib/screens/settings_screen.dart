@@ -17,22 +17,22 @@ class SettingsScreen extends StatelessWidget {
         children: const [
           _SettingsCard(
             title: 'Уведомления',
-            description: 'Управление настройками уведомлений приложения.',
+            icon: Icons.notifications_active_outlined,
             destination: NotificationsSettingsScreen(),
           ),
           _SettingsCard(
             title: 'Тема',
-            description: 'Выбор светлой или тёмной темы интерфейса.',
+            icon: Icons.brightness_6_outlined,
             destination: ThemeSettingsScreen(),
           ),
           _SettingsCard(
             title: 'Политика конфиденциальности',
-            description: 'Ознакомьтесь с политикой обработки данных.',
+            icon: Icons.privacy_tip_outlined,
             destination: PrivacyPolicyScreen(),
           ),
           _SettingsCard(
             title: 'Пользовательское соглашение',
-            description: 'Основные разделы пользовательского соглашения.',
+            icon: Icons.receipt_long_outlined,
             destination: UserAgreementScreen(),
           ),
         ],
@@ -44,12 +44,12 @@ class SettingsScreen extends StatelessWidget {
 class _SettingsCard extends StatelessWidget {
   const _SettingsCard({
     required this.title,
-    required this.description,
+    required this.icon,
     required this.destination,
   });
 
   final String title;
-  final String description;
+  final IconData icon;
   final Widget destination;
 
   @override
@@ -57,8 +57,8 @@ class _SettingsCard extends StatelessWidget {
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
       child: ListTile(
+        leading: Icon(icon),
         title: Text(title),
-        subtitle: Text(description),
         trailing: const Icon(Icons.chevron_right),
         onTap: () {
           Navigator.of(context).push(
