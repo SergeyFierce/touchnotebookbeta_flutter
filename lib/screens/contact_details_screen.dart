@@ -10,6 +10,7 @@ import 'package:overlay_support/overlay_support.dart';
 import '../models/contact.dart';
 import '../models/note.dart';
 import '../models/reminder.dart';
+import 'reminders_list_screen.dart';
 import '../services/contact_database.dart';
 import '../services/push_notifications.dart';
 import '../widgets/system_notifications.dart';
@@ -641,8 +642,8 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
 
   Future<void> _loadReminders() async {
     if (_contact.id == null) return;
-    final reminders =
-        await ContactDatabase.instance.remindersByContact(_contact.id!);
+    final reminders = await ContactDatabase.instance
+        .remindersByContact(_contact.id!, onlyActive: true);
     if (mounted) setState(() => _reminders = reminders);
   }
 
@@ -709,6 +710,17 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
         showErrorBanner('Не удалось сохранить напоминание: $e');
       }
     }
+  }
+
+  Future<void> _openRemindersList() async {
+    if (_contact.id == null) return;
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => RemindersListScreen(contact: _contact),
+      ),
+    );
+    await _loadReminders();
   }
 
   Future<void> _editReminder(Reminder reminder) async {
@@ -1948,10 +1960,10 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
                     if (v) _scrollToCard(_remindersCardKey);
                   },
                   headerActions: [
-                    IconButton(
-                      tooltip: 'Добавить напоминание',
-                      onPressed: _contact.id == null ? null : _addReminder,
-                      icon: const Icon(Icons.add_alert_outlined),
+                    TextButton(
+                      onPressed:
+                          _contact.id == null ? null : _openRemindersList,
+                      child: const Text('Список напоминаний'),
                     ),
                   ],
                   children: _reminders.isEmpty
