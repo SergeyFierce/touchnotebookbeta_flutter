@@ -356,12 +356,9 @@ class _AddContactScreenState extends State<AddContactScreen> {
   static const Map<String, String> _brandSlug = {
     'Telegram': 'telegram',
     'VK': 'vk',
-    'Instagram': 'instagram',
     'WhatsApp': 'whatsapp',
     'TikTok': 'tiktok',
     'Одноклассники': 'odnoklassniki',
-    'Facebook': 'facebook',
-    'Twitter': 'twitterx',
     'X': 'twitterx',
   };
 
@@ -572,12 +569,9 @@ class _AddContactScreenState extends State<AddContactScreen> {
     const options = [
       'Telegram',
       'VK',
-      'Instagram',
-      'Facebook',
       'WhatsApp',
       'TikTok',
       'Одноклассники',
-      'Twitter',
     ];
 
     final result = await showModalBottomSheet<String>(
