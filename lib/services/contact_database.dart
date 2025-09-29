@@ -270,6 +270,16 @@ class ContactDatabase {
     return Sqflite.firstIntValue(result) ?? 0;
   }
 
+  Future<int> activeReminderCount() async {
+    final db = await database;
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final result = await db.rawQuery(
+      'SELECT COUNT(*) as c FROM reminders WHERE completedAt IS NULL AND remindAt >= ?',
+      [now],
+    );
+    return Sqflite.firstIntValue(result) ?? 0;
+  }
+
   // ================= Notes =================
 
   Future<int> insertNote(Note note) async {

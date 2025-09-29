@@ -12,6 +12,13 @@ class PushNotifications {
 
   static bool _initialized = false;
   static bool _tzReady = false;
+  static bool _enabled = true;
+
+  static void setEnabled(bool value) {
+    _enabled = value;
+  }
+
+  static bool get isEnabled => _enabled;
 
   static const AndroidNotificationDetails _androidDetails =
   AndroidNotificationDetails(
@@ -88,6 +95,7 @@ class PushNotifications {
     required String title,
     required String body,
   }) async {
+    if (!_enabled) return;
     await ensureInitialized();
     try {
       await _plugin.show(id, title, body, _details);
@@ -104,6 +112,7 @@ class PushNotifications {
     required String body,
     bool exact = true, // для Android: точное ли срабатывание
   }) async {
+    if (!_enabled) return;
     await ensureInitialized();
     await _ensureTimeZone();
 
@@ -132,6 +141,7 @@ class PushNotifications {
     required String body,
     bool exact = false,
   }) async {
+    if (!_enabled) return;
     await ensureInitialized();
     await _ensureTimeZone();
 
@@ -171,6 +181,7 @@ class PushNotifications {
     required String body,
     bool exact = false,
   }) async {
+    if (!_enabled) return;
     await ensureInitialized();
     await _ensureTimeZone();
 
