@@ -210,6 +210,8 @@ class _AllRemindersScreenState extends State<AllRemindersScreen> {
     final dateFormatter = DateFormat.yMMMMd('ru');
     final timeFormatter = DateFormat('HH:mm', 'ru');
     final completedFormatter = DateFormat('d MMMM, HH:mm', 'ru');
+    final reminderHighlightColor = theme.colorScheme.primaryContainer;
+    final reminderHighlightTextColor = theme.colorScheme.onPrimaryContainer;
 
     return RefreshIndicator(
       onRefresh: _onRefresh,
@@ -231,12 +233,26 @@ class _AllRemindersScreenState extends State<AllRemindersScreen> {
                 child: Card(
                   child: ListTile(
                     leading: _ReminderStatusIcon(reminder: item.reminder),
-                    title: Text(item.reminder.text),
+                    title: Text(item.contactName),
                     subtitle: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(item.contactName),
-                        const SizedBox(height: 4),
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: reminderHighlightColor,
+                            borderRadius: const BorderRadius.all(Radius.circular(8)),
+                          ),
+                          child: Text(
+                            item.reminder.text,
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                              color: reminderHighlightTextColor,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
                         Text(
                           '${timeFormatter.format(item.reminder.remindAt)} • ${item.contactCategory}',
                         ),
