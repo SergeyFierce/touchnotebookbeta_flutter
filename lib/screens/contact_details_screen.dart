@@ -1594,6 +1594,17 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> with RouteA
     FocusScope.of(context).requestFocus(_focusSocial);
     setState(() => _socialOpen = true);
 
+    const options = [
+      'Telegram',
+      'VK',
+      'Instagram',
+      'Facebook',
+      'WhatsApp',
+      'TikTok',
+      'Одноклассники',
+      'Twitter',
+    ];
+
     final result = await showModalBottomSheet<String>(
       context: context,
       showDragHandle: true,
@@ -1604,28 +1615,35 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> with RouteA
       clipBehavior: Clip.antiAlias,
       builder: (context) {
         final maxH = MediaQuery.of(context).size.height * 0.8;
-        final items = [
-          'Telegram','VK','Instagram','Facebook','WhatsApp','TikTok','Одноклассники','Twitter',
-        ];
-        return _sheetWrap(
-          title: 'Соцсеть',
-          child: ConstrainedBox(
-            constraints: BoxConstraints(maxHeight: maxH),
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  for (int i = 0; i < items.length; i++)
-                    _radioRow<String>(
-                      value: items[i],
-                      groupValue: _socialType,
-                      title: items[i],
-                      leading: _brandIcon(items[i]),
-                      onSelect: () => Navigator.pop(context, items[i]),
-                      isLast: i == items.length - 1,
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.only(left: 16, right: 16, bottom: 16),
+            child: ConstrainedBox(
+              constraints: BoxConstraints(maxHeight: maxH),
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                      child: Text(
+                        'Соцсеть',
+                        style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+                      ),
                     ),
-                ],
+                    const Divider(height: 1),
+                    for (var i = 0; i < options.length; i++) ...[
+                      if (i > 0) const Divider(height: 0),
+                      ListTile(
+                        leading: _brandIcon(options[i]),
+                        title: Text(options[i]),
+                        onTap: () => Navigator.pop(context, options[i]),
+                      ),
+                    ],
+                  ],
+                ),
               ),
             ),
           ),
