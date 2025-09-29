@@ -1038,6 +1038,7 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> with RouteA
       );
 
     var selected = initial?.remindAt ?? DateTime.now().add(const Duration(minutes: 1));
+    final now = DateTime.now();
 
     final result = await showModalBottomSheet<({String text, DateTime when})>(
       context: context,
@@ -1046,9 +1047,7 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> with RouteA
         return StatefulBuilder(
           builder: (context, setState) {
             final viewInsets = MediaQuery.of(context).viewInsets;
-            final currentNow = DateTime.now();
-            final minimumDate = selected.isBefore(currentNow) ? selected : currentNow;
-            final canSave = selected.isAfter(currentNow);
+            final minimumDate = selected.isBefore(now) ? selected : now;
 
             return AnimatedPadding(
               duration: const Duration(milliseconds: 150),
@@ -1080,16 +1079,14 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> with RouteA
                             ),
                             const SizedBox(width: 8),
                             FilledButton(
-                              onPressed: canSave
-                                  ? () {
-                                      final text = controller.text.trim();
-                                      if (text.isEmpty) {
-                                        showErrorBanner('Введите текст напоминания');
-                                        return;
-                                      }
-                                      Navigator.pop(sheetContext, (text: text, when: selected));
-                                    }
-                                  : null,
+                              onPressed: () {
+                                final text = controller.text.trim();
+                                if (text.isEmpty) {
+                                  showErrorBanner('Введите текст напоминания');
+                                  return;
+                                }
+                                Navigator.pop(sheetContext, (text: text, when: selected));
+                              },
                               child: const Text('Сохранить'),
                             ),
                           ],
@@ -1117,7 +1114,7 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> with RouteA
                           use24hFormat: true,
                           initialDateTime: selected,
                           minimumDate: minimumDate,
-                          maximumDate: currentNow.add(const Duration(days: 365 * 5)),
+                          maximumDate: now.add(const Duration(days: 365 * 5)),
                           onDateTimeChanged: (value) => setState(() => selected = value),
                         ),
                       ),
