@@ -524,8 +524,7 @@ class _ContactListScreenState extends State<ContactListScreen> {
           _restoreLocally(c.copyWith(id: newId), highlight: true);
 
           // Восстанавливаем запланированные уведомления для будущих напоминаний
-          final restoredReminders =
-              await db.remindersByContact(newId, onlyActive: true);
+          final restoredReminders = await db.remindersByContact(newId);
           for (final reminder in restoredReminders) {
             if (reminder.remindAt.isAfter(DateTime.now()) && reminder.id != null) {
               await PushNotifications.scheduleOneTime(
