@@ -1037,7 +1037,7 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> with RouteA
         TextPosition(offset: controller.text.length),
       );
 
-    var selected = initial?.remindAt ?? DateTime.now().add(const Duration(minutes: 5));
+    var selected = initial?.remindAt ?? DateTime.now().add(const Duration(minutes: 1));
     final now = DateTime.now();
 
     final result = await showModalBottomSheet<({String text, DateTime when})>(
