@@ -254,31 +254,35 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
   Widget _sheetWrap({required String title, required Widget child}) {
     final bottom = MediaQuery.of(context).viewInsets.bottom;
     return SafeArea(
-      child: Padding(
-        padding: EdgeInsets.only(
-          left: 16, right: 16, top: 8, bottom: bottom > 0 ? bottom : 16,
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Заголовок
-            Padding(
-              padding: const EdgeInsets.only(left: 4, right: 4, bottom: 8),
-              child: Text(
-                title,
-                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+      child: LayoutBuilder(
+        builder: (context, c) {
+          final maxH = c.maxHeight; // учитывает клавиатуру
+          return Padding(
+            padding: EdgeInsets.only(left:16, right:16, top:8, bottom: bottom > 0 ? bottom : 16),
+            child: ConstrainedBox(
+              constraints: BoxConstraints(maxHeight: maxH),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.only(left: 4, right: 4, bottom: 8),
+                      child: Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+                    ),
+                    const Divider(height: 1),
+                    const SizedBox(height: 8),
+                    child,
+                  ],
+                ),
               ),
             ),
-            const Divider(height: 1),
-            const SizedBox(height: 8),
-            // Контент шита
-            child,
-          ],
-        ),
+          );
+        },
       ),
     );
   }
+
 
 
   // Плавный автоскролл к карточке после раскрытия (более мягкий)
@@ -843,7 +847,6 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
       },
     );
 
-    controller.dispose();
     return result;
   }
 
