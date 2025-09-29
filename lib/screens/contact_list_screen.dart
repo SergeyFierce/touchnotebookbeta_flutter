@@ -4,7 +4,9 @@ import 'package:overlay_support/overlay_support.dart';
 
 import '../app.dart'; // для App.navigatorKey
 import '../models/contact.dart';
+import '../models/reminder.dart';
 import '../services/contact_database.dart';
+import '../services/push_notifications.dart';
 import '../widgets/system_notifications.dart';
 import 'add_contact_screen.dart';
 import 'contact_details_screen.dart';
@@ -489,8 +491,18 @@ class _ContactListScreenState extends State<ContactListScreen> {
     if (c.id == null) return;
     final db = ContactDatabase.instance;
     try {
-      // 1) Снимок заметок + удаление контакта (каскад снесёт заметки)
-      final notesSnapshot = await db.deleteContactWithSnapshot(c.id!);
+      // 1) Снимок заметок/напоминаний + удаление контакта
+      final snapshot = await db.deleteContactWithSnapshot(c.id!);
+      final notesSnapshot = snapshot.notes;
+      final remindersSnapshot = snapshot.reminders;
+
+      // Отменяем запланированные уведомления по напоминаниям
+      for (final reminder in remindersSnapshot) {
+        final reminderId = reminder.id;
+        if (reminderId != null) {
+          await PushNotifications.cancel(reminderId);
+        }
+      }
       // 2) Убираем из локального списка
       setState(() {
         _all.removeWhere((e) => e.id == c.id);
@@ -504,9 +516,25 @@ class _ContactListScreenState extends State<ContactListScreen> {
         icon: Icons.delete_outline,
         onUndo: () async {
           _undoBanner = null;
-          final newId =
-              await db.restoreContactWithNotes(c.copyWith(id: null), notesSnapshot);
+          final newId = await db.restoreContactWithNotes(
+            c.copyWith(id: null),
+            notesSnapshot,
+            remindersSnapshot,
+          );
           _restoreLocally(c.copyWith(id: newId), highlight: true);
+
+          // Восстанавливаем запланированные уведомления для будущих напоминаний
+          final restoredReminders = await db.remindersByContact(newId);
+          for (final reminder in restoredReminders) {
+            if (reminder.remindAt.isAfter(DateTime.now()) && reminder.id != null) {
+              await PushNotifications.scheduleOneTime(
+                id: reminder.id!,
+                whenLocal: reminder.remindAt,
+                title: 'Напоминание: ${c.name}',
+                body: reminder.text,
+              );
+            }
+          }
         },
       );
     } catch (e) {
