@@ -1609,41 +1609,25 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> with RouteA
       context: context,
       showDragHandle: true,
       isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      clipBehavior: Clip.antiAlias,
       builder: (context) {
         final maxH = MediaQuery.of(context).size.height * 0.8;
         return SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.only(left: 16, right: 16, bottom: 16),
-            child: ConstrainedBox(
-              constraints: BoxConstraints(maxHeight: maxH),
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.only(bottom: 8),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-                      child: Text(
-                        'Соцсеть',
-                        style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
-                      ),
+          child: ConstrainedBox(
+            constraints: BoxConstraints(maxHeight: maxH),
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  for (var i = 0; i < options.length; i++) ...[
+                    if (i > 0) const Divider(height: 0),
+                    ListTile(
+                      leading: _brandIcon(options[i]),
+                      title: Text(options[i]),
+                      onTap: () => Navigator.pop(context, options[i]),
                     ),
-                    const Divider(height: 1),
-                    for (var i = 0; i < options.length; i++) ...[
-                      if (i > 0) const Divider(height: 0),
-                      ListTile(
-                        leading: _brandIcon(options[i]),
-                        title: Text(options[i]),
-                        onTap: () => Navigator.pop(context, options[i]),
-                      ),
-                    ],
                   ],
-                ),
+                ],
               ),
             ),
           ),
