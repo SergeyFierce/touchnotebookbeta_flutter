@@ -1,7 +1,4 @@
 class Contact {
-  static const reminderTagName = 'Напоминания';
-  static const legacyReminderTagName = 'Напомнить';
-
   final int? id;
   final String name;
   final DateTime? birthDate;
@@ -16,7 +13,6 @@ class Contact {
   final List<String> tags;
   final String? comment;
   final DateTime createdAt;
-  final int activeReminderCount;
 
   const Contact({
     this.id,
@@ -33,41 +29,23 @@ class Contact {
     this.tags = const [],
     this.comment,
     required this.createdAt,
-    this.activeReminderCount = 0,
   });
 
-  Contact copyWith({
-    int? id,
-    String? name,
-    DateTime? birthDate,
-    int? ageManual,
-    String? profession,
-    String? city,
-    String? phone,
-    String? email,
-    String? social,
-    String? category,
-    String? status,
-    List<String>? tags,
-    String? comment,
-    DateTime? createdAt,
-    int? activeReminderCount,
-  }) => Contact(
+  Contact copyWith({int? id}) => Contact(
         id: id ?? this.id,
-        name: name ?? this.name,
-        birthDate: birthDate ?? this.birthDate,
-        ageManual: ageManual ?? this.ageManual,
-        profession: profession ?? this.profession,
-        city: city ?? this.city,
-        phone: phone ?? this.phone,
-        email: email ?? this.email,
-        social: social ?? this.social,
-        category: category ?? this.category,
-        status: status ?? this.status,
-        tags: tags ?? this.tags,
-        comment: comment ?? this.comment,
-        createdAt: createdAt ?? this.createdAt,
-        activeReminderCount: activeReminderCount ?? this.activeReminderCount,
+        name: name,
+        birthDate: birthDate,
+        ageManual: ageManual,
+        profession: profession,
+        city: city,
+        phone: phone,
+        email: email,
+        social: social,
+        category: category,
+        status: status,
+        tags: tags,
+        comment: comment,
+        createdAt: createdAt,
       );
 
   Map<String, dynamic> toMap() => {
@@ -101,20 +79,8 @@ class Contact {
         social: map['social'] as String?,
         category: map['category'] as String,
         status: map['status'] as String,
-        tags: (map['tags'] as String?)
-                ?.split(',')
-                .where((e) {
-                  if (e.isEmpty) return false;
-                  return e != reminderTagName && e != legacyReminderTagName;
-                })
-                .toList() ??
-            [],
+        tags: (map['tags'] as String?)?.split(',').where((e) => e.isNotEmpty).toList() ?? [],
         comment: map['comment'] as String?,
         createdAt: DateTime.fromMillisecondsSinceEpoch(map['createdAt'] as int),
-        activeReminderCount: () {
-          final value = map['activeReminderCount'];
-          if (value is num) return value.toInt();
-          return 0;
-        }(),
       );
 }
