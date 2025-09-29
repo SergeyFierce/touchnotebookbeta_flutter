@@ -4,6 +4,7 @@ class Reminder {
   final String text;
   final DateTime remindAt;
   final DateTime createdAt;
+  final DateTime? completedAt;
 
   const Reminder({
     this.id,
@@ -11,6 +12,7 @@ class Reminder {
     required this.text,
     required this.remindAt,
     required this.createdAt,
+    this.completedAt,
   });
 
   Reminder copyWith({
@@ -19,6 +21,7 @@ class Reminder {
     String? text,
     DateTime? remindAt,
     DateTime? createdAt,
+    Object? completedAt = _sentinel,
   }) =>
       Reminder(
         id: id ?? this.id,
@@ -26,6 +29,9 @@ class Reminder {
         text: text ?? this.text,
         remindAt: remindAt ?? this.remindAt,
         createdAt: createdAt ?? this.createdAt,
+        completedAt: completedAt == _sentinel
+            ? this.completedAt
+            : completedAt as DateTime?,
       );
 
   Map<String, Object?> toMap() => {
@@ -34,6 +40,7 @@ class Reminder {
         'text': text,
         'remindAt': remindAt.millisecondsSinceEpoch,
         'createdAt': createdAt.millisecondsSinceEpoch,
+        'completedAt': completedAt?.millisecondsSinceEpoch,
       };
 
   factory Reminder.fromMap(Map<String, Object?> map) => Reminder(
@@ -44,5 +51,10 @@ class Reminder {
             DateTime.fromMillisecondsSinceEpoch(map['remindAt'] as int),
         createdAt:
             DateTime.fromMillisecondsSinceEpoch(map['createdAt'] as int),
+        completedAt: map['completedAt'] != null
+            ? DateTime.fromMillisecondsSinceEpoch(map['completedAt'] as int)
+            : null,
       );
 }
+
+const _sentinel = Object();
