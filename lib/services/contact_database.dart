@@ -23,8 +23,8 @@ class ContactDatabase {
 
     _db = await openDatabase(
       path,
-      // ВАЖНО: поднимаем версию до 3, чтобы сработала миграция с FK + CASCADE и напоминаниями
-      version: 3,
+      // ВАЖНО: поднимаем версию до 4, чтобы сработала миграция с FK + CASCADE и напоминаниями
+      version: 4,
 
       // Включаем поддержку внешних ключей (иначе SQLite их игнорирует)
       onConfigure: (db) async {
@@ -73,6 +73,7 @@ class ContactDatabase {
             text TEXT NOT NULL,
             remindAt INTEGER NOT NULL,
             createdAt INTEGER NOT NULL,
+            completedAt INTEGER,
             FOREIGN KEY(contactId) REFERENCES contacts(id) ON DELETE CASCADE
           )
         ''');
@@ -123,10 +124,24 @@ class ContactDatabase {
               text TEXT NOT NULL,
               remindAt INTEGER NOT NULL,
               createdAt INTEGER NOT NULL,
+              completedAt INTEGER,
               FOREIGN KEY(contactId) REFERENCES contacts(id) ON DELETE CASCADE
             )
           ''');
           await db.execute('CREATE INDEX IF NOT EXISTS idx_reminders_contactId_remindAt ON reminders(contactId, remindAt)');
+        }
+
+        if (oldV < 4) {
+          final columns = await db.rawQuery('PRAGMA table_info(reminders)');
+          final hasCompletedAt = columns.any((column) {
+            final name = column['name'];
+            if (name is String) return name == 'completedAt';
+            return false;
+          });
+          if (!hasCompletedAt) {
+            await db
+                .execute('ALTER TABLE reminders ADD COLUMN completedAt INTEGER');
+          }
         }
       },
     );
@@ -164,11 +179,21 @@ class ContactDatabase {
 
   Future<List<Contact>> contactsByCategory(String category) async {
     final db = await database;
-    final maps = await db.query(
-      'contacts',
-      where: 'category = ?',
-      whereArgs: [category],
-      orderBy: 'createdAt DESC',
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final maps = await db.rawQuery(
+      '''
+      SELECT c.*,
+             COALESCE(SUM(CASE
+               WHEN r.completedAt IS NULL AND r.remindAt >= ? THEN 1
+               ELSE 0
+             END), 0) AS activeReminderCount
+        FROM contacts c
+        LEFT JOIN reminders r ON r.contactId = c.id
+       WHERE c.category = ?
+       GROUP BY c.id
+       ORDER BY c.createdAt DESC
+      '''.trim(),
+      [now, category],
     );
     return maps.map(Contact.fromMap).toList();
   }
@@ -179,13 +204,22 @@ class ContactDatabase {
     int offset = 0,
   }) async {
     final db = await database;
-    final maps = await db.query(
-      'contacts',
-      where: 'category = ?',
-      whereArgs: [category],
-      orderBy: 'createdAt DESC',
-      limit: limit,
-      offset: offset,
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final maps = await db.rawQuery(
+      '''
+      SELECT c.*,
+             COALESCE(SUM(CASE
+               WHEN r.completedAt IS NULL AND r.remindAt >= ? THEN 1
+               ELSE 0
+             END), 0) AS activeReminderCount
+        FROM contacts c
+        LEFT JOIN reminders r ON r.contactId = c.id
+       WHERE c.category = ?
+       GROUP BY c.id
+       ORDER BY c.createdAt DESC
+       LIMIT ? OFFSET ?
+      '''.trim(),
+      [now, category, limit, offset],
     );
     return maps.map(Contact.fromMap).toList();
   }
@@ -214,6 +248,23 @@ class ContactDatabase {
     final result = await db.rawQuery(
       'SELECT COUNT(*) as c FROM contacts WHERE category = ?',
       [category],
+    );
+    return Sqflite.firstIntValue(result) ?? 0;
+  }
+
+  Future<int> activeReminderCountByCategory(String category) async {
+    final db = await database;
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final result = await db.rawQuery(
+      '''
+      SELECT COUNT(r.id) as c
+        FROM reminders r
+        JOIN contacts c ON c.id = r.contactId
+       WHERE c.category = ?
+         AND r.completedAt IS NULL
+         AND r.remindAt >= ?
+      '''.trim(),
+      [category, now],
     );
     return Sqflite.firstIntValue(result) ?? 0;
   }
@@ -314,13 +365,80 @@ class ContactDatabase {
     return rows;
   }
 
-  Future<List<Reminder>> remindersByContact(int contactId) async {
+  Future<int> deleteCompletedRemindersForContact(int contactId) async {
     final db = await database;
+    final rows = await db.delete(
+      'reminders',
+      where: 'contactId = ? AND completedAt IS NOT NULL',
+      whereArgs: [contactId],
+    );
+    if (rows > 0) {
+      _bumpRevision();
+    }
+    return rows;
+  }
+
+  Future<List<Reminder>> completeDueRemindersForContact(int contactId) async {
+    final db = await database;
+    final nowEpoch = DateTime.now().millisecondsSinceEpoch;
+    final dueMaps = await db.query(
+      'reminders',
+      where: 'contactId = ? AND completedAt IS NULL AND remindAt <= ?',
+      whereArgs: [contactId, nowEpoch],
+    );
+
+    if (dueMaps.isEmpty) return const [];
+
+    final dueReminders = dueMaps.map(Reminder.fromMap).toList();
+    final updatedReminders = <Reminder>[];
+    final batch = db.batch();
+    final completionMoment = DateTime.now();
+
+    for (final reminder in dueReminders) {
+      final updated = reminder.copyWith(completedAt: completionMoment);
+      updatedReminders.add(updated);
+      batch.update(
+        'reminders',
+        updated.toMap(),
+        where: 'id = ?',
+        whereArgs: [reminder.id],
+      );
+    }
+
+    await batch.commit(noResult: true);
+    _bumpRevision();
+    return updatedReminders;
+  }
+
+  Future<List<Reminder>> remindersByContact(
+    int contactId, {
+    bool onlyActive = false,
+    bool onlyCompleted = false,
+  }) async {
+    assert(!(onlyActive && onlyCompleted),
+        'Нельзя одновременно запрашивать только активные и только завершённые напоминания');
+    final db = await database;
+    final where = StringBuffer('contactId = ?');
+    final whereArgs = <Object?>[contactId];
+    var orderBy = 'remindAt ASC';
+
+    if (onlyActive) {
+      final now = DateTime.now().millisecondsSinceEpoch;
+      where
+        ..write(' AND completedAt IS NULL')
+        ..write(' AND remindAt >= ?');
+      whereArgs.add(now);
+      orderBy = 'remindAt ASC';
+    } else if (onlyCompleted) {
+      where.write(' AND completedAt IS NOT NULL');
+      orderBy = 'completedAt DESC';
+    }
+
     final maps = await db.query(
       'reminders',
-      where: 'contactId = ?',
-      whereArgs: [contactId],
-      orderBy: 'remindAt ASC',
+      where: where.toString(),
+      whereArgs: whereArgs,
+      orderBy: orderBy,
     );
     return maps.map(Reminder.fromMap).toList();
   }
