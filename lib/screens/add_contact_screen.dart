@@ -359,6 +359,7 @@ class _AddContactScreenState extends State<AddContactScreen> {
     'WhatsApp': 'whatsapp',
     'TikTok': 'tiktok',
     'Одноклассники': 'odnoklassniki',
+    'MAX': 'MAX',
   };
 
   String _brandAssetPath(String value) {
@@ -571,6 +572,7 @@ class _AddContactScreenState extends State<AddContactScreen> {
       'WhatsApp',
       'TikTok',
       'Одноклассники',
+      'MAX',
     ];
 
     final result = await showModalBottomSheet<String>(
