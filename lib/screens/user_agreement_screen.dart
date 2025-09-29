@@ -18,6 +18,7 @@ class _UserAgreementScreenState extends State<UserAgreementScreen> {
   double _progress = 0;
   bool _hasError = false;
   String? _errorDescription;
+  String? _statusMessage;
 
   @override
   void initState() {
@@ -42,6 +43,7 @@ class _UserAgreementScreenState extends State<UserAgreementScreen> {
               _hasError = true;
               _errorDescription = error.description;
               _progress = 1;
+              _statusMessage = null;
             });
             _controller.loadFlutterAsset(_localAssetPath);
           },
@@ -67,6 +69,7 @@ class _UserAgreementScreenState extends State<UserAgreementScreen> {
       _hasError = false;
       _errorDescription = null;
       _progress = 0;
+      _statusMessage = null;
     });
 
     final hasConnection = await _hasNetworkConnection();
@@ -76,9 +79,8 @@ class _UserAgreementScreenState extends State<UserAgreementScreen> {
 
     if (!hasConnection) {
       setState(() {
-        _hasError = true;
-        _errorDescription =
-            'Не удалось подключиться к интернету. Отображается офлайн-версия.';
+        _statusMessage =
+            'Не удалось подключиться к интернету. Показана офлайн-версия документа.';
         _progress = 1;
       });
       return;
@@ -100,6 +102,15 @@ class _UserAgreementScreenState extends State<UserAgreementScreen> {
     await _loadRemoteContent();
   }
 
+  void _dismissStatusMessage() {
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _statusMessage = null;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -114,6 +125,40 @@ class _UserAgreementScreenState extends State<UserAgreementScreen> {
             child: Stack(
               children: [
                 WebViewWidget(controller: _controller),
+                if (_statusMessage != null)
+                  Positioned(
+                    left: 16,
+                    right: 16,
+                    bottom: 24,
+                    child: SafeArea(
+                      child: Material(
+                        elevation: 2,
+                        borderRadius: BorderRadius.circular(12),
+                        color: Theme.of(context).colorScheme.surface,
+                        child: Padding(
+                          padding: const EdgeInsets.all(16),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Icon(Icons.info_outline, size: 20),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Text(
+                                  _statusMessage!,
+                                  style: Theme.of(context).textTheme.bodyMedium,
+                                ),
+                              ),
+                              IconButton(
+                                onPressed: _dismissStatusMessage,
+                                icon: const Icon(Icons.close),
+                                tooltip: 'Закрыть уведомление',
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
                 if (_hasError)
                   Positioned.fill(
                     child: Container(
