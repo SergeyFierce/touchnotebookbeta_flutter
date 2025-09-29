@@ -1237,7 +1237,9 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> with RouteA
         TextPosition(offset: controller.text.length),
       );
 
-    var selected = initial?.remindAt ?? DateTime.now().add(const Duration(minutes: 1));
+    var selected = _roundToMinute(
+      initial?.remindAt ?? DateTime.now().add(const Duration(minutes: 1)),
+    );
 
     final result = await showModalBottomSheet<({String text, DateTime when})>(
       context: context,
@@ -1246,17 +1248,9 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> with RouteA
         return StatefulBuilder(
           builder: (context, setState) {
             final viewInsets = MediaQuery.of(context).viewInsets;
-            DateTime _minutePrecision(DateTime value) => DateTime(
-                  value.year,
-                  value.month,
-                  value.day,
-                  value.hour,
-                  value.minute,
-                );
-
             final currentNow = DateTime.now();
-            final minuteNow = _minutePrecision(currentNow);
-            final minuteSelected = _minutePrecision(selected);
+            final minuteNow = _roundToMinute(currentNow);
+            final minuteSelected = selected;
             final minimumDate = minuteSelected.isBefore(minuteNow) ? selected : minuteNow;
             final canSave = minuteSelected.isAfter(minuteNow);
 
@@ -1328,7 +1322,8 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> with RouteA
                           initialDateTime: selected,
                           minimumDate: minimumDate,
                           maximumDate: currentNow.add(const Duration(days: 365 * 5)),
-                          onDateTimeChanged: (value) => setState(() => selected = value),
+                          onDateTimeChanged:
+                              (value) => setState(() => selected = _roundToMinute(value)),
                         ),
                       ),
                     ],
@@ -1348,6 +1343,14 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> with RouteA
   // ==================== helpers ====================
 
   void _defocus() => FocusScope.of(context).unfocus();
+
+  DateTime _roundToMinute(DateTime value) => DateTime(
+        value.year,
+        value.month,
+        value.day,
+        value.hour,
+        value.minute,
+      );
 
   Contact _snapshot() => Contact(
     id: _contact.id,
