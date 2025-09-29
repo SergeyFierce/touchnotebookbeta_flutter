@@ -242,7 +242,7 @@ class _AllRemindersScreenState extends State<AllRemindersScreen> {
                       ),
                     ),
                     subtitle: Padding(
-                      padding: const EdgeInsets.only(top: 12),
+                      padding: const EdgeInsets.only(top: 5),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
@@ -276,6 +276,7 @@ class _AllRemindersScreenState extends State<AllRemindersScreen> {
                   ),
                 ),
               ),
+            ),
           ],
           const SizedBox(height: 16),
         ],
