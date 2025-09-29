@@ -720,6 +720,7 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> with RouteA
     'WhatsApp': 'whatsapp',
     'TikTok': 'tiktok',
     'Одноклассники': 'odnoklassniki',
+    'MAX': 'MAX',
   };
 
   String _brandAssetPath(String value) {
@@ -1599,6 +1600,7 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> with RouteA
       'WhatsApp',
       'TikTok',
       'Одноклассники',
+      'MAX',
     ];
 
     final result = await showModalBottomSheet<String>(
