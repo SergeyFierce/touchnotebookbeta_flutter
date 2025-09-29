@@ -2129,6 +2129,16 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> with RouteA
     final catValue = (_category ?? _categoryController.text.trim());
     final statusValue = (_status ?? _statusController.text.trim());
 
+    final selectionCount = _selectedReminderIds.length;
+    final totalSelectableActiveReminders =
+        _activeReminders.where((reminder) => reminder.id != null).length;
+    final hasSelection = selectionCount > 0;
+    final showReminderSelectionAppBar =
+        !_isEditing && _isReminderSelectionMode && _selectedRemindersTab == 0;
+    final allSelected = selectionCount >= totalSelectableActiveReminders &&
+        totalSelectableActiveReminders > 0;
+    final canSelectAll = showReminderSelectionAppBar && !allSelected;
+
     return Scaffold(
       appBar: AppBar(
         backgroundColor: Theme.of(context).colorScheme.surface, // фиксированный фон
@@ -2138,22 +2148,47 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> with RouteA
         surfaceTintColor: Colors.transparent, // убрать M3-тонку
         leading: _isEditing
             ? IconButton(
-          tooltip: 'Отмена',
-          icon: const Icon(Icons.close),
-          onPressed: () {
-            _loadFromContact();
-            setState(() => _isEditing = false);
-          },
-        )
-            : const BackButton(),
-        title: Text(_isEditing ? 'Редактирование' : 'Детали контакта'),
+                tooltip: 'Отмена',
+                icon: const Icon(Icons.close),
+                onPressed: () {
+                  _loadFromContact();
+                  setState(() => _isEditing = false);
+                },
+              )
+            : showReminderSelectionAppBar
+                ? IconButton(
+                    tooltip: 'Отмена',
+                    icon: const Icon(Icons.close),
+                    onPressed: _cancelReminderSelection,
+                  )
+                : const BackButton(),
+        title: showReminderSelectionAppBar
+            ? Text('Выбрано: $selectionCount')
+            : Text(_isEditing ? 'Редактирование' : 'Детали контакта'),
         actions: [
           if (_isEditing)
             IconButton(
               tooltip: 'Сохранить',
               icon: const Icon(Icons.check),
               onPressed: (_isDirty && _canSave) ? _save : null,
+            )
+          else if (showReminderSelectionAppBar) ...[
+            IconButton(
+              tooltip: 'Выбрать всё',
+              icon: const Icon(Icons.done_all),
+              onPressed: canSelectAll ? _selectAllActiveReminders : null,
             ),
+            IconButton(
+              tooltip: 'Отметить выполненным',
+              icon: const Icon(Icons.check_circle_outline),
+              onPressed: hasSelection ? _completeSelectedReminders : null,
+            ),
+            IconButton(
+              tooltip: 'Удалить',
+              icon: const Icon(Icons.delete_outline),
+              onPressed: hasSelection ? _deleteSelectedReminders : null,
+            ),
+          ],
         ],
       ),
 
@@ -2487,67 +2522,9 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> with RouteA
                               ),
                             );
 
-                          final selectionCount = _selectedReminderIds.length;
-                          final hasSelection = selectionCount > 0;
-                          final totalSelectableReminders = reminders
-                              .where((reminder) => reminder.id != null)
-                              .length;
-                          final allSelected = hasSelection &&
-                              selectionCount >= totalSelectableReminders &&
-                              totalSelectableReminders > 0;
-                          final canSelectAll =
-                              totalSelectableReminders > 0 && !allSelected;
-
                           return Column(
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
-                              if (!isCompletedTab && _isReminderSelectionMode) ...[
-                                Padding(
-                                  padding: const EdgeInsets.only(bottom: 12),
-                                  child: Wrap(
-                                    spacing: 12,
-                                    runSpacing: 8,
-                                    crossAxisAlignment: WrapCrossAlignment.center,
-                                    children: [
-                                      Chip(
-                                        avatar: const Icon(Icons.checklist_rtl, size: 18),
-                                        label: Text('Выбрано: $selectionCount'),
-                                      ),
-                                      Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          TextButton.icon(
-                                            onPressed: canSelectAll
-                                                ? _selectAllActiveReminders
-                                                : null,
-                                            icon: const Icon(Icons.done_all),
-                                            label: const Text('Выбрать все'),
-                                          ),
-                                          const SizedBox(width: 8),
-                                          TextButton.icon(
-                                            onPressed: _cancelReminderSelection,
-                                            icon: const Icon(Icons.close),
-                                            label: const Text('Отмена'),
-                                          ),
-                                        ],
-                                      ),
-                                      FilledButton.icon(
-                                        onPressed: hasSelection
-                                            ? _completeSelectedReminders
-                                            : null,
-                                        icon: const Icon(Icons.check_circle_outline),
-                                        label: const Text('Отметить выполненным'),
-                                      ),
-                                      OutlinedButton.icon(
-                                        onPressed:
-                                            hasSelection ? _deleteSelectedReminders : null,
-                                        icon: const Icon(Icons.delete_outline),
-                                        label: const Text('Удалить'),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ],
                               Card(
                                 elevation: 0,
                                 child: _buildRemindersList(
