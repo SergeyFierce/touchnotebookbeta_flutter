@@ -111,9 +111,6 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> with RouteA
     );
   }
 
-  static const int _maxVisibleReminderTiles = 3;
-  static const double _reminderListViewportHeight = 330;
-
   Widget _reminderTile(Reminder reminder, {required bool completed}) {
     final theme = Theme.of(context);
     final formatter = DateFormat('dd.MM.yyyy HH:mm');
@@ -122,11 +119,6 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> with RouteA
             ? 'Завершено: ${formatter.format(reminder.completedAt!)}'
             : 'Завершено'
         : 'Запланировано на ${formatter.format(reminder.remindAt)}';
-
-    final reminderId = reminder.id;
-    final isSelecting = !completed && _isReminderSelectionMode;
-    final isSelected =
-        isSelecting && reminderId != null && _selectedReminderIds.contains(reminderId);
 
     PopupMenuItem<_ReminderAction> buildMenuItem(
       _ReminderAction action,
@@ -147,18 +139,6 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> with RouteA
 
     return ListTile(
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      onLongPress: completed
-          ? null
-          : () {
-              if (isSelecting) {
-                _toggleReminderSelection(reminder);
-              } else {
-                _startReminderSelection(reminder);
-              }
-            },
-      onTap: isSelecting ? () => _toggleReminderSelection(reminder) : null,
-      selected: isSelected,
-      selectedTileColor: theme.colorScheme.primary.withOpacity(0.08),
       leading: Icon(
         completed ? Icons.check_circle : Icons.notifications_outlined,
         color: theme.colorScheme.primary,
@@ -171,73 +151,41 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> with RouteA
               icon: const Icon(Icons.delete_outline),
               onPressed: () => _confirmDeleteReminder(reminder),
             )
-          : isSelecting
-              ? Checkbox(
-                  value: isSelected,
-                  onChanged: reminderId == null
-                      ? null
-                      : (_) => _toggleReminderSelection(reminder),
-                )
-              : PopupMenuButton<_ReminderAction>(
-                  tooltip: 'Действия',
-                  icon: const Icon(Icons.more_vert),
-                  onSelected: (action) {
-                    switch (action) {
-                      case _ReminderAction.complete:
-                        _completeReminder(reminder);
-                        break;
-                      case _ReminderAction.edit:
-                        _editReminder(reminder);
-                        break;
-                      case _ReminderAction.delete:
-                        _confirmDeleteReminder(reminder);
-                        break;
-                    }
-                  },
-                  itemBuilder: (context) => [
-                    buildMenuItem(
-                      _ReminderAction.complete,
-                      Icons.check_circle_outline,
-                      'Отметить выполненным',
-                    ),
-                    buildMenuItem(
-                      _ReminderAction.edit,
-                      Icons.edit_outlined,
-                      'Редактировать',
-                    ),
-                    buildMenuItem(
-                      _ReminderAction.delete,
-                      Icons.delete_outline,
-                      'Удалить',
-                    ),
-                  ],
+          : PopupMenuButton<_ReminderAction>(
+              tooltip: 'Действия',
+              icon: const Icon(Icons.more_vert),
+              onSelected: (action) {
+                switch (action) {
+                  case _ReminderAction.complete:
+                    _completeReminder(reminder);
+                    break;
+                  case _ReminderAction.edit:
+                    _editReminder(reminder);
+                    break;
+                  case _ReminderAction.delete:
+                    _confirmDeleteReminder(reminder);
+                    break;
+                }
+              },
+              itemBuilder: (context) => [
+                buildMenuItem(
+                  _ReminderAction.complete,
+                  Icons.check_circle_outline,
+                  'Отметить выполненным',
                 ),
+                buildMenuItem(
+                  _ReminderAction.edit,
+                  Icons.edit_outlined,
+                  'Редактировать',
+                ),
+                buildMenuItem(
+                  _ReminderAction.delete,
+                  Icons.delete_outline,
+                  'Удалить',
+                ),
+              ],
+            ),
     );
-  }
-
-  Widget _buildRemindersList(List<Reminder> reminders, {required bool completed}) {
-    final listView = ListView.separated(
-      padding: EdgeInsets.zero,
-      shrinkWrap: true,
-      physics: reminders.length > _maxVisibleReminderTiles
-          ? const ClampingScrollPhysics()
-          : const NeverScrollableScrollPhysics(),
-      itemCount: reminders.length,
-      itemBuilder: (context, index) => _reminderTile(
-        reminders[index],
-        completed: completed,
-      ),
-      separatorBuilder: (context, index) => const Divider(height: 0),
-    );
-
-    if (reminders.length > _maxVisibleReminderTiles) {
-      return ConstrainedBox(
-        constraints: const BoxConstraints(maxHeight: _reminderListViewportHeight),
-        child: listView,
-      );
-    }
-
-    return listView;
   }
 
   Widget _noteRow(Note note, {bool isLast = false}) {
@@ -695,8 +643,6 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> with RouteA
   List<Reminder> _activeReminders = [];
   List<Reminder> _completedReminders = [];
   int _selectedRemindersTab = 0;
-  bool _isReminderSelectionMode = false;
-  final Set<int> _selectedReminderIds = <int>{};
   Timer? _remindersRefreshTimer;
   bool _notesExpanded = true; // «Заметки» открыто
   List<Note> _notes = [];
@@ -838,143 +784,8 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> with RouteA
         _activeReminders = active;
         _completedReminders = completed;
         _contact = _contact.copyWith(activeReminderCount: active.length);
-        _isReminderSelectionMode = false;
-        _selectedReminderIds.clear();
       });
       _scheduleNextReminderRefresh();
-    }
-  }
-
-  void _startReminderSelection(Reminder reminder) {
-    final reminderId = reminder.id;
-    if (reminderId == null) return;
-    setState(() {
-      _isReminderSelectionMode = true;
-      _selectedReminderIds
-        ..clear()
-        ..add(reminderId);
-    });
-  }
-
-  void _toggleReminderSelection(Reminder reminder) {
-    final reminderId = reminder.id;
-    if (reminderId == null) return;
-
-    setState(() {
-      if (_selectedReminderIds.contains(reminderId)) {
-        _selectedReminderIds.remove(reminderId);
-        if (_selectedReminderIds.isEmpty) {
-          _isReminderSelectionMode = false;
-        }
-      } else {
-        _isReminderSelectionMode = true;
-        _selectedReminderIds.add(reminderId);
-      }
-    });
-  }
-
-  void _cancelReminderSelection() {
-    if (!_isReminderSelectionMode && _selectedReminderIds.isEmpty) return;
-    setState(() {
-      _isReminderSelectionMode = false;
-      _selectedReminderIds.clear();
-    });
-  }
-
-  List<Reminder> _selectedActiveReminders() => _activeReminders
-      .where((reminder) => reminder.id != null && _selectedReminderIds.contains(reminder.id))
-      .toList();
-
-  Future<void> _completeSelectedReminders() async {
-    final selected = _selectedActiveReminders();
-    if (selected.isEmpty) return;
-
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Отметить выполненными?'),
-        content: const Text(
-          'Выбранные напоминания будут отмечены как выполненные и уведомления отменятся.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Отмена'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Завершить'),
-          ),
-        ],
-      ),
-    );
-
-    if (confirm != true) return;
-
-    try {
-      for (final reminder in selected) {
-        final reminderId = reminder.id;
-        if (reminderId == null) continue;
-        final updated = reminder.copyWith(completedAt: DateTime.now());
-        await ContactDatabase.instance.updateReminder(updated);
-        await PushNotifications.cancel(reminderId);
-      }
-
-      await _loadReminders();
-      if (!mounted) return;
-      showSuccessBanner(
-        selected.length == 1 ? 'Напоминание завершено' : 'Напоминания завершены',
-      );
-      _cancelReminderSelection();
-    } catch (e) {
-      if (mounted) {
-        showErrorBanner('Не удалось завершить напоминания: $e');
-      }
-    }
-  }
-
-  Future<void> _deleteSelectedReminders() async {
-    final selected = _selectedActiveReminders();
-    if (selected.isEmpty) return;
-
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Удалить напоминания?'),
-        content: const Text('Выбранные напоминания будут удалены и уведомления отменены.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Отмена'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Удалить'),
-          ),
-        ],
-      ),
-    );
-
-    if (confirm != true) return;
-
-    try {
-      for (final reminder in selected) {
-        final reminderId = reminder.id;
-        if (reminderId == null) continue;
-        await ContactDatabase.instance.deleteReminder(reminderId);
-        await PushNotifications.cancel(reminderId);
-      }
-
-      await _loadReminders();
-      if (!mounted) return;
-      showSuccessBanner(
-        selected.length == 1 ? 'Напоминание удалено' : 'Напоминания удалены',
-      );
-      _cancelReminderSelection();
-    } catch (e) {
-      if (mounted) {
-        showErrorBanner('Не удалось удалить напоминания: $e');
-      }
     }
   }
 
@@ -2409,13 +2220,7 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> with RouteA
                           borderRadius: BorderRadius.circular(20),
                           constraints: const BoxConstraints(minHeight: 36, minWidth: 120),
                           onPressed: (index) {
-                            setState(() {
-                              _selectedRemindersTab = index;
-                              if (index != 0) {
-                                _isReminderSelectionMode = false;
-                                _selectedReminderIds.clear();
-                              }
-                            });
+                            setState(() => _selectedRemindersTab = index);
                           },
                           children: const [
                             Padding(
@@ -2472,55 +2277,10 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> with RouteA
                               ),
                             );
 
-                          final selectionCount = _selectedReminderIds.length;
-                          final hasSelection = selectionCount > 0;
-
                           return Column(
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
-                              if (!isCompletedTab && _isReminderSelectionMode) ...[
-                                Padding(
-                                  padding: const EdgeInsets.only(bottom: 12),
-                                  child: Wrap(
-                                    spacing: 12,
-                                    runSpacing: 8,
-                                    crossAxisAlignment: WrapCrossAlignment.center,
-                                    children: [
-                                      Chip(
-                                        avatar: const Icon(Icons.checklist_rtl, size: 18),
-                                        label: Text('Выбрано: $selectionCount'),
-                                      ),
-                                      TextButton.icon(
-                                        onPressed: _cancelReminderSelection,
-                                        icon: const Icon(Icons.close),
-                                        label: const Text('Отмена'),
-                                      ),
-                                      FilledButton.icon(
-                                        onPressed: hasSelection
-                                            ? _completeSelectedReminders
-                                            : null,
-                                        icon: const Icon(Icons.check_circle_outline),
-                                        label: const Text('Отметить выполненным'),
-                                      ),
-                                      OutlinedButton.icon(
-                                        onPressed:
-                                            hasSelection ? _deleteSelectedReminders : null,
-                                        icon: const Icon(Icons.delete_outline),
-                                        label: const Text('Удалить'),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ],
-                              Card(
-                                elevation: 0,
-                                child: _buildRemindersList(
-                                  reminders,
-                                  completed: isCompletedTab,
-                                ),
-                              ),
-                              if (isCompletedTab && reminders.isNotEmpty) ...[
-                                const SizedBox(height: 12),
+                              if (isCompletedTab)
                                 Align(
                                   alignment: Alignment.centerRight,
                                   child: TextButton.icon(
@@ -2529,7 +2289,22 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> with RouteA
                                     label: const Text('Очистить всё'),
                                   ),
                                 ),
-                              ],
+                              if (isCompletedTab) const SizedBox(height: 8),
+                              Card(
+                                elevation: 0,
+                                child: Column(
+                                  children: [
+                                    for (var i = 0; i < reminders.length; i++) ...[
+                                      _reminderTile(
+                                        reminders[i],
+                                        completed: isCompletedTab,
+                                      ),
+                                      if (i != reminders.length - 1)
+                                        const Divider(height: 0),
+                                    ],
+                                  ],
+                                ),
+                              ),
                             ],
                           );
                         },
