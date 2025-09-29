@@ -1190,8 +1190,8 @@ class _AddContactScreenState extends State<AddContactScreen> {
                   children: [
                     TextFormField(
                       controller: _commentController,
-                      minLines: 3,
-                      maxLines: 5,
+                      minLines: 1,
+                      maxLines: null,
                       textInputAction: TextInputAction.newline,
                       decoration: _outlinedDec(
                         Theme.of(context),

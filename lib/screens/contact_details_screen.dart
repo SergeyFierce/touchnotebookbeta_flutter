@@ -2632,7 +2632,8 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> with RouteA
                 children: [
                   TextFormField(
                     controller: _commentController,
-                    maxLines: 1,
+                    minLines: 1,
+                    maxLines: null,
                     decoration: _outlinedDec(
                       Theme.of(context),
                       label: 'Комментарий',

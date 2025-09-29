@@ -412,10 +412,9 @@ class _HomeScreenState extends State<HomeScreen> with RestorationMixin {
                       contentPadding: EdgeInsets.zero,
                       controlAffinity: ListTileControlAffinity.leading,
                       title: Wrap(
-                        alignment: WrapAlignment.start,
+                        spacing: 2,              // было 4 — сделаем плотнее
+                        runSpacing: 0,
                         crossAxisAlignment: WrapCrossAlignment.center,
-                        spacing: 4,
-                        runSpacing: 4,
                         children: [
                           const Text('Я соглашаюсь с'),
                           TextButton(
@@ -423,8 +422,20 @@ class _HomeScreenState extends State<HomeScreen> with RestorationMixin {
                               dialogContext,
                               const PrivacyPolicyScreen(),
                             ),
-                            style: TextButton.styleFrom(padding: EdgeInsets.zero),
-                            child: const Text('Политикой конфиденциальности'),
+                            style: TextButton.styleFrom(
+                              padding: EdgeInsets.zero,                    // убираем внутренние отступы
+                              minimumSize: Size.zero,                      // убираем минимальный размер
+                              tapTargetSize: MaterialTapTargetSize.shrinkWrap, // убираем “зону попадания”
+                              visualDensity: const VisualDensity(          // делаем кнопку максимально компактной
+                                horizontal: -4, vertical: -4,
+                              ),
+                              // Чтобы выглядеть как обычный текст-ссылка:
+                              textStyle: Theme.of(context).textTheme.bodyMedium,
+                            ),
+                            child: const Text(
+                              'Политикой конфиденциальности',
+                              overflow: TextOverflow.visible,
+                            ),
                           ),
                           const Text('и'),
                           TextButton(
@@ -432,8 +443,17 @@ class _HomeScreenState extends State<HomeScreen> with RestorationMixin {
                               dialogContext,
                               const UserAgreementScreen(),
                             ),
-                            style: TextButton.styleFrom(padding: EdgeInsets.zero),
-                            child: const Text('Пользовательским соглашением'),
+                            style: TextButton.styleFrom(
+                              padding: EdgeInsets.zero,
+                              minimumSize: Size.zero,
+                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                              visualDensity: const VisualDensity(horizontal: -4, vertical: -4),
+                              textStyle: Theme.of(context).textTheme.bodyMedium,
+                            ),
+                            child: const Text(
+                              'Пользовательским соглашением',
+                              overflow: TextOverflow.visible,
+                            ),
                           ),
                         ],
                       ),
@@ -533,11 +553,13 @@ class _HomeScreenState extends State<HomeScreen> with RestorationMixin {
         ],
       ),
       drawer: NavigationDrawer(
-        selectedIndex: _drawerIndex.value,
+        selectedIndex: 0, // всегда подсвечен "Главный экран"
         onDestinationSelected: (index) {
-          _drawerIndex.value = index;
-          Navigator.pop(context);
+          Navigator.pop(context); // закрыли меню
           switch (index) {
+            case 0:
+            // Ничего не делаем — уже на главном
+              break;
             case 1:
               Navigator.push(
                 context,
@@ -546,8 +568,6 @@ class _HomeScreenState extends State<HomeScreen> with RestorationMixin {
               break;
             case 2:
               _openSupport(context);
-              break;
-            default:
               break;
           }
         },
