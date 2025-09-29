@@ -156,6 +156,13 @@ class Counts {
     });
   }
 
+  int get totalReminders {
+    return ContactCategory.values.fold<int>(0, (sum, c) {
+      final value = remindersOf(c);
+      return value >= 0 ? sum + value : sum;
+    });
+  }
+
   int get unknownCount => ContactCategory.values.where((c) => of(c) < 0).length;
 
   @override
@@ -406,10 +413,19 @@ class _HomeScreenState extends State<HomeScreen> with RestorationMixin {
         title: const Text(R.homeTitle),
         // В AppBar actions:
         actions: [
-          IconButton(
-            tooltip: R.remindersOverview,
-            icon: const Icon(Icons.notifications_active_outlined),
-            onPressed: _openAllReminders,
+          FutureBuilder<Counts>(
+            future: _countsFuture,
+            builder: (context, snapshot) {
+              final counts = snapshot.data ?? _lastCountsShown ?? _lastGoodCounts;
+              final totalReminders = counts?.totalReminders ?? 0;
+              return IconButton(
+                tooltip: totalReminders > 0
+                    ? '${R.remindersOverview} ($totalReminders)'
+                    : R.remindersOverview,
+                icon: _buildRemindersActionIcon(context, totalReminders),
+                onPressed: _openAllReminders,
+              );
+            },
           ),
         ],
       ),
@@ -643,6 +659,56 @@ class _HomeScreenState extends State<HomeScreen> with RestorationMixin {
         label: const Text(R.addContact),
         icon: const Icon(Icons.person_add),
       ),
+    );
+  }
+
+  Widget _buildRemindersActionIcon(BuildContext context, int totalReminders) {
+    final baseIcon = const Icon(Icons.notifications_active_outlined);
+    if (totalReminders <= 0) return baseIcon;
+
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final badgeColor = colorScheme.error;
+    final onBadge = colorScheme.onError;
+    final badgeTextStyle = theme.textTheme.labelSmall?.copyWith(
+          color: onBadge,
+          fontWeight: FontWeight.w600,
+          height: 1,
+        ) ??
+        TextStyle(
+          color: onBadge,
+          fontWeight: FontWeight.w600,
+          fontSize: 10,
+          height: 1,
+        );
+
+    final badgeText = totalReminders > 99 ? '99+' : '$totalReminders';
+
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        baseIcon,
+        Positioned(
+          right: -6,
+          top: -6,
+          child: Semantics(
+            label: 'Активных напоминаний: $totalReminders',
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+              decoration: BoxDecoration(
+                color: badgeColor,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              constraints: const BoxConstraints(minWidth: 18),
+              child: Text(
+                badgeText,
+                style: badgeTextStyle,
+                textAlign: TextAlign.center,
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 
