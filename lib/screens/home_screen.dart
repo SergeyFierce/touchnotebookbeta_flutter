@@ -10,8 +10,8 @@ import 'package:intl/intl.dart';
 import 'add_contact_screen.dart';
 import 'settings_screen.dart';
 import 'contact_list_screen.dart';
+import 'all_reminders_screen.dart';
 import '../services/contact_database.dart';
-import '../services/push_notifications.dart';
 
 
 /// ---------------------
@@ -43,8 +43,7 @@ abstract class R {
       'Создайте первый контакт. Ниже можно открыть списки по категориям.';
   static const chipHintOpenList = 'Откройте список по категории';
   static const dataUpdated = 'Данные обновлены';
-  static const showNotification = 'Показать уведомление';
-  static const notificationMessage = 'Это тестовое push-уведомление.';
+  static const remindersOverview = 'Все напоминания';
 
   static String summaryUnknown(int count) {
     if (count <= 0) return summaryAllKnown;
@@ -138,10 +137,15 @@ extension ContactCategoryX on ContactCategory {
 /// Типобезопасные счётчики
 /// ---------------------
 class Counts {
-  final Map<ContactCategory, int> _m;
-  const Counts(this._m);
+  final Map<ContactCategory, int> _contacts;
+  final Map<ContactCategory, int> _reminders;
+  const Counts(
+    this._contacts, [
+    Map<ContactCategory, int>? reminders,
+  ]) : _reminders = reminders ?? const {};
 
-  int of(ContactCategory c) => _m[c] ?? 0;
+  int of(ContactCategory c) => _contacts[c] ?? 0;
+  int remindersOf(ContactCategory c) => _reminders[c] ?? 0;
 
   bool get allZero => ContactCategory.values.every((c) => of(c) == 0);
 
@@ -160,12 +164,16 @@ class Counts {
     if (other is! Counts) return false;
     for (final c in ContactCategory.values) {
       if (of(c) != other.of(c)) return false;
+      if (remindersOf(c) != other.remindersOf(c)) return false;
     }
     return true;
   }
 
   @override
-  int get hashCode => Object.hashAll(ContactCategory.values.map(of));
+  int get hashCode => Object.hashAll([
+        for (final c in ContactCategory.values) of(c),
+        for (final c in ContactCategory.values) remindersOf(c),
+      ]);
 }
 
 /// ---------------------
@@ -185,6 +193,7 @@ class _HomeScreenState extends State<HomeScreen> with RestorationMixin {
 
   // debounce для частых ревизий
   Timer? _debounce;
+  Timer? _timeTicker;
 
   // Для уведомления «Данные обновлены»
   Counts? _lastCountsShown;
@@ -209,11 +218,13 @@ class _HomeScreenState extends State<HomeScreen> with RestorationMixin {
     _countsFuture = _loadCounts();
     _revListener = _scheduleRefresh;
     ContactDatabase.instance.revision.addListener(_revListener);
+    _scheduleTimeTick();
   }
 
   @override
   void dispose() {
     _debounce?.cancel();
+    _timeTicker?.cancel();
     ContactDatabase.instance.revision.removeListener(_revListener);
     _drawerIndex.dispose();
     super.dispose();
@@ -230,17 +241,30 @@ class _HomeScreenState extends State<HomeScreen> with RestorationMixin {
   }
 
   Future<Counts> _loadCounts() async {
-    final partner = await _safe(
-        ContactDatabase.instance.countByCategory(ContactCategory.partner.dbKey));
-    final client = await _safe(
-        ContactDatabase.instance.countByCategory(ContactCategory.client.dbKey));
-    final prospect = await _safe(
-        ContactDatabase.instance.countByCategory(ContactCategory.prospect.dbKey));
-    return Counts({
-      ContactCategory.partner: partner,
-      ContactCategory.client: client,
-      ContactCategory.prospect: prospect,
-    });
+    final db = ContactDatabase.instance;
+    final contactCounts = await Future.wait<int>([
+      _safe(db.countByCategory(ContactCategory.partner.dbKey)),
+      _safe(db.countByCategory(ContactCategory.client.dbKey)),
+      _safe(db.countByCategory(ContactCategory.prospect.dbKey)),
+    ]);
+    final reminderCounts = await Future.wait<int>([
+      _safe(db.activeReminderCountByCategory(ContactCategory.partner.dbKey)),
+      _safe(db.activeReminderCountByCategory(ContactCategory.client.dbKey)),
+      _safe(db.activeReminderCountByCategory(ContactCategory.prospect.dbKey)),
+    ]);
+
+    return Counts(
+      {
+        ContactCategory.partner: contactCounts[0],
+        ContactCategory.client: contactCounts[1],
+        ContactCategory.prospect: contactCounts[2],
+      },
+      {
+        ContactCategory.partner: reminderCounts[0],
+        ContactCategory.client: reminderCounts[1],
+        ContactCategory.prospect: reminderCounts[2],
+      },
+    );
   }
 
   void _scheduleRefresh() {
@@ -250,6 +274,27 @@ class _HomeScreenState extends State<HomeScreen> with RestorationMixin {
       setState(() {
         _countsFuture = _loadCounts();
       });
+      _scheduleTimeTick();
+    });
+  }
+
+  void _scheduleTimeTick() {
+    _timeTicker?.cancel();
+    final now = DateTime.now();
+    final nextMinute = DateTime(
+      now.year,
+      now.month,
+      now.day,
+      now.hour,
+      now.minute + 1,
+    );
+    final delay = nextMinute.difference(now);
+    _timeTicker = Timer(delay, () {
+      if (!mounted) return;
+      setState(() {
+        _countsFuture = _loadCounts();
+      });
+      _scheduleTimeTick();
     });
   }
 
@@ -258,6 +303,7 @@ class _HomeScreenState extends State<HomeScreen> with RestorationMixin {
     setState(() {
       _countsFuture = _loadCounts();
     });
+    _scheduleTimeTick();
   }
 
   void _showLoadErrorOnce(BuildContext context) {
@@ -352,43 +398,6 @@ class _HomeScreenState extends State<HomeScreen> with RestorationMixin {
     }
   }
 
-  Future<void> _pickAndScheduleReminder() async {
-    // 1) Выбор даты/времени
-    final now = DateTime.now();
-    final date = await showDatePicker(
-      context: context,
-      initialDate: now.add(const Duration(days: 0)),
-      firstDate: now,
-      lastDate: now.add(const Duration(days: 365)),
-      helpText: 'Выберите дату',
-    );
-    if (date == null) return;
-
-    final time = await showTimePicker(
-      context: context,
-      initialTime: TimeOfDay.fromDateTime(now.add(const Duration(minutes: 5))),
-      helpText: 'Выберите время',
-    );
-    if (time == null) return;
-
-    final when = DateTime(date.year, date.month, date.day, time.hour, time.minute);
-
-    // 2) Планируем одноразовое
-    await PushNotifications.scheduleOneTime(
-      id: 2001,
-      whenLocal: when,
-      title: R.appTitle,
-      body: 'Напоминание на ${DateFormat('d MMMM, HH:mm', 'ru').format(when)}',
-      exact: true, // если не критично — можно false, чтобы не спрашивать exact alarm
-    );
-
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Напоминание запланировано на '
-          '${DateFormat('d MMMM, HH:mm', 'ru').format(when)}')),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -398,14 +407,9 @@ class _HomeScreenState extends State<HomeScreen> with RestorationMixin {
         // В AppBar actions:
         actions: [
           IconButton(
-            tooltip: R.showNotification,
+            tooltip: R.remindersOverview,
             icon: const Icon(Icons.notifications_active_outlined),
-            onPressed: _showDemoNotification,
-          ),
-          IconButton(
-            tooltip: 'Запланировать напоминание',
-            icon: const Icon(Icons.schedule),
-            onPressed: _pickAndScheduleReminder,
+            onPressed: _openAllReminders,
           ),
         ],
       ),
@@ -458,7 +462,10 @@ class _HomeScreenState extends State<HomeScreen> with RestorationMixin {
               // если есть хоть какие-то прошлые данные — используем их
               final counts = snapshot.data ??
                   _lastGoodCounts ??
-                  Counts({ for (final c in ContactCategory.values) c: 0 });
+                  Counts(
+                    { for (final c in ContactCategory.values) c: 0 },
+                    { for (final c in ContactCategory.values) c: 0 },
+                  );
 
               // если пришла ошибка и данных нет вообще — показываем карточку ошибки
               if (snapshot.hasError && !hasSomeData) {
@@ -509,12 +516,14 @@ class _HomeScreenState extends State<HomeScreen> with RestorationMixin {
 
                   final items = ContactCategory.values.map((cat) {
                     final c = counts.of(cat);
+                    final reminders = counts.remindersOf(cat);
                     final subtitle = (c < 0) ? R.unknown : cat.russianCount(c);
                     final chip = (c < 0) ? '—' : _nfRu.format(c);
                     return _CategoryCard(
                       category: cat,
                       subtitle: subtitle,
                       trailingCount: chip,
+                      reminderCount: reminders,
                       isLoading: false, // НЕ скрываем карточки при refresh
                       onTap: () {
                         if (!kIsWeb) HapticFeedback.selectionClick();
@@ -637,13 +646,11 @@ class _HomeScreenState extends State<HomeScreen> with RestorationMixin {
     );
   }
 
-  Future<void> _showDemoNotification() async {
-    await PushNotifications.showNotification(
-      id: 1001,
-      title: R.appTitle,
-      body: R.notificationMessage,
+  void _openAllReminders() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const AllRemindersScreen()),
     );
-    if (!mounted) return;
   }
 }
 
@@ -824,6 +831,7 @@ class _CategoryCard extends StatefulWidget {
   final String? trailingCount; // null — без чипа (скелетон/загрузка)
   final VoidCallback onTap;
   final bool isLoading;
+  final int reminderCount;
 
   const _CategoryCard({
     super.key,
@@ -831,6 +839,7 @@ class _CategoryCard extends StatefulWidget {
     required this.subtitle,
     required this.onTap,
     required this.trailingCount,
+    required this.reminderCount,
     this.isLoading = false,
   });
 
@@ -839,7 +848,8 @@ class _CategoryCard extends StatefulWidget {
         subtitle = R.loading,
         trailingCount = null,
         onTap = _noop,
-        isLoading = true;
+        isLoading = true,
+        reminderCount = 0;
 
   static void _noop() {}
   @override
@@ -854,14 +864,57 @@ class _CategoryCardState extends State<_CategoryCard> {
     setState(() => _pressed = value);
   }
 
+  Widget _iconWithBadge(ThemeData theme, ColorScheme scheme) {
+    final count = widget.reminderCount;
+    final baseIcon = Icon(widget.category.icon, size: 32, color: scheme.primary);
+    if (count <= 0) return baseIcon;
+
+    final badgeText = count > 99 ? '99+' : '$count';
+    final badgeColor = scheme.error;
+    final onBadge = scheme.onError;
+    final badgeTextStyle = theme.textTheme.labelSmall?.copyWith(
+          color: onBadge,
+          fontWeight: FontWeight.w600,
+        ) ??
+        TextStyle(
+          color: onBadge,
+          fontWeight: FontWeight.w600,
+          fontSize: 10,
+        );
+
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        baseIcon,
+        Positioned(
+          right: -10,
+          top: -6,
+          child: Tooltip(
+            message: 'Активные напоминания: $count',
+            child: Semantics(
+              label: 'Активных напоминаний: $count',
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: badgeColor,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Text(badgeText, style: badgeTextStyle),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final isLoading = widget.isLoading;
 
-    Widget leadingIcon =
-    Icon(widget.category.icon, size: 32, color: colorScheme.primary);
+    Widget leadingIcon = _iconWithBadge(theme, colorScheme);
 
     if (!isLoading) {
       leadingIcon = Hero(
