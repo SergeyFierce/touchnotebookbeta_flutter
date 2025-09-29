@@ -147,6 +147,13 @@ class Counts {
   int of(ContactCategory c) => _contacts[c] ?? 0;
   int remindersOf(ContactCategory c) => _reminders[c] ?? 0;
 
+  int get remindersTotal {
+    return ContactCategory.values.fold<int>(0, (sum, c) {
+      final value = remindersOf(c);
+      return value >= 0 ? sum + value : sum;
+    });
+  }
+
   bool get allZero => ContactCategory.values.every((c) => of(c) == 0);
 
   int get knownTotal {
@@ -398,6 +405,75 @@ class _HomeScreenState extends State<HomeScreen> with RestorationMixin {
     }
   }
 
+  Widget _buildRemindersAction() {
+    return FutureBuilder<Counts>(
+      future: _countsFuture,
+      builder: (context, snapshot) {
+        final cached = _lastGoodCounts ?? _lastCountsShown;
+        final reminders = snapshot.data?.remindersTotal ?? cached?.remindersTotal ?? 0;
+        final tooltip = reminders > 0
+            ? '${R.remindersOverview} ($reminders)'
+            : R.remindersOverview;
+
+        return IconButton(
+          tooltip: tooltip,
+          icon: _remindersIcon(context, reminders),
+          semanticLabel: reminders > 0
+              ? '${R.remindersOverview}. Активных напоминаний: $reminders'
+              : R.remindersOverview,
+          onPressed: _openAllReminders,
+        );
+      },
+    );
+  }
+
+  Widget _remindersIcon(BuildContext context, int count) {
+    if (count <= 0) {
+      return const Icon(Icons.notifications_active_outlined);
+    }
+
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final badgeText = count > 99 ? '99+' : '$count';
+    final textStyle = theme.textTheme.labelSmall?.copyWith(
+          color: scheme.onError,
+          fontWeight: FontWeight.w600,
+        ) ??
+        TextStyle(
+          color: scheme.onError,
+          fontWeight: FontWeight.w600,
+          fontSize: 10,
+        );
+
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        const Icon(Icons.notifications_active_outlined),
+        Positioned(
+          right: -6,
+          top: -4,
+          child: Semantics(
+            label: 'Активных напоминаний: $count',
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+              decoration: BoxDecoration(
+                color: scheme.error,
+                borderRadius: BorderRadius.circular(9),
+              ),
+              constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
+              alignment: Alignment.center,
+              child: Text(
+                badgeText,
+                style: textStyle,
+                textAlign: TextAlign.center,
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -406,11 +482,7 @@ class _HomeScreenState extends State<HomeScreen> with RestorationMixin {
         title: const Text(R.homeTitle),
         // В AppBar actions:
         actions: [
-          IconButton(
-            tooltip: R.remindersOverview,
-            icon: const Icon(Icons.notifications_active_outlined),
-            onPressed: _openAllReminders,
-          ),
+          _buildRemindersAction(),
         ],
       ),
       drawer: NavigationDrawer(
