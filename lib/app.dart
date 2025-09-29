@@ -10,7 +10,6 @@ class App extends StatelessWidget {
   /// Глобальный ключ навигатора — доступен из любого места:
   /// App.navigatorKey.currentState?.push(...);
   static final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
-  static final RouteObserver<ModalRoute<void>> routeObserver = RouteObserver<ModalRoute<void>>();
 
   @override
   Widget build(BuildContext context) {
@@ -19,7 +18,6 @@ class App extends StatelessWidget {
         title: 'Touch NoteBook',
         debugShowCheckedModeBanner: false, // 🔔 убирает "DEBUG" в углу
         navigatorKey: navigatorKey, // <-- ВАЖНО: подключили ключ
-        navigatorObservers: [routeObserver],
         theme: ThemeData(
           colorScheme: ColorScheme.fromSeed(
             seedColor: Colors.deepPurple,
