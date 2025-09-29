@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:mask_text_input_formatter/mask_text_input_formatter.dart';
@@ -83,8 +84,7 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
               children: [
                 Text(
                   reminder.text,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
+                  softWrap: true,
                   style: theme.textTheme.bodyLarge,
                 ),
                 const SizedBox(height: 4),
@@ -100,12 +100,18 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
             ),
           ),
           IconButton(
+            icon: const Icon(Icons.edit_outlined),
+            tooltip: 'Редактировать напоминание',
+            onPressed: () => _editReminder(reminder),
+          ),
+          IconButton(
             icon: const Icon(Icons.delete_outline),
             tooltip: 'Удалить напоминание',
             onPressed: () => _confirmDeleteReminder(reminder),
           ),
         ],
       ),
+      onTap: () => _editReminder(reminder),
       isLast: isLast,
     );
   }
@@ -701,6 +707,41 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
     }
   }
 
+  Future<void> _editReminder(Reminder reminder) async {
+    if (reminder.id == null) return;
+
+    final result = await _showReminderDialog(initial: reminder);
+    if (result == null) return;
+
+    final text = result.text.trim();
+    final when = result.when;
+    if (when.isBefore(DateTime.now())) {
+      showErrorBanner('Выберите время в будущем');
+      return;
+    }
+
+    final updated = reminder.copyWith(text: text, remindAt: when);
+
+    try {
+      await ContactDatabase.instance.updateReminder(updated);
+      await PushNotifications.cancel(reminder.id!);
+      await PushNotifications.scheduleOneTime(
+        id: updated.id!,
+        whenLocal: updated.remindAt,
+        title: 'Напоминание: ${_contact.name}',
+        body: updated.text,
+      );
+
+      await _loadReminders();
+      if (!mounted) return;
+      showSuccessBanner('Напоминание обновлено');
+    } catch (e) {
+      if (mounted) {
+        showErrorBanner('Не удалось обновить напоминание: $e');
+      }
+    }
+  }
+
   Future<void> _confirmDeleteReminder(Reminder reminder) async {
     final ok = await showDialog<bool>(
       context: context,
@@ -737,28 +778,29 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
     }
   }
 
-  Future<({String text, DateTime when})?> _showReminderDialog() async {
-    final controller = TextEditingController();
-    var selected = DateTime.now().add(const Duration(minutes: 5));
+  Future<({String text, DateTime when})?> _showReminderDialog({Reminder? initial}) async {
+    final controller = TextEditingController(text: initial?.text ?? '');
+    var selected = initial?.remindAt ?? DateTime.now().add(const Duration(minutes: 5));
 
-    return showDialog<({String text, DateTime when})>(
+    final result = await showDialog<({String text, DateTime when})>(
       context: context,
       builder: (context) {
         return StatefulBuilder(
           builder: (context, setState) {
-            final dateLabel = DateFormat('dd.MM.yyyy').format(selected);
-            final timeLabel = DateFormat('HH:mm').format(selected);
+            final dateLabel = DateFormat('dd.MM.yyyy HH:mm').format(selected);
 
             return AlertDialog(
-              title: const Text('Новое напоминание'),
+              title: Text(initial == null ? 'Новое напоминание' : 'Редактирование напоминания'),
               content: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   TextField(
                     controller: controller,
-                    maxLines: 3,
+                    minLines: 1,
+                    maxLines: null,
                     autofocus: true,
+                    keyboardType: TextInputType.multiline,
                     decoration: const InputDecoration(
                       labelText: 'Текст напоминания',
                     ),
@@ -768,50 +810,11 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
                     contentPadding: EdgeInsets.zero,
                     leading: const Icon(Icons.event_outlined),
                     title: Text(dateLabel),
-                    subtitle: const Text('Дата'),
+                    subtitle: const Text('Дата и время'),
                     onTap: () async {
-                      final picked = await showDatePicker(
-                        context: context,
-                        initialDate: selected,
-                        firstDate: DateTime.now(),
-                        lastDate: DateTime.now().add(const Duration(days: 365 * 5)),
-                        helpText: 'Выберите дату',
-                      );
+                      final picked = await _pickReminderDateTime(selected);
                       if (picked != null) {
-                        setState(() {
-                          selected = DateTime(
-                            picked.year,
-                            picked.month,
-                            picked.day,
-                            selected.hour,
-                            selected.minute,
-                          );
-                        });
-                      }
-                    },
-                  ),
-                  ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    leading: const Icon(Icons.schedule_outlined),
-                    title: Text(timeLabel),
-                    subtitle: const Text('Время'),
-                    onTap: () async {
-                      final picked = await showTimePicker(
-                        context: context,
-                        initialTime:
-                            TimeOfDay(hour: selected.hour, minute: selected.minute),
-                        helpText: 'Выберите время',
-                      );
-                      if (picked != null) {
-                        setState(() {
-                          selected = DateTime(
-                            selected.year,
-                            selected.month,
-                            selected.day,
-                            picked.hour,
-                            picked.minute,
-                          );
-                        });
+                        setState(() => selected = picked);
                       }
                     },
                   ),
@@ -836,6 +839,58 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
               ],
             );
           },
+        );
+      },
+    );
+
+    controller.dispose();
+    return result;
+  }
+
+  Future<DateTime?> _pickReminderDateTime(DateTime initial) async {
+    final now = DateTime.now();
+    final minimumDate = initial.isBefore(now) ? initial : now;
+    var temp = initial;
+
+    return showModalBottomSheet<DateTime>(
+      context: context,
+      builder: (sheetContext) {
+        return SafeArea(
+          top: false,
+          child: SizedBox(
+            height: 300,
+            child: Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(sheetContext),
+                        child: const Text('Отмена'),
+                      ),
+                      TextButton(
+                        onPressed: () => Navigator.pop(sheetContext, temp),
+                        child: const Text('Готово'),
+                      ),
+                    ],
+                  ),
+                ),
+                const Divider(height: 0),
+                Expanded(
+                  child: CupertinoDatePicker(
+                    mode: CupertinoDatePickerMode.dateAndTime,
+                    use24hFormat: true,
+                    initialDateTime: initial,
+                    minimumDate: minimumDate,
+                    maximumDate: now.add(const Duration(days: 365 * 5)),
+                    onDateTimeChanged: (value) => temp = value,
+                  ),
+                ),
+              ],
+            ),
+          ),
         );
       },
     );
