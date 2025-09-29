@@ -38,6 +38,8 @@ flutter:
   uses-material-design: true
   assets:
     - assets/
+    - assets/policies/privacy_policy.html
+    - assets/policies/user_agreement.html
 
 
 flutter_launcher_icons:
