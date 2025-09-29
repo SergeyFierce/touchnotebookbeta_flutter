@@ -524,7 +524,8 @@ class _ContactListScreenState extends State<ContactListScreen> {
           _restoreLocally(c.copyWith(id: newId), highlight: true);
 
           // Восстанавливаем запланированные уведомления для будущих напоминаний
-          final restoredReminders = await db.remindersByContact(newId);
+          final restoredReminders =
+              await db.remindersByContact(newId, onlyActive: true);
           for (final reminder in restoredReminders) {
             if (reminder.remindAt.isAfter(DateTime.now()) && reminder.id != null) {
               await PushNotifications.scheduleOneTime(
@@ -881,6 +882,41 @@ class _ContactCardState extends State<_ContactCard> with TickerProviderStateMixi
     );
   }
 
+  Widget _reminderTagChip(int count) {
+    final bg = ContactColors.tagColor('Напомнить');
+    final fg = ContactColors.tagTextColor('Напомнить');
+    final badgeTextStyle = Theme.of(context).textTheme.bodySmall?.copyWith(
+          fontSize: 10,
+          color: bg,
+          fontWeight: FontWeight.w600,
+        );
+    return Chip(
+      label: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            'Напомнить',
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(fontSize: 10, color: fg),
+          ),
+          const SizedBox(width: 6),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Text('$count', style: badgeTextStyle),
+          ),
+        ],
+      ),
+      backgroundColor: bg,
+      visualDensity: const VisualDensity(horizontal: -4, vertical: -4),
+      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 0),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final border = BorderRadius.circular(12);
@@ -950,6 +986,11 @@ class _ContactCardState extends State<_ContactCard> with TickerProviderStateMixi
 
   Widget _buildCard(BuildContext context, BorderRadius border) {
     const double kStatusReserve = 120;
+    final reminderCount = widget.contact.activeReminderCount;
+    final hasReminderTag = reminderCount > 0;
+    final visibleTags = widget.contact.tags
+        .where((tag) => tag != 'Напомнить')
+        .toList(growable: false);
     return AnimatedScale(
       scale: _pressed ? 0.98 : 1.0,
       duration: const Duration(milliseconds: 100),
@@ -1005,7 +1046,7 @@ class _ContactCardState extends State<_ContactCard> with TickerProviderStateMixi
                         spacing: 4,
                         runSpacing: 4,
                         children: [
-                          for (final tag in widget.contact.tags)
+                          for (final tag in visibleTags)
                             Semantics(
                               label: 'Тег $tag',
                               child: Chip(
@@ -1024,6 +1065,11 @@ class _ContactCardState extends State<_ContactCard> with TickerProviderStateMixi
                                   borderRadius: BorderRadius.circular(30),
                                 ),
                               ),
+                            ),
+                          if (hasReminderTag)
+                            Semantics(
+                              label: 'Тег Напомнить с $reminderCount активными напоминаниями',
+                              child: _reminderTagChip(reminderCount),
                             ),
                         ],
                       ),
