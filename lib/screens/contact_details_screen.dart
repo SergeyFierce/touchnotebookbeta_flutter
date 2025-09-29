@@ -68,48 +68,51 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
     }
   }
 
-  Widget _reminderTile(Reminder reminder, {required bool completed}) {
+  Widget _reminderRow(Reminder reminder, {bool isLast = false}) {
     final theme = Theme.of(context);
-    final formatter = DateFormat('dd.MM.yyyy HH:mm');
-    final subtitle = completed
-        ? reminder.completedAt != null
-            ? 'Завершено: ${formatter.format(reminder.completedAt!)}'
-            : 'Завершено'
-        : 'Запланировано на ${formatter.format(reminder.remindAt)}';
+    final dateLabel = DateFormat('dd.MM.yyyy HH:mm').format(reminder.remindAt);
+    final isPast = reminder.remindAt.isBefore(DateTime.now());
 
-    final actions = <Widget>[
-      if (!completed)
-        IconButton(
-          icon: const Icon(Icons.check_circle_outline),
-          tooltip: 'Отметить выполненным',
-          color: theme.colorScheme.primary,
-          onPressed: () => _completeReminder(reminder),
-        ),
-      if (!completed)
-        IconButton(
-          icon: const Icon(Icons.edit_outlined),
-          tooltip: 'Редактировать напоминание',
-          onPressed: () => _editReminder(reminder),
-        ),
-      IconButton(
-        icon: const Icon(Icons.delete_outline),
-        tooltip: 'Удалить напоминание',
-        onPressed: () => _confirmDeleteReminder(reminder),
+    return _sheetRow(
+      leading: const Icon(Icons.notifications_active_outlined),
+      right: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  reminder.text,
+                  softWrap: true,
+                  style: theme.textTheme.bodyLarge,
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  dateLabel,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: isPast
+                        ? theme.colorScheme.error
+                        : theme.hintColor,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.edit_outlined),
+            tooltip: 'Редактировать напоминание',
+            onPressed: () => _editReminder(reminder),
+          ),
+          IconButton(
+            icon: const Icon(Icons.delete_outline),
+            tooltip: 'Удалить напоминание',
+            onPressed: () => _confirmDeleteReminder(reminder),
+          ),
+        ],
       ),
-    ];
-
-    return ListTile(
-      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      leading: Icon(
-        completed ? Icons.check_circle : Icons.notifications_outlined,
-        color: theme.colorScheme.primary,
-      ),
-      title: Text(reminder.text, style: theme.textTheme.titleMedium),
-      subtitle: Text(subtitle),
-      trailing: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: actions,
-      ),
+      onTap: () => _editReminder(reminder),
+      isLast: isLast,
     );
   }
 
@@ -557,9 +560,7 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
 
   bool _extraExpanded = false; // «Дополнительно»
   bool _remindersExpanded = true; // «Напоминания» открыто
-  List<Reminder> _activeReminders = [];
-  List<Reminder> _completedReminders = [];
-  int _selectedRemindersTab = 0;
+  List<Reminder> _reminders = [];
   bool _notesExpanded = true; // «Заметки» открыто
   List<Note> _notes = [];
 
@@ -639,28 +640,10 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
   }
 
   Future<void> _loadReminders() async {
-    final contactId = _contact.id;
-    if (contactId == null) {
-      if (mounted) {
-        setState(() {
-          _activeReminders = [];
-          _completedReminders = [];
-        });
-      }
-      return;
-    }
-
-    final db = ContactDatabase.instance;
-    final active = await db.remindersByContact(contactId, onlyActive: true);
-    final completed =
-        await db.remindersByContact(contactId, onlyCompleted: true);
-
-    if (mounted) {
-      setState(() {
-        _activeReminders = active;
-        _completedReminders = completed;
-      });
-    }
+    if (_contact.id == null) return;
+    final reminders =
+        await ContactDatabase.instance.remindersByContact(_contact.id!);
+    if (mounted) setState(() => _reminders = reminders);
   }
 
   Future<void> _loadNotes() async {
@@ -729,7 +712,7 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
   }
 
   Future<void> _editReminder(Reminder reminder) async {
-    if (reminder.id == null || reminder.completedAt != null) return;
+    if (reminder.id == null) return;
 
     final result = await _showReminderDialog(initial: reminder);
     if (result == null) return;
@@ -759,45 +742,6 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
     } catch (e) {
       if (mounted) {
         showErrorBanner('Не удалось обновить напоминание: $e');
-      }
-    }
-  }
-
-  Future<void> _completeReminder(Reminder reminder) async {
-    final reminderId = reminder.id;
-    if (reminderId == null || reminder.completedAt != null) return;
-
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Завершить напоминание?'),
-        content: const Text('Напоминание будет отмечено как выполненное и уведомление отменится.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Отмена'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Завершить'),
-          ),
-        ],
-      ),
-    );
-
-    if (confirm != true) return;
-
-    final updated = reminder.copyWith(completedAt: DateTime.now());
-
-    try {
-      await ContactDatabase.instance.updateReminder(updated);
-      await PushNotifications.cancel(reminderId);
-      await _loadReminders();
-      if (!mounted) return;
-      showSuccessBanner('Напоминание завершено');
-    } catch (e) {
-      if (mounted) {
-        showErrorBanner('Не удалось завершить напоминание: $e');
       }
     }
   }
@@ -2005,112 +1949,68 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> {
                   },
                   headerActions: [
                     IconButton(
-                      onPressed: _contact.id == null ? null : _addReminder,
                       tooltip: 'Добавить напоминание',
-                      icon: const Icon(Icons.add_circle_outline),
+                      onPressed: _contact.id == null ? null : _addReminder,
+                      icon: const Icon(Icons.add_alert_outlined),
                     ),
                   ],
-                  children: [
-                    if (_contact.id == null)
-                      Card(
-                        elevation: 0,
-                        child: Padding(
-                          padding: const EdgeInsets.fromLTRB(24, 32, 24, 24),
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const Icon(
-                                Icons.notifications_active_outlined,
-                                size: 48,
+                  children: _reminders.isEmpty
+                      ? [
+                          Card(
+                            elevation: 0,
+                            child: Padding(
+                              padding: const EdgeInsets.fromLTRB(24, 32, 24, 24),
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(
+                                    Icons.notifications_active_outlined,
+                                    size: 48,
+                                  ),
+                                  const SizedBox(height: 12),
+                                  Text(
+                                    _contact.id == null
+                                        ? 'Сохраните контакт, чтобы добавлять напоминания'
+                                        : 'Нет напоминаний',
+                                    style: Theme.of(context).textTheme.titleMedium,
+                                    textAlign: TextAlign.center,
+                                  ),
+                                  const SizedBox(height: 24),
+                                  FilledButton.icon(
+                                    onPressed:
+                                        _contact.id == null ? null : _addReminder,
+                                    icon: const Icon(Icons.add),
+                                    label: const Text('Добавить напоминание'),
+                                  ),
+                                ],
                               ),
-                              const SizedBox(height: 12),
-                              Text(
-                                'Сохраните контакт, чтобы добавлять напоминания',
-                                style: Theme.of(context).textTheme.titleMedium,
-                                textAlign: TextAlign.center,
-                              ),
-                            ],
+                            ),
                           ),
-                        ),
-                      )
-                    else ...[
-                      Center(
-                        child: ToggleButtons(
-                          isSelected: [
-                            _selectedRemindersTab == 0,
-                            _selectedRemindersTab == 1,
-                          ],
-                          borderRadius: BorderRadius.circular(20),
-                          constraints: const BoxConstraints(minHeight: 36, minWidth: 120),
-                          onPressed: (index) {
-                            setState(() => _selectedRemindersTab = index);
-                          },
-                          children: const [
-                            Padding(
-                              padding: EdgeInsets.symmetric(horizontal: 12),
-                              child: Text('Активные'),
-                            ),
-                            Padding(
-                              padding: EdgeInsets.symmetric(horizontal: 12),
-                              child: Text('Завершённые'),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      Builder(
-                        builder: (context) {
-                          final isCompletedTab = _selectedRemindersTab == 1;
-                          final reminders =
-                              isCompletedTab ? _completedReminders : _activeReminders;
-                          final emptyText = isCompletedTab
-                              ? 'Нет завершённых напоминаний'
-                              : 'Нет активных напоминаний';
-
-                          if (reminders.isEmpty)
-                            return Card(
-                              elevation: 0,
-                              child: Padding(
-                                padding:
-                                    const EdgeInsets.fromLTRB(24, 32, 24, 24),
-                                child: Column(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    const Icon(
-                                      Icons.notifications_active_outlined,
-                                      size: 48,
-                                    ),
-                                    const SizedBox(height: 12),
-                                    Text(
-                                      emptyText,
-                                      style:
-                                          Theme.of(context).textTheme.titleMedium,
-                                      textAlign: TextAlign.center,
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            );
-
-                          return Card(
+                        ]
+                      : [
+                          Card(
                             elevation: 0,
                             child: Column(
                               children: [
-                                for (var i = 0; i < reminders.length; i++) ...[
-                                  _reminderTile(
-                                    reminders[i],
-                                    completed: isCompletedTab,
+                                for (var i = 0; i < _reminders.length; i++)
+                                  _reminderRow(
+                                    _reminders[i],
+                                    isLast: i == _reminders.length - 1,
                                   ),
-                                  if (i != reminders.length - 1)
-                                    const Divider(height: 0),
-                                ],
                               ],
                             ),
-                          );
-                        },
-                      ),
-                    ],
-                  ],
+                          ),
+                          const SizedBox(height: 12),
+                          Align(
+                            alignment: Alignment.centerLeft,
+                            child: FilledButton.icon(
+                              onPressed:
+                                  _contact.id == null ? null : _addReminder,
+                              icon: const Icon(Icons.add),
+                              label: const Text('Добавить напоминание'),
+                            ),
+                          ),
+                        ],
                 ),
               ),
 
