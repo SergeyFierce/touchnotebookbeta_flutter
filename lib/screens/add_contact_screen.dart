@@ -18,7 +18,7 @@ abstract class Dict {
     'Потенциальный': ['Холодный', 'Тёплый', 'Потерянный'],
   };
 
-  static const tags = ['Новый', 'Напомнить', 'VIP'];
+  static const tags = ['Новый', 'VIP'];
 }
 
 class AddContactScreen extends StatefulWidget {
@@ -743,6 +743,7 @@ class _AddContactScreenState extends State<AddContactScreen> {
       tags: _tags.toList(),
       comment: _commentController.text.trim().isNotEmpty ? _commentController.text.trim() : null,
       createdAt: _addedDate,
+      activeReminderCount: 0,
     );
 
     try {
