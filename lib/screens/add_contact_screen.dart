@@ -569,6 +569,17 @@ class _AddContactScreenState extends State<AddContactScreen> {
     FocusScope.of(context).requestFocus(_focusSocial);
     setState(() => _socialOpen = true);
 
+    const options = [
+      'Telegram',
+      'VK',
+      'Instagram',
+      'Facebook',
+      'WhatsApp',
+      'TikTok',
+      'Одноклассники',
+      'Twitter',
+    ];
+
     final result = await showModalBottomSheet<String>(
       context: context,
       showDragHandle: true,
@@ -583,14 +594,14 @@ class _AddContactScreenState extends State<AddContactScreen> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  ListTile(leading: _brandIcon('Telegram'), title: const Text('Telegram'), onTap: () => Navigator.pop(context, 'Telegram')),
-                  ListTile(leading: _brandIcon('VK'), title: const Text('VK'), onTap: () => Navigator.pop(context, 'VK')),
-                  ListTile(leading: _brandIcon('Instagram'), title: const Text('Instagram'), onTap: () => Navigator.pop(context, 'Instagram')),
-                  ListTile(leading: _brandIcon('Facebook'), title: const Text('Facebook'), onTap: () => Navigator.pop(context, 'Facebook')),
-                  ListTile(leading: _brandIcon('WhatsApp'), title: const Text('WhatsApp'), onTap: () => Navigator.pop(context, 'WhatsApp')),
-                  ListTile(leading: _brandIcon('TikTok'), title: const Text('TikTok'), onTap: () => Navigator.pop(context, 'TikTok')),
-                  ListTile(leading: _brandIcon('Одноклассники'), title: const Text('Одноклассники'), onTap: () => Navigator.pop(context, 'Одноклассники')),
-                  ListTile(leading: _brandIcon('Twitter'), title: const Text('Twitter'), onTap: () => Navigator.pop(context, 'Twitter')),
+                  for (var i = 0; i < options.length; i++) ...[
+                    if (i > 0) const Divider(height: 0),
+                    ListTile(
+                      leading: _brandIcon(options[i]),
+                      title: Text(options[i]),
+                      onTap: () => Navigator.pop(context, options[i]),
+                    ),
+                  ],
                 ],
               ),
             ),
