@@ -3,7 +3,6 @@ import 'package:intl/intl.dart';
 import 'package:mask_text_input_formatter/mask_text_input_formatter.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:characters/characters.dart';
-import 'package:flutter/services.dart';
 
 import '../models/contact.dart';
 import '../services/contact_database.dart';
@@ -738,16 +737,6 @@ class _AddContactScreenState extends State<AddContactScreen> {
     // нормализуем телефон (в БД — только цифры)
     final rawPhone = _phoneMask.getUnmaskedText();
 
-    final duplicate = await ContactDatabase.instance.contactByPhone(rawPhone);
-    if (duplicate != null) {
-      if (mounted) {
-        showErrorBanner('Контакт с таким телефоном уже существует');
-        await _ensureVisible(_phoneKey);
-        setState(() => _saving = false);
-      }
-      return;
-    }
-
     final contact = Contact(
       name: _nameController.text.trim(),
       birthDate: _birthDate,
@@ -1016,7 +1005,6 @@ class _AddContactScreenState extends State<AddContactScreen> {
                         maxLines: 1,
                         autofillHints: const [AutofillHints.name],
                         textInputAction: TextInputAction.next,
-                        inputFormatters: const [FilteringTextInputFormatter.deny(RegExp(r'[0-9]'))],
                         decoration: _outlinedDec(
                           Theme.of(context),
                           label: 'ФИО*',
