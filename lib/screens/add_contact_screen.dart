@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 import 'package:mask_text_input_formatter/mask_text_input_formatter.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:characters/characters.dart';
+import 'package:flutter/services.dart';
 
 import '../models/contact.dart';
 import '../services/contact_database.dart';
@@ -346,6 +347,9 @@ class _AddContactScreenState extends State<AddContactScreen> {
   final FocusNode _focusCategory = FocusNode(skipTraversal: true);
   final FocusNode _focusStatus = FocusNode(skipTraversal: true);
   final FocusNode _focusAdded = FocusNode(skipTraversal: true);
+  final FocusNode _focusEmail = FocusNode();
+
+  static final RegExp _emailRegex = RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$');
 
   final _phoneMask = MaskTextInputFormatter(
     mask: '+7 (###) ###-##-##',
@@ -424,6 +428,7 @@ class _AddContactScreenState extends State<AddContactScreen> {
     _focusCategory.dispose();
     _focusStatus.dispose();
     _focusAdded.dispose();
+    _focusEmail.dispose();
     super.dispose();
   }
 
@@ -470,6 +475,12 @@ class _AddContactScreenState extends State<AddContactScreen> {
   }
 
   bool get _phoneValid => _phoneMask.getUnmaskedText().length == 10;
+
+  bool get _emailValid {
+    final value = _emailController.text.trim();
+    if (value.isEmpty) return true;
+    return _emailRegex.hasMatch(value);
+  }
 
   bool get _canSave =>
       _nameController.text.trim().isNotEmpty &&
@@ -706,6 +717,26 @@ class _AddContactScreenState extends State<AddContactScreen> {
     _defocus();
     setState(() => _submitted = true);
 
+    final formValid = _formKey.currentState?.validate() ?? false;
+    if (!formValid) {
+      if (_nameController.text.trim().isEmpty) {
+        await _ensureVisible(_nameKey);
+        return;
+      }
+      if (!_phoneValid) {
+        await _ensureVisible(_phoneKey);
+        return;
+      }
+      if (!_emailValid) {
+        if (!_extraExpanded) {
+          setState(() => _extraExpanded = true);
+        }
+        await _scrollToCard(_extraCardKey);
+        FocusScope.of(context).requestFocus(_focusEmail);
+        return;
+      }
+    }
+
     // Мгновенно подсказать, что не так, и проскроллить к первой ошибке
     if (_nameController.text.trim().isEmpty) {
       await _ensureVisible(_nameKey);
@@ -736,6 +767,16 @@ class _AddContactScreenState extends State<AddContactScreen> {
 
     // нормализуем телефон (в БД — только цифры)
     final rawPhone = _phoneMask.getUnmaskedText();
+
+    final duplicate = await ContactDatabase.instance.contactByPhone(rawPhone);
+    if (duplicate != null) {
+      if (mounted) {
+        showErrorBanner('Контакт с таким телефоном уже существует');
+        await _ensureVisible(_phoneKey);
+        setState(() => _saving = false);
+      }
+      return;
+    }
 
     final contact = Contact(
       name: _nameController.text.trim(),
@@ -1005,6 +1046,7 @@ class _AddContactScreenState extends State<AddContactScreen> {
                         maxLines: 1,
                         autofillHints: const [AutofillHints.name],
                         textInputAction: TextInputAction.next,
+                        inputFormatters: [FilteringTextInputFormatter.deny(RegExp(r'[0-9]'))],
                         decoration: _outlinedDec(
                           Theme.of(context),
                           label: 'ФИО*',
@@ -1138,6 +1180,7 @@ class _AddContactScreenState extends State<AddContactScreen> {
                       // Email
                       TextFormField(
                         controller: _emailController,
+                        focusNode: _focusEmail,
                         keyboardType: TextInputType.emailAddress,
                         textInputAction: TextInputAction.next,
                         autofillHints: const [AutofillHints.email],
@@ -1150,8 +1193,7 @@ class _AddContactScreenState extends State<AddContactScreen> {
                         validator: (v) {
                           if (v == null || v.trim().isEmpty) return null;
                           final value = v.trim();
-                          final regex = RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$');
-                          return regex.hasMatch(value) ? null : 'Некорректный email';
+                          return _emailRegex.hasMatch(value) ? null : 'Некорректный email';
                         },
                         onTapOutside: (_) => _defocus(),
                       ),
