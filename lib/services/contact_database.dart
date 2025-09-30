@@ -178,20 +178,6 @@ class ContactDatabase {
     return id;
   }
 
-  Future<Contact?> contactByPhone(String phone, {int? excludeId}) async {
-    final db = await database;
-    final args = excludeId != null ? [phone, excludeId] : [phone];
-    final where = excludeId != null ? 'phone = ? AND id != ?' : 'phone = ?';
-    final maps = await db.query(
-      'contacts',
-      where: where,
-      whereArgs: args,
-      limit: 1,
-    );
-    if (maps.isEmpty) return null;
-    return Contact.fromMap(maps.first);
-  }
-
   Future<List<Contact>> contactsByCategory(String category) async {
     final db = await database;
     final now = DateTime.now().millisecondsSinceEpoch;
