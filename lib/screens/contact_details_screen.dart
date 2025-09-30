@@ -6,6 +6,7 @@ import 'package:mask_text_input_formatter/mask_text_input_formatter.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:characters/characters.dart';
 import 'package:overlay_support/overlay_support.dart';
+import 'package:flutter/services.dart';
 
 import '../app.dart';
 import '../models/contact.dart';
@@ -1353,27 +1354,33 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> with RouteA
         value.minute,
       );
 
-  Contact _snapshot() => Contact(
-    id: _contact.id,
-    name: _nameController.text.trim(),
-    birthDate: _birthDate,
-    ageManual: _ageManual,
-    profession: _professionController.text.trim().isEmpty ? null : _professionController.text.trim(),
-    city: _cityController.text.trim().isEmpty ? null : _cityController.text.trim(),
-    phone: _phoneController.text.trim(),
-    email: _emailController.text.trim().isNotEmpty ? _emailController.text.trim() : null,
-    social: _socialType,
-    category: _category ?? _categoryController.text.trim(),
-    status: _status ?? _statusController.text.trim(),
-    tags: _tags
-        .where((tag) =>
-            tag != Contact.reminderTagName &&
-            tag != Contact.legacyReminderTagName)
-        .toList(),
-    comment: _commentController.text.trim().isNotEmpty ? _commentController.text.trim() : null,
-    createdAt: _addedDate,
-    activeReminderCount: _contact.activeReminderCount,
-  );
+  Contact _snapshot() {
+    final rawPhone = _phoneMask.getUnmaskedText();
+    final normalizedPhone = rawPhone.length == 10 ? rawPhone : _digitsOnly(_phoneController.text);
+    final email = _emailController.text.trim();
+
+    return Contact(
+      id: _contact.id,
+      name: _nameController.text.trim(),
+      birthDate: _birthDate,
+      ageManual: _ageManual,
+      profession: _professionController.text.trim().isEmpty ? null : _professionController.text.trim(),
+      city: _cityController.text.trim().isEmpty ? null : _cityController.text.trim(),
+      phone: normalizedPhone,
+      email: email.isNotEmpty ? email.toLowerCase() : null,
+      social: _socialType,
+      category: _category ?? _categoryController.text.trim(),
+      status: _status ?? _statusController.text.trim(),
+      tags: _tags
+          .where((tag) =>
+              tag != Contact.reminderTagName &&
+              tag != Contact.legacyReminderTagName)
+          .toList(),
+      comment: _commentController.text.trim().isNotEmpty ? _commentController.text.trim() : null,
+      createdAt: _addedDate,
+      activeReminderCount: _contact.activeReminderCount,
+    );
+  }
 
   bool _listEq(List<String> a, List<String> b) {
     if (a.length != b.length) return false;
@@ -1803,6 +1810,17 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> with RouteA
       return;
     }
 
+    final normalizedPhone = _phoneMask.getUnmaskedText();
+    final duplicate = await ContactDatabase.instance.contactByPhone(
+      normalizedPhone,
+      excludeId: _contact.id,
+    );
+    if (duplicate != null) {
+      showErrorBanner('Контакт с таким телефоном уже существует');
+      await _ensureVisible(_phoneKey);
+      return;
+    }
+
     final updated = _snapshot();
     await ContactDatabase.instance.update(updated);
     if (!mounted) return;
@@ -2226,6 +2244,7 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> with RouteA
                       controller: _nameController,
                       maxLines: 1,
                       textInputAction: TextInputAction.next,
+                      inputFormatters: const [FilteringTextInputFormatter.deny(RegExp(r'[0-9]'))],
                       decoration: _outlinedDec(
                         Theme.of(context),
                         label: 'ФИО*',
@@ -2366,9 +2385,11 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> with RouteA
                         controller: _emailController,
                       ),
                       validator: (v) {
-                        if (v == null || v.isEmpty) return null;
-                        final regex = RegExp(r'.+@.+[.].+');
-                        return regex.hasMatch(v) ? null : 'Некорректный email';
+                        if (v == null) return null;
+                        final value = v.trim();
+                        if (value.isEmpty) return null;
+                        final regex = RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$');
+                        return regex.hasMatch(value) ? null : 'Некорректный email';
                       },
                       onTapOutside: (_) => _defocus(),
                       onChanged: (_) => _updateEditingFromDirty(),
