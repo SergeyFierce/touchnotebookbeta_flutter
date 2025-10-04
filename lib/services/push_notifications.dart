@@ -38,16 +38,24 @@ class PushNotifications {
 
   static bool get isEnabled => _enabled;
 
-  static const DarwinNotificationDetails _darwinDetails =
-  DarwinNotificationDetails();
-
-  static NotificationDetails _buildDetails({bool withReminderActions = false}) {
+  static NotificationDetails _buildDetails({
+    bool withReminderActions = false,
+    String? androidBigText,
+    String? androidSummaryText,
+    String? darwinSubtitle,
+  }) {
     final androidDetails = AndroidNotificationDetails(
       'demo_push_channel',
       'Демо уведомления',
       channelDescription: 'Канал для тестовых push-уведомлений',
       importance: Importance.max,
       priority: Priority.high,
+      styleInformation: androidBigText != null
+          ? BigTextStyleInformation(
+              androidBigText,
+              summaryText: androidSummaryText,
+            )
+          : null,
       actions: withReminderActions
           ? const [
               AndroidNotificationAction(
@@ -64,10 +72,17 @@ class PushNotifications {
           : null,
     );
 
+    final darwinDetails = DarwinNotificationDetails(
+      subtitle: darwinSubtitle,
+      presentAlert: true,
+      presentBadge: true,
+      presentSound: true,
+    );
+
     return NotificationDetails(
       android: androidDetails,
-      iOS: _darwinDetails,
-      macOS: _darwinDetails,
+      iOS: darwinDetails,
+      macOS: darwinDetails,
     );
   }
 
@@ -138,11 +153,29 @@ class PushNotifications {
     required int id,
     required String title,
     required String body,
+    String? expandedBody,
+    String? summaryText,
   }) async {
     if (!_enabled) return;
     await ensureInitialized();
+
+    final bool useExpandedBodyForDarwin = expandedBody != null &&
+        (defaultTargetPlatform == TargetPlatform.iOS ||
+            defaultTargetPlatform == TargetPlatform.macOS);
+    final notificationBody =
+        useExpandedBodyForDarwin ? expandedBody! : body;
+
     try {
-      await _plugin.show(id, title, body, _buildDetails());
+      await _plugin.show(
+        id,
+        title,
+        notificationBody,
+        _buildDetails(
+          androidBigText: expandedBody ?? body,
+          androidSummaryText: summaryText,
+          darwinSubtitle: useExpandedBodyForDarwin ? body : null,
+        ),
+      );
     } catch (e, s) {
       if (kDebugMode) print('Failed to show notification: $e\n$s');
     }
@@ -157,6 +190,8 @@ class PushNotifications {
     bool exact = true, // для Android: точное ли срабатывание
     String? payload,
     bool withReminderActions = false,
+    String? expandedBody,
+    String? summaryText,
   }) async {
     if (!_enabled) return;
     await ensureInitialized();
@@ -164,12 +199,23 @@ class PushNotifications {
 
     final scheduled = tz.TZDateTime.from(whenLocal, tz.local);
 
+    final bool useExpandedBodyForDarwin = expandedBody != null &&
+        (defaultTargetPlatform == TargetPlatform.iOS ||
+            defaultTargetPlatform == TargetPlatform.macOS);
+    final notificationBody =
+        useExpandedBodyForDarwin ? expandedBody! : body;
+
     await _plugin.zonedSchedule(
       id,
       title,
-      body,
+      notificationBody,
       scheduled,
-      _buildDetails(withReminderActions: withReminderActions),
+      _buildDetails(
+        withReminderActions: withReminderActions,
+        androidBigText: expandedBody ?? body,
+        androidSummaryText: summaryText,
+        darwinSubtitle: useExpandedBodyForDarwin ? body : null,
+      ),
       androidScheduleMode: exact
           ? AndroidScheduleMode.exactAllowWhileIdle
           : AndroidScheduleMode.inexact,
@@ -187,6 +233,8 @@ class PushNotifications {
     required String title,
     required String body,
     bool exact = false,
+    String? expandedBody,
+    String? summaryText,
   }) async {
     if (!_enabled) return;
     await ensureInitialized();
@@ -205,12 +253,22 @@ class PushNotifications {
       first = first.add(const Duration(days: 1));
     }
 
+    final bool useExpandedBodyForDarwin = expandedBody != null &&
+        (defaultTargetPlatform == TargetPlatform.iOS ||
+            defaultTargetPlatform == TargetPlatform.macOS);
+    final notificationBody =
+        useExpandedBodyForDarwin ? expandedBody! : body;
+
     await _plugin.zonedSchedule(
       id,
       title,
-      body,
+      notificationBody,
       first,
-      _buildDetails(),
+      _buildDetails(
+        androidBigText: expandedBody ?? body,
+        androidSummaryText: summaryText,
+        darwinSubtitle: useExpandedBodyForDarwin ? body : null,
+      ),
       androidScheduleMode:
       exact ? AndroidScheduleMode.exactAllowWhileIdle : AndroidScheduleMode.inexact,
       matchDateTimeComponents: DateTimeComponents.time,
@@ -227,6 +285,8 @@ class PushNotifications {
     required String title,
     required String body,
     bool exact = false,
+    String? expandedBody,
+    String? summaryText,
   }) async {
     if (!_enabled) return;
     await ensureInitialized();
@@ -246,12 +306,22 @@ class PushNotifications {
       first = first.add(const Duration(days: 1));
     }
 
+    final bool useExpandedBodyForDarwin = expandedBody != null &&
+        (defaultTargetPlatform == TargetPlatform.iOS ||
+            defaultTargetPlatform == TargetPlatform.macOS);
+    final notificationBody =
+        useExpandedBodyForDarwin ? expandedBody! : body;
+
     await _plugin.zonedSchedule(
       id,
       title,
-      body,
+      notificationBody,
       first,
-      _buildDetails(),
+      _buildDetails(
+        androidBigText: expandedBody ?? body,
+        androidSummaryText: summaryText,
+        darwinSubtitle: useExpandedBodyForDarwin ? body : null,
+      ),
       androidScheduleMode:
       exact ? AndroidScheduleMode.exactAllowWhileIdle : AndroidScheduleMode.inexact,
       matchDateTimeComponents: DateTimeComponents.dayOfWeekAndTime,
