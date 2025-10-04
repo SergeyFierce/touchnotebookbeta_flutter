@@ -566,6 +566,8 @@ class _ContactListScreenState extends State<ContactListScreen> {
                 whenLocal: reminder.remindAt,
                 title: 'Напоминание: ${c.name}',
                 body: reminder.text,
+                payload: PushNotifications.reminderPayload(reminder.id!),
+                withReminderActions: true,
               );
             }
           }

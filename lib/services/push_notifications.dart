@@ -1,14 +1,32 @@
+import 'dart:async';
+import 'dart:convert';
+
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart' show TimeOfDay;
+import 'package:flutter/widgets.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_timezone/flutter_timezone.dart';              // NEW
 import 'package:timezone/data/latest_all.dart' as tz;               // NEW
 import 'package:timezone/timezone.dart' as tz;                      // NEW
-import 'package:flutter/material.dart' show TimeOfDay;
+
+import '../models/reminder.dart';
+import 'contact_database.dart';
+
+@pragma('vm:entry-point')
+Future<void> notificationTapBackground(NotificationResponse response) async {
+  await PushNotifications._handleNotificationResponse(response);
+}
 class PushNotifications {
   PushNotifications._();
 
   static final FlutterLocalNotificationsPlugin _plugin =
   FlutterLocalNotificationsPlugin();
+
+  static const String _payloadTypeKey = 'type';
+  static const String _payloadReminderType = 'reminder';
+  static const String _payloadReminderIdKey = 'id';
+  static const String _reminderSnoozeHourActionId = 'reminder_snooze_hour';
+  static const String _reminderTomorrowActionId = 'reminder_tomorrow';
 
   static bool _initialized = false;
   static bool _tzReady = false;
@@ -20,23 +38,38 @@ class PushNotifications {
 
   static bool get isEnabled => _enabled;
 
-  static const AndroidNotificationDetails _androidDetails =
-  AndroidNotificationDetails(
-    'demo_push_channel',
-    'Демо уведомления',
-    channelDescription: 'Канал для тестовых push-уведомлений',
-    importance: Importance.max,
-    priority: Priority.high,
-  );
-
   static const DarwinNotificationDetails _darwinDetails =
   DarwinNotificationDetails();
 
-  static const NotificationDetails _details = NotificationDetails(
-    android: _androidDetails,
-    iOS: _darwinDetails,
-    macOS: _darwinDetails,
-  );
+  static NotificationDetails _buildDetails({bool withReminderActions = false}) {
+    final androidDetails = AndroidNotificationDetails(
+      'demo_push_channel',
+      'Демо уведомления',
+      channelDescription: 'Канал для тестовых push-уведомлений',
+      importance: Importance.max,
+      priority: Priority.high,
+      actions: withReminderActions
+          ? const [
+              AndroidNotificationAction(
+                _reminderTomorrowActionId,
+                'Напомнить завтра',
+                showsUserInterface: true,
+              ),
+              AndroidNotificationAction(
+                _reminderSnoozeHourActionId,
+                'Отложить на час',
+                showsUserInterface: true,
+              ),
+            ]
+          : null,
+    );
+
+    return NotificationDetails(
+      android: androidDetails,
+      iOS: _darwinDetails,
+      macOS: _darwinDetails,
+    );
+  }
 
   static Future<void> ensureInitialized() async {
     if (_initialized) return;
@@ -54,7 +87,13 @@ class PushNotifications {
       macOS: darwinInit,
     );
 
-    await _plugin.initialize(settings);
+    await _plugin.initialize(
+      settings,
+      onDidReceiveNotificationResponse: (response) {
+        unawaited(_handleNotificationResponse(response));
+      },
+      onDidReceiveBackgroundNotificationResponse: notificationTapBackground,
+    );
 
     // Android 13+: запрос разрешения на показ уведомлений
     final androidImplementation = _plugin
@@ -89,6 +128,11 @@ class PushNotifications {
     _tzReady = true;
   }
 
+  static String reminderPayload(int reminderId) => jsonEncode({
+        _payloadTypeKey: _payloadReminderType,
+        _payloadReminderIdKey: reminderId,
+      });
+
   /// Немедленное уведомление (у вас уже было)
   static Future<void> showNotification({
     required int id,
@@ -98,7 +142,7 @@ class PushNotifications {
     if (!_enabled) return;
     await ensureInitialized();
     try {
-      await _plugin.show(id, title, body, _details);
+      await _plugin.show(id, title, body, _buildDetails());
     } catch (e, s) {
       if (kDebugMode) print('Failed to show notification: $e\n$s');
     }
@@ -111,6 +155,8 @@ class PushNotifications {
     required String title,
     required String body,
     bool exact = true, // для Android: точное ли срабатывание
+    String? payload,
+    bool withReminderActions = false,
   }) async {
     if (!_enabled) return;
     await ensureInitialized();
@@ -123,12 +169,13 @@ class PushNotifications {
       title,
       body,
       scheduled,
-      _details,
+      _buildDetails(withReminderActions: withReminderActions),
       androidScheduleMode: exact
           ? AndroidScheduleMode.exactAllowWhileIdle
           : AndroidScheduleMode.inexact,
       uiLocalNotificationDateInterpretation:
       UILocalNotificationDateInterpretation.absoluteTime, // ⬅️ ДОБАВИТЬ
+      payload: payload,
       // matchDateTimeComponents не указываем — одноразовое
     );
   }
@@ -163,7 +210,7 @@ class PushNotifications {
       title,
       body,
       first,
-      _details,
+      _buildDetails(),
       androidScheduleMode:
       exact ? AndroidScheduleMode.exactAllowWhileIdle : AndroidScheduleMode.inexact,
       matchDateTimeComponents: DateTimeComponents.time,
@@ -204,7 +251,7 @@ class PushNotifications {
       title,
       body,
       first,
-      _details,
+      _buildDetails(),
       androidScheduleMode:
       exact ? AndroidScheduleMode.exactAllowWhileIdle : AndroidScheduleMode.inexact,
       matchDateTimeComponents: DateTimeComponents.dayOfWeekAndTime,
@@ -212,6 +259,79 @@ class PushNotifications {
       UILocalNotificationDateInterpretation.absoluteTime, // ⬅️ ДОБАВИТЬ
     );
 
+  }
+
+  static Future<void> _handleNotificationResponse(
+    NotificationResponse response,
+  ) async {
+    final actionId = response.actionId;
+    final payload = response.payload;
+
+    if (actionId == null || actionId.isEmpty) return;
+    if (payload == null || payload.isEmpty) return;
+
+    try {
+      WidgetsFlutterBinding.ensureInitialized();
+      final decoded = jsonDecode(payload);
+      if (decoded is! Map<String, dynamic>) return;
+      if (decoded[_payloadTypeKey] != _payloadReminderType) return;
+
+      final rawId = decoded[_payloadReminderIdKey];
+      final reminderId = rawId is int ? rawId : int.tryParse(rawId?.toString() ?? '');
+      if (reminderId == null) return;
+
+      switch (actionId) {
+        case _reminderSnoozeHourActionId:
+          await _rescheduleReminder(
+            reminderId,
+            (_) => DateTime.now().add(const Duration(hours: 1)),
+          );
+          break;
+        case _reminderTomorrowActionId:
+          await _rescheduleReminder(
+            reminderId,
+            (reminder) => reminder.remindAt.add(const Duration(days: 1)),
+          );
+          break;
+        default:
+          break;
+      }
+    } catch (e, s) {
+      if (kDebugMode) {
+        print('Failed to handle notification response: $e\n$s');
+      }
+    }
+  }
+
+  static Future<void> _rescheduleReminder(
+    int reminderId,
+    DateTime Function(Reminder reminder) computeNewTime,
+  ) async {
+    final reminder = await ContactDatabase.instance.reminderById(reminderId);
+    if (reminder == null) return;
+
+    final newWhen = _ensureFuture(computeNewTime(reminder));
+    final updated = reminder.copyWith(remindAt: newWhen, completedAt: null);
+    await ContactDatabase.instance.updateReminder(updated);
+
+    final contact = await ContactDatabase.instance.contactById(reminder.contactId);
+    final contactName = contact?.name ?? 'Контакт';
+
+    await cancel(reminderId);
+    await scheduleOneTime(
+      id: reminderId,
+      whenLocal: newWhen,
+      title: 'Напоминание: ${contactName}',
+      body: reminder.text,
+      payload: reminderPayload(reminderId),
+      withReminderActions: true,
+    );
+  }
+
+  static DateTime _ensureFuture(DateTime candidate) {
+    final now = DateTime.now();
+    if (candidate.isAfter(now)) return candidate;
+    return now.add(const Duration(minutes: 1));
   }
 
   static Future<void> cancel(int id) async {

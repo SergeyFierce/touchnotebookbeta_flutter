@@ -107,6 +107,8 @@ class AppSettings extends ChangeNotifier {
         whenLocal: reminder.remindAt,
         title: 'Напоминание: ${entry.contactName}',
         body: reminder.text,
+        payload: PushNotifications.reminderPayload(reminder.id!),
+        withReminderActions: true,
       );
     }
   }

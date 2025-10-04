@@ -498,6 +498,9 @@ class _AddContactScreenState extends State<AddContactScreen> {
     return completer.future;
   }
 
+  String _formatIssues(List<String> messages) =>
+      messages.map((m) => '• $m').join('\n');
+
   Future<void> _showFieldIssue({
     required String message,
     GlobalKey? targetKey,
@@ -858,7 +861,7 @@ class _AddContactScreenState extends State<AddContactScreen> {
 
     if (issueMessages.isNotEmpty) {
       await _showFieldIssue(
-        message: issueMessages.join('\n'),
+        message: _formatIssues(issueMessages),
         targetKey: issueKey,
         focusNode: issueFocus,
         expandExtra: issueExpand,
@@ -1127,7 +1130,7 @@ class _AddContactScreenState extends State<AddContactScreen> {
             child: ListView(
               controller: _scroll,
               physics: const BouncingScrollPhysics(),
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 120),
               children: [
                 // ===== Превью =====
                 Column(
@@ -1155,7 +1158,7 @@ class _AddContactScreenState extends State<AddContactScreen> {
                         maxLines: 1,
                         autofillHints: const [AutofillHints.name],
                         textInputAction: TextInputAction.next,
-                        inputFormatters: [FilteringTextInputFormatter.deny(RegExp(r'[0-9]'))],
+                        inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r"[A-Za-zА-Яа-яЁё\s\-]"))],
                         decoration: _outlinedDec(
                           Theme.of(context),
                           label: 'ФИО*',
@@ -1392,31 +1395,31 @@ class _AddContactScreenState extends State<AddContactScreen> {
 
                 const SizedBox(height: 16),
 
-                // ===== КНОПКА СОХРАНЕНИЯ =====
-                SafeArea(
-                  top: false,
-                  minimum: const EdgeInsets.only(bottom: 24),
-                  child: Semantics(
-                    button: true,
-                    enabled: _canSave,
-                    label: _saving ? 'Сохранение контакта' : 'Сохранить контакт',
-                    child: FilledButton.icon(
-                      onPressed: _canSave ? _save : null,
-                      icon: _saving
-                          ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
-                          : const Icon(Icons.save_outlined),
-                      label: const Padding(
-                        padding: EdgeInsets.symmetric(vertical: 12),
-                        child: Text('Сохранить контакт'),
-                      ),
-                    ),
-                  ),
-                ),
               ],
             ),
           ),
         ),
       ),
+      floatingActionButton: _buildFloatingSaveButton(),
+      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
+    );
+  }
+
+  Widget _buildFloatingSaveButton() {
+    final label = _saving ? 'Сохранение…' : 'Сохранить контакт';
+    final icon = _saving
+        ? const SizedBox(
+            width: 20,
+            height: 20,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          )
+        : const Icon(Icons.save_outlined);
+
+    return FloatingActionButton.extended(
+      heroTag: 'add_contact_save_fab',
+      onPressed: _canSave ? _save : null,
+      icon: icon,
+      label: Text(label),
     );
   }
 }
