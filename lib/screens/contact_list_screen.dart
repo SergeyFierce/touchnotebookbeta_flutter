@@ -141,6 +141,7 @@ class _ContactListScreenState extends State<ContactListScreen> {
   Timer? _highlightTimer;
   late final VoidCallback _revisionListener;
   Timer? _revisionDebounce;
+  Timer? _timeTicker;
   bool _pendingRevisionReload = false;
 
   void _restoreLocally(Contact restored, {bool highlight = false}) {
@@ -194,6 +195,7 @@ class _ContactListScreenState extends State<ContactListScreen> {
       });
     };
     revision.addListener(_revisionListener);
+    _scheduleTimeTick();
   }
 
   @override
@@ -214,6 +216,7 @@ class _ContactListScreenState extends State<ContactListScreen> {
     _debounce?.cancel();
     _highlightTimer?.cancel();
     _revisionDebounce?.cancel();
+    _timeTicker?.cancel();
     ContactDatabase.instance.revision.removeListener(_revisionListener);
     _searchController.dispose();
     _scroll.removeListener(_onScroll);
@@ -270,6 +273,44 @@ class _ContactListScreenState extends State<ContactListScreen> {
     if (_scroll.position.pixels >= _scroll.position.maxScrollExtent - 200) {
       _loadMoreContacts();
     }
+  }
+
+  void _scheduleTimeTick() {
+    _timeTicker?.cancel();
+    final now = DateTime.now();
+    final nextMinute = DateTime(
+      now.year,
+      now.month,
+      now.day,
+      now.hour,
+      now.minute + 1,
+    );
+    final delay = nextMinute.difference(now);
+    _timeTicker = Timer(delay, () {
+      if (!mounted) return;
+      unawaited(_refreshActiveReminderCounts());
+      _scheduleTimeTick();
+    });
+  }
+
+  Future<void> _refreshActiveReminderCounts() async {
+    if (_isLoading || _all.isEmpty) return;
+    final ids = _all.map((e) => e.id).whereType<int>().toList(growable: false);
+    if (ids.isEmpty) return;
+    final counts =
+        await ContactDatabase.instance.activeReminderCountByContactIds(ids);
+    if (!mounted) return;
+    setState(() {
+      for (var i = 0; i < _all.length; i++) {
+        final contact = _all[i];
+        final id = contact.id;
+        if (id == null) continue;
+        final newCount = counts[id] ?? 0;
+        if (contact.activeReminderCount != newCount) {
+          _all[i] = contact.copyWith(activeReminderCount: newCount);
+        }
+      }
+    });
   }
 
   Future<void> _loadContacts({bool reset = false}) async {

@@ -296,6 +296,48 @@ class ContactDatabase {
     return Sqflite.firstIntValue(result) ?? 0;
   }
 
+  Future<Map<int, int>> activeReminderCountByContactIds(
+    List<int> contactIds,
+  ) async {
+    if (contactIds.isEmpty) return {};
+    final db = await database;
+    final placeholders = List.filled(contactIds.length, '?').join(',');
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final args = <Object?>[now, ...contactIds];
+    final rows = await db.rawQuery(
+      '''
+      SELECT contactId AS contactId,
+             SUM(CASE
+               WHEN completedAt IS NULL AND remindAt >= ? THEN 1
+               ELSE 0
+             END) AS activeReminderCount
+        FROM reminders
+       WHERE contactId IN ($placeholders)
+       GROUP BY contactId
+      '''.trim(),
+      args,
+    );
+    final counts = <int, int>{};
+    for (final row in rows) {
+      final idValue = row['contactId'];
+      final countValue = row['activeReminderCount'];
+      if (idValue == null) continue;
+      final id = idValue is int
+          ? idValue
+          : idValue is num
+              ? idValue.toInt()
+              : null;
+      if (id == null) continue;
+      final count = countValue is int
+          ? countValue
+          : countValue is num
+              ? countValue.toInt()
+              : 0;
+      counts[id] = count;
+    }
+    return counts;
+  }
+
   Future<int> activeReminderCount() async {
     final db = await database;
     final now = DateTime.now().millisecondsSinceEpoch;
