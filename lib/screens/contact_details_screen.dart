@@ -1092,7 +1092,6 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> with RouteA
         whenLocal: saved.remindAt,
         title: 'Напоминание: ${_contact.name}',
         body: saved.text,
-        reminderActions: true,
       );
 
       await _loadReminders();
@@ -1128,7 +1127,6 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> with RouteA
         whenLocal: updated.remindAt,
         title: 'Напоминание: ${_contact.name}',
         body: updated.text,
-        reminderActions: true,
       );
 
       await _loadReminders();
@@ -2038,7 +2036,6 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> with RouteA
               whenLocal: reminder.remindAt,
               title: 'Напоминание: ${c.name}',
               body: reminder.text,
-              reminderActions: true,
             );
           }
         }
