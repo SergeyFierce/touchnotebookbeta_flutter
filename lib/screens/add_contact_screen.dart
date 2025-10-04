@@ -800,45 +800,15 @@ class _AddContactScreenState extends State<AddContactScreen> {
       addMissing('Дата добавления', _addedKey, focusNode: _focusAdded);
     }
 
-    Contact? duplicateContact;
-    if (_phoneValid) {
-      duplicateContact = await ContactDatabase.instance.contactByPhone(phoneDigits);
-      if (!mounted) return;
-    } else if (_duplicatePhone && mounted) {
-      setState(() => _duplicatePhone = false);
-    }
-
-    final issueMessages = <String>[];
-    GlobalKey? issueKey;
-    FocusNode? issueFocus;
-    var issueExpand = false;
-
     if (missingLabels.isNotEmpty) {
       final message = missingLabels.length == 1
           ? 'Заполните поле «${missingLabels.first}»'
           : 'Заполните поля: ${missingLabels.join(', ')}';
-      issueMessages.add(message);
-      issueKey = firstMissingKey;
-      issueFocus = firstMissingFocus;
-      issueExpand = firstMissingExpand;
-    }
-
-    if (mounted && _duplicatePhone != (duplicateContact != null)) {
-      setState(() => _duplicatePhone = duplicateContact != null);
-    }
-
-    if (duplicateContact != null) {
-      issueMessages.add('Контакт с таким телефоном уже существует');
-      issueKey ??= _phoneKey;
-      _formKey.currentState?.validate();
-    }
-
-    if (issueMessages.isNotEmpty) {
       await _showFieldIssue(
-        message: issueMessages.join('\n'),
-        targetKey: issueKey,
-        focusNode: issueFocus,
-        expandExtra: issueExpand,
+        message: message,
+        targetKey: firstMissingKey,
+        focusNode: firstMissingFocus,
+        expandExtra: firstMissingExpand,
       );
       return;
     }
