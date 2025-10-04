@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:mask_text_input_formatter/mask_text_input_formatter.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:characters/characters.dart';
+import 'package:flutter/services.dart';
 
 import '../models/contact.dart';
 import '../services/contact_database.dart';
@@ -39,6 +42,7 @@ class _AddContactScreenState extends State<AddContactScreen> {
   final _categoryKey = GlobalKey();
   final _statusKey = GlobalKey();
   final _addedKey = GlobalKey();
+  final _emailFieldKey = GlobalKey();
 
   // Controllers
   final _nameController = TextEditingController();
@@ -56,6 +60,8 @@ class _AddContactScreenState extends State<AddContactScreen> {
   // --- UI state ---
   bool _submitted = false;
   bool _saving = false;
+  bool _emailTouched = false;
+  bool _duplicatePhone = false;
 
   // --- key для «Дополнительно» ---
   final _extraCardKey = GlobalKey();
@@ -346,6 +352,9 @@ class _AddContactScreenState extends State<AddContactScreen> {
   final FocusNode _focusCategory = FocusNode(skipTraversal: true);
   final FocusNode _focusStatus = FocusNode(skipTraversal: true);
   final FocusNode _focusAdded = FocusNode(skipTraversal: true);
+  final FocusNode _focusEmail = FocusNode();
+
+  static final RegExp _emailRegex = RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$');
 
   final _phoneMask = MaskTextInputFormatter(
     mask: '+7 (###) ###-##-##',
@@ -391,7 +400,13 @@ class _AddContactScreenState extends State<AddContactScreen> {
 
     // Обновление превью по ключевым полям
     _nameController.addListener(() => setState(() {}));
-    _phoneController.addListener(() => setState(() {}));
+    _phoneController.addListener(() {
+      setState(() {
+        if (_duplicatePhone) {
+          _duplicatePhone = false;
+        }
+      });
+    });
     _emailController.addListener(() => setState(() {}));
     _professionController.addListener(() => setState(() {}));
     _cityController.addListener(() => setState(() {}));
@@ -402,6 +417,11 @@ class _AddContactScreenState extends State<AddContactScreen> {
     _focusSocial.addListener(() => setState(() {}));
     _focusBirth.addListener(() => setState(() {}));
     _focusAdded.addListener(() => setState(() {}));
+    _focusEmail.addListener(() {
+      if (!_focusEmail.hasFocus && _emailController.text.trim().isNotEmpty && !_emailTouched) {
+        setState(() => _emailTouched = true);
+      }
+    });
   }
 
   @override
@@ -424,6 +444,7 @@ class _AddContactScreenState extends State<AddContactScreen> {
     _focusCategory.dispose();
     _focusStatus.dispose();
     _focusAdded.dispose();
+    _focusEmail.dispose();
     super.dispose();
   }
 
@@ -458,26 +479,55 @@ class _AddContactScreenState extends State<AddContactScreen> {
   }
 
   Future<void> _ensureVisible(GlobalKey key) async {
-    final ctx = key.currentContext;
-    if (ctx != null) {
-      await Scrollable.ensureVisible(
-        ctx,
-        duration: const Duration(milliseconds: 350),
-        curve: Curves.easeOut,
-        alignment: 0.1,
-      );
+    final completer = Completer<void>();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final ctx = key.currentContext;
+      if (ctx != null) {
+        Scrollable.ensureVisible(
+          ctx,
+          duration: const Duration(milliseconds: 350),
+          curve: Curves.easeOut,
+          alignment: 0.1,
+        ).whenComplete(() {
+          if (!completer.isCompleted) completer.complete();
+        });
+      } else {
+        if (!completer.isCompleted) completer.complete();
+      }
+    });
+    return completer.future;
+  }
+
+  Future<void> _showFieldIssue({
+    required String message,
+    GlobalKey? targetKey,
+    FocusNode? focusNode,
+    bool expandExtra = false,
+  }) async {
+    showErrorBanner(message);
+    if (expandExtra) {
+      if (!_extraExpanded) {
+        setState(() => _extraExpanded = true);
+      }
+      await _ensureVisible(_extraCardKey);
+    }
+    if (targetKey != null) {
+      await _ensureVisible(targetKey);
+    }
+    if (focusNode != null) {
+      FocusScope.of(context).requestFocus(focusNode);
     }
   }
 
   bool get _phoneValid => _phoneMask.getUnmaskedText().length == 10;
 
-  bool get _canSave =>
-      _nameController.text.trim().isNotEmpty &&
-          _phoneValid &&
-          _category != null &&
-          _status != null &&
-          _addedController.text.trim().isNotEmpty &&
-          !_saving;
+  bool get _emailValid {
+    final value = _emailController.text.trim();
+    if (value.isEmpty) return true;
+    return _emailRegex.hasMatch(value);
+  }
+
+  bool get _canSave => !_saving;
 
   // ==================== pickers ====================
   Future<void> _pickBirthOrAge() async {
@@ -704,38 +754,106 @@ class _AddContactScreenState extends State<AddContactScreen> {
   // ==================== save ====================
   Future<void> _save() async {
     _defocus();
-    setState(() => _submitted = true);
+    if (!_submitted) {
+      setState(() => _submitted = true);
+    }
 
-    // Мгновенно подсказать, что не так, и проскроллить к первой ошибке
-    if (_nameController.text.trim().isEmpty) {
-      await _ensureVisible(_nameKey);
+    _formKey.currentState?.validate();
+
+    final trimmedName = _nameController.text.trim();
+    final categoryValue = _category ?? _categoryController.text.trim();
+    final statusValue = _status ?? _statusController.text.trim();
+    final addedValue = _addedController.text.trim();
+    final phoneDigits = _phoneMask.getUnmaskedText();
+
+    final missingLabels = <String>[];
+    GlobalKey? firstMissingKey;
+    FocusNode? firstMissingFocus;
+    var firstMissingExpand = false;
+
+    void addMissing(String label, GlobalKey key, {FocusNode? focusNode, bool expandExtra = false}) {
+      missingLabels.add(label);
+      if (firstMissingKey == null) {
+        firstMissingKey = key;
+        firstMissingFocus = focusNode;
+        firstMissingExpand = expandExtra;
+      }
+    }
+
+    if (trimmedName.isEmpty) {
+      addMissing('ФИО', _nameKey);
+    }
+
+    if (phoneDigits.isEmpty) {
+      addMissing('Телефон', _phoneKey);
+    }
+
+    if (categoryValue.isEmpty) {
+      addMissing('Категория', _categoryKey, focusNode: _focusCategory);
+    }
+
+    if (statusValue.isEmpty) {
+      addMissing('Статус', _statusKey, focusNode: _focusStatus);
+    }
+
+    if (addedValue.isEmpty) {
+      addMissing('Дата добавления', _addedKey, focusNode: _focusAdded);
+    }
+
+    if (missingLabels.isNotEmpty) {
+      final message = missingLabels.length == 1
+          ? 'Заполните поле «${missingLabels.first}»'
+          : 'Заполните поля: ${missingLabels.join(', ')}';
+      await _showFieldIssue(
+        message: message,
+        targetKey: firstMissingKey,
+        focusNode: firstMissingFocus,
+        expandExtra: firstMissingExpand,
+      );
       return;
     }
+
     if (!_phoneValid) {
-      await _ensureVisible(_phoneKey);
+      await _showFieldIssue(
+        message: 'Введите номер телефона',
+        targetKey: _phoneKey,
+      );
       return;
     }
-    if (_category == null || _categoryController.text.trim().isEmpty) {
-      await _ensureVisible(_categoryKey);
-      FocusScope.of(context).requestFocus(_focusCategory);
+
+    if (!_emailValid) {
+      if (!_emailTouched) {
+        setState(() => _emailTouched = true);
+      }
+      await _showFieldIssue(
+        message: 'Некорректный email',
+        targetKey: _emailFieldKey,
+        focusNode: _focusEmail,
+        expandExtra: true,
+      );
       return;
     }
-    if (_status == null || _statusController.text.trim().isEmpty) {
-      await _ensureVisible(_statusKey);
-      FocusScope.of(context).requestFocus(_focusStatus);
-      return;
-    }
-    if (_addedController.text.trim().isEmpty) {
-      await _ensureVisible(_addedKey);
-      FocusScope.of(context).requestFocus(_focusAdded);
-      return;
-    }
+
     if (_saving) return;
 
     setState(() => _saving = true);
 
     // нормализуем телефон (в БД — только цифры)
     final rawPhone = _phoneMask.getUnmaskedText();
+
+    final duplicate = await ContactDatabase.instance.contactByPhone(rawPhone);
+    if (duplicate != null) {
+      if (mounted) {
+        setState(() {
+          _duplicatePhone = true;
+          _saving = false;
+        });
+        _formKey.currentState?.validate();
+        showErrorBanner('Контакт с таким телефоном уже существует');
+        await _ensureVisible(_phoneKey);
+      }
+      return;
+    }
 
     final contact = Contact(
       name: _nameController.text.trim(),
@@ -1005,6 +1123,7 @@ class _AddContactScreenState extends State<AddContactScreen> {
                         maxLines: 1,
                         autofillHints: const [AutofillHints.name],
                         textInputAction: TextInputAction.next,
+                        inputFormatters: [FilteringTextInputFormatter.deny(RegExp(r'[0-9]'))],
                         decoration: _outlinedDec(
                           Theme.of(context),
                           label: 'ФИО*',
@@ -1034,7 +1153,11 @@ class _AddContactScreenState extends State<AddContactScreen> {
                           controller: _phoneController,
                           requiredField: true,
                         ),
-                        validator: (_) => _phoneValid ? null : 'Введите 10 цифр',
+                        validator: (_) {
+                          if (!_phoneValid) return 'Введите 10 цифр';
+                          if (_duplicatePhone) return 'Номер уже используется';
+                          return null;
+                        },
                         onTapOutside: (_) => _defocus(),
                       ),
                     ),
@@ -1137,10 +1260,14 @@ class _AddContactScreenState extends State<AddContactScreen> {
 
                       // Email
                       TextFormField(
+                        key: _emailFieldKey,
                         controller: _emailController,
+                        focusNode: _focusEmail,
                         keyboardType: TextInputType.emailAddress,
                         textInputAction: TextInputAction.next,
                         autofillHints: const [AutofillHints.email],
+                        autovalidateMode:
+                            _submitted || _emailTouched ? AutovalidateMode.always : AutovalidateMode.disabled,
                         decoration: _outlinedDec(
                           Theme.of(context),
                           label: 'Email',
@@ -1150,8 +1277,7 @@ class _AddContactScreenState extends State<AddContactScreen> {
                         validator: (v) {
                           if (v == null || v.trim().isEmpty) return null;
                           final value = v.trim();
-                          final regex = RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$');
-                          return regex.hasMatch(value) ? null : 'Некорректный email';
+                          return _emailRegex.hasMatch(value) ? null : 'Некорректный email';
                         },
                         onTapOutside: (_) => _defocus(),
                       ),
@@ -1241,9 +1367,7 @@ class _AddContactScreenState extends State<AddContactScreen> {
                   child: Semantics(
                     button: true,
                     enabled: _canSave,
-                    label: _saving
-                        ? 'Сохранение контакта'
-                        : (_canSave ? 'Сохранить контакт' : 'Кнопка сохранить недоступна'),
+                    label: _saving ? 'Сохранение контакта' : 'Сохранить контакт',
                     child: FilledButton.icon(
                       onPressed: _canSave ? _save : null,
                       icon: _saving
