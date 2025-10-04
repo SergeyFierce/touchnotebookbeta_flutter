@@ -6,6 +6,7 @@ import 'package:mask_text_input_formatter/mask_text_input_formatter.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:characters/characters.dart';
 import 'package:overlay_support/overlay_support.dart';
+import 'package:flutter/services.dart';
 
 import '../app.dart';
 import '../models/contact.dart';
@@ -41,6 +42,7 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> with RouteA
   final _categoryKey = GlobalKey();
   final _statusKey = GlobalKey();
   final _addedKey = GlobalKey();
+  final _emailFieldKey = GlobalKey();
 
   // Controllers
   final _nameController = TextEditingController();
@@ -700,6 +702,9 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> with RouteA
   Timer? _remindersRefreshTimer;
   bool _notesExpanded = true; // «Заметки» открыто
   List<Note> _notes = [];
+  bool _submitted = false;
+  bool _saving = false;
+  bool _emailTouched = false;
 
   // FocusNodes — для подсветки/навигации
   final FocusNode _focusBirth = FocusNode(skipTraversal: true);
@@ -707,6 +712,9 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> with RouteA
   final FocusNode _focusCategory = FocusNode(skipTraversal: true);
   final FocusNode _focusStatus = FocusNode(skipTraversal: true);
   final FocusNode _focusAdded = FocusNode(skipTraversal: true);
+  final FocusNode _focusEmail = FocusNode();
+
+  static final RegExp _emailRegex = RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$');
 
   final _phoneMask = MaskTextInputFormatter(
     mask: '+7 (###) ###-##-##',
@@ -752,6 +760,11 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> with RouteA
     _phoneController.addListener(() => setState(() {}));
     _nameController.addListener(() => setState(() {}));
     _statusController.addListener(() => setState(() {}));
+    _focusEmail.addListener(() {
+      if (!_focusEmail.hasFocus && _emailController.text.trim().isNotEmpty && !_emailTouched) {
+        setState(() => _emailTouched = true);
+      }
+    });
   }
 
   @override
@@ -792,6 +805,7 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> with RouteA
     _focusCategory.dispose();
     _focusStatus.dispose();
     _focusAdded.dispose();
+    _focusEmail.dispose();
     _undoBanner = null;
     _undoBanner?.dismiss();
     super.dispose();
@@ -1353,27 +1367,33 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> with RouteA
         value.minute,
       );
 
-  Contact _snapshot() => Contact(
-    id: _contact.id,
-    name: _nameController.text.trim(),
-    birthDate: _birthDate,
-    ageManual: _ageManual,
-    profession: _professionController.text.trim().isEmpty ? null : _professionController.text.trim(),
-    city: _cityController.text.trim().isEmpty ? null : _cityController.text.trim(),
-    phone: _phoneController.text.trim(),
-    email: _emailController.text.trim().isNotEmpty ? _emailController.text.trim() : null,
-    social: _socialType,
-    category: _category ?? _categoryController.text.trim(),
-    status: _status ?? _statusController.text.trim(),
-    tags: _tags
-        .where((tag) =>
-            tag != Contact.reminderTagName &&
-            tag != Contact.legacyReminderTagName)
-        .toList(),
-    comment: _commentController.text.trim().isNotEmpty ? _commentController.text.trim() : null,
-    createdAt: _addedDate,
-    activeReminderCount: _contact.activeReminderCount,
-  );
+  Contact _snapshot() {
+    final rawPhone = _phoneMask.getUnmaskedText();
+    final normalizedPhone = rawPhone.length == 10 ? rawPhone : _digitsOnly(_phoneController.text);
+    final email = _emailController.text.trim();
+
+    return Contact(
+      id: _contact.id,
+      name: _nameController.text.trim(),
+      birthDate: _birthDate,
+      ageManual: _ageManual,
+      profession: _professionController.text.trim().isEmpty ? null : _professionController.text.trim(),
+      city: _cityController.text.trim().isEmpty ? null : _cityController.text.trim(),
+      phone: normalizedPhone,
+      email: email.isNotEmpty ? email.toLowerCase() : null,
+      social: _socialType,
+      category: _category ?? _categoryController.text.trim(),
+      status: _status ?? _statusController.text.trim(),
+      tags: _tags
+          .where((tag) =>
+              tag != Contact.reminderTagName &&
+              tag != Contact.legacyReminderTagName)
+          .toList(),
+      comment: _commentController.text.trim().isNotEmpty ? _commentController.text.trim() : null,
+      createdAt: _addedDate,
+      activeReminderCount: _contact.activeReminderCount,
+    );
+  }
 
   bool _listEq(List<String> a, List<String> b) {
     if (a.length != b.length) return false;
@@ -1440,14 +1460,43 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> with RouteA
   }
 
   Future<void> _ensureVisible(GlobalKey key) async {
-    final ctx = key.currentContext;
-    if (ctx != null) {
-      await Scrollable.ensureVisible(
-        ctx,
-        duration: const Duration(milliseconds: 350),
-        curve: Curves.easeOut,
-        alignment: 0.1,
-      );
+    final completer = Completer<void>();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final ctx = key.currentContext;
+      if (ctx != null) {
+        Scrollable.ensureVisible(
+          ctx,
+          duration: const Duration(milliseconds: 350),
+          curve: Curves.easeOut,
+          alignment: 0.1,
+        ).whenComplete(() {
+          if (!completer.isCompleted) completer.complete();
+        });
+      } else {
+        if (!completer.isCompleted) completer.complete();
+      }
+    });
+    return completer.future;
+  }
+
+  Future<void> _showFieldIssue({
+    required String message,
+    GlobalKey? targetKey,
+    FocusNode? focusNode,
+    bool expandExtra = false,
+  }) async {
+    showErrorBanner(message);
+    if (expandExtra) {
+      if (!_extraExpanded) {
+        setState(() => _extraExpanded = true);
+      }
+      await _ensureVisible(_extraCardKey);
+    }
+    if (targetKey != null) {
+      await _ensureVisible(targetKey);
+    }
+    if (focusNode != null) {
+      FocusScope.of(context).requestFocus(focusNode);
     }
   }
 
@@ -1467,12 +1516,13 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> with RouteA
   }
 
   bool get _phoneValid => _phoneMask.getUnmaskedText().length == 10;
-  bool get _canSave =>
-      _nameController.text.trim().isNotEmpty &&
-          _phoneValid &&
-          (_category ?? _categoryController.text.trim()).isNotEmpty &&
-          (_status ?? _statusController.text.trim()).isNotEmpty &&
-          _addedController.text.trim().isNotEmpty;
+
+  bool get _emailValid {
+    final value = _emailController.text.trim();
+    if (value.isEmpty) return true;
+    return _emailRegex.hasMatch(value);
+  }
+  bool get _canSave => !_saving;
 
   // ==================== pickers ====================
 
@@ -1779,41 +1829,104 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> with RouteA
 
   Future<void> _save() async {
     _defocus();
-
-    final valid = _formKey.currentState?.validate() ?? false;
-    if (!valid) {
-      if (_nameController.text.trim().isEmpty) {
-        await _ensureVisible(_nameKey);
-        return;
-      }
-      if (!_phoneValid) {
-        await _ensureVisible(_phoneKey);
-        return;
-      }
+    if (!_submitted) {
+      setState(() => _submitted = true);
     }
-    if (!_canSave) {
-      if ((_category ?? '').isEmpty) {
-        await _ensureVisible(_categoryKey);
-      } else if ((_status ?? '').isEmpty) {
-        await _ensureVisible(_statusKey);
-      } else {
-        await _ensureVisible(_addedKey);
-        showWarningBanner('Укажите дату добавления');
-      }
+
+    _formKey.currentState?.validate();
+
+    final trimmedName = _nameController.text.trim();
+    final categoryValue = (_category ?? _categoryController.text.trim());
+    final statusValue = (_status ?? _statusController.text.trim());
+    final addedValue = _addedController.text.trim();
+
+    if (trimmedName.isEmpty) {
+      await _showFieldIssue(
+        message: 'Укажите ФИО',
+        targetKey: _nameKey,
+      );
       return;
     }
 
-    final updated = _snapshot();
-    await ContactDatabase.instance.update(updated);
-    if (!mounted) return;
+    if (!_phoneValid) {
+      await _showFieldIssue(
+        message: 'Введите номер телефона',
+        targetKey: _phoneKey,
+      );
+      return;
+    }
 
-    // Обновляем локальный снапшот (без setState — мы всё равно уходим со страницы)
-    _contact = updated;
+    if (!_emailValid) {
+      if (!_emailTouched) {
+        setState(() => _emailTouched = true);
+      }
+      await _showFieldIssue(
+        message: 'Некорректный email',
+        targetKey: _emailFieldKey,
+        focusNode: _focusEmail,
+        expandExtra: true,
+      );
+      return;
+    }
 
-    // Выходим с результатом
-    Navigator.pop(context, updated);
+    if (categoryValue.isEmpty) {
+      await _showFieldIssue(
+        message: 'Выберите категорию',
+        targetKey: _categoryKey,
+        focusNode: _focusCategory,
+      );
+      return;
+    }
 
-    showSuccessBanner('Изменения сохранены');
+    if (statusValue.isEmpty) {
+      await _showFieldIssue(
+        message: 'Выберите статус',
+        targetKey: _statusKey,
+        focusNode: _focusStatus,
+      );
+      return;
+    }
+
+    if (addedValue.isEmpty) {
+      await _showFieldIssue(
+        message: 'Укажите дату добавления',
+        targetKey: _addedKey,
+        focusNode: _focusAdded,
+      );
+      return;
+    }
+
+    if (_saving) return;
+
+    setState(() => _saving = true);
+
+    final normalizedPhone = _phoneMask.getUnmaskedText();
+    try {
+      final duplicate = await ContactDatabase.instance.contactByPhone(
+        normalizedPhone,
+        excludeId: _contact.id,
+      );
+      if (duplicate != null) {
+        showErrorBanner('Контакт с таким телефоном уже существует');
+        await _ensureVisible(_phoneKey);
+        setState(() => _saving = false);
+        return;
+      }
+
+      final updated = _snapshot();
+      await ContactDatabase.instance.update(updated);
+      if (!mounted) return;
+
+      _contact = updated;
+      setState(() => _saving = false);
+
+      Navigator.pop(context, updated);
+      showSuccessBanner('Изменения сохранены');
+    } catch (e) {
+      if (!mounted) return;
+      showErrorBanner('Не удалось сохранить изменения');
+      setState(() => _saving = false);
+    }
   }
 
 
@@ -1921,6 +2034,7 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> with RouteA
         bool showClear = true,
         bool requiredField = false,
         bool forceFloatingLabel = false, // <<< НОВОЕ: принудительно держать метку сверху
+        String? errorText,
       }) {
     return InputDecoration(
       labelText: label,
@@ -1940,6 +2054,7 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> with RouteA
           )
               : null),
       helperText: requiredField ? 'Обязательное поле' : 'Необязательное поле',
+      errorText: errorText,
       border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
@@ -2057,6 +2172,7 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> with RouteA
     bool forceFloatingLabel = false,
     Widget? prefix, // ← ДОБАВЛЕНО
   }) {
+    final showError = _submitted && requiredField && controller.text.trim().isEmpty;
     final dec = _outlinedDec(
       Theme.of(context),
       label: title,
@@ -2067,6 +2183,7 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> with RouteA
       showClear: false,
       requiredField: requiredField,
       forceFloatingLabel: forceFloatingLabel,
+      errorText: showError ? 'Обязательное поле' : null,
     ).copyWith(
       // если передан кастомный, используем его, иначе — обычный Icon(icon)
       prefixIcon: prefix ?? Icon(icon),
@@ -2195,7 +2312,7 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> with RouteA
       body: SafeArea(
         child: Form(
           key: _formKey,
-          autovalidateMode: AutovalidateMode.disabled,
+          autovalidateMode: _submitted ? AutovalidateMode.always : AutovalidateMode.disabled,
           child: ListView(
             controller: _scroll,
             physics: const BouncingScrollPhysics(),
@@ -2226,6 +2343,7 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> with RouteA
                       controller: _nameController,
                       maxLines: 1,
                       textInputAction: TextInputAction.next,
+                      inputFormatters: [FilteringTextInputFormatter.deny(RegExp(r'[0-9]'))],
                       decoration: _outlinedDec(
                         Theme.of(context),
                         label: 'ФИО*',
@@ -2356,9 +2474,13 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> with RouteA
                     const SizedBox(height: 12),
 
                     TextFormField(
+                      key: _emailFieldKey,
                       controller: _emailController,
+                      focusNode: _focusEmail,
                       keyboardType: TextInputType.emailAddress,
                       textInputAction: TextInputAction.next,
+                      autovalidateMode:
+                          (_submitted || _emailTouched) ? AutovalidateMode.always : AutovalidateMode.disabled,
                       decoration: _outlinedDec(
                         Theme.of(context),
                         label: 'Email',
@@ -2366,9 +2488,10 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> with RouteA
                         controller: _emailController,
                       ),
                       validator: (v) {
-                        if (v == null || v.isEmpty) return null;
-                        final regex = RegExp(r'.+@.+[.].+');
-                        return regex.hasMatch(v) ? null : 'Некорректный email';
+                        if (v == null) return null;
+                        final value = v.trim();
+                        if (value.isEmpty) return null;
+                        return _emailRegex.hasMatch(value) ? null : 'Некорректный email';
                       },
                       onTapOutside: (_) => _defocus(),
                       onChanged: (_) => _updateEditingFromDirty(),
@@ -2726,6 +2849,10 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> with RouteA
     _commentController.text = c.comment ?? '';
     _addedDate = c.createdAt;
     _addedController.text = DateFormat('dd.MM.yyyy').format(_addedDate);
+
+    _submitted = false;
+    _emailTouched = false;
+    _saving = false;
   }
 }
 
