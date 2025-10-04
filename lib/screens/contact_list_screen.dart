@@ -397,13 +397,13 @@ class _ContactListScreenState extends State<ContactListScreen> {
                 onChanged: (v) => Navigator.pop(context, v),
               ),
               RadioListTile<SortOption>(
-                title: const Text('Новые сверху'),
+                title: const Text('Сначала новые'),
                 value: SortOption.dateDesc,
                 groupValue: _sort,
                 onChanged: (v) => Navigator.pop(context, v),
               ),
               RadioListTile<SortOption>(
-                title: const Text('Старые сверху'),
+                title: const Text('Сначала старые'),
                 value: SortOption.dateAsc,
                 groupValue: _sort,
                 onChanged: (v) => Navigator.pop(context, v),

@@ -387,7 +387,7 @@ class _SystemNotificationSurfaceState extends State<_SystemNotificationSurface>
         child: AnimatedSize(
           duration: const Duration(milliseconds: 200),
           curve: Curves.easeInOut,
-          vsync: this,
+
           child: _expanded
               ? Padding(
                   padding: const EdgeInsets.only(top: 12),
