@@ -107,7 +107,6 @@ class AppSettings extends ChangeNotifier {
         whenLocal: reminder.remindAt,
         title: 'Напоминание: ${entry.contactName}',
         body: reminder.text,
-        reminderActions: true,
       );
     }
   }

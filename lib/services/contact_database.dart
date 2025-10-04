@@ -371,18 +371,6 @@ class ContactDatabase {
     return id;
   }
 
-  Future<Reminder?> reminderById(int id) async {
-    final db = await database;
-    final maps = await db.query(
-      'reminders',
-      where: 'id = ?',
-      whereArgs: [id],
-      limit: 1,
-    );
-    if (maps.isEmpty) return null;
-    return Reminder.fromMap(maps.first);
-  }
-
   Future<int> updateReminder(Reminder reminder) async {
     final db = await database;
     final rows = await db.update(

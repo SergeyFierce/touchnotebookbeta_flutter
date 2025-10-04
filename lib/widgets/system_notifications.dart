@@ -30,24 +30,17 @@ OverlaySupportEntry showSystemNotification(
             )
           : null;
 
-      final surface = _SystemNotificationSurface(
+      return _SystemNotificationSurface(
         backgroundColor: colors.background,
         textColor: colors.foreground,
         icon: icon,
         iconColor: colors.iconColor,
-        content: _NotificationMessage(message: message),
+        content: Text(
+          message,
+          maxLines: 3,
+          overflow: TextOverflow.ellipsis,
+        ),
         action: action,
-      );
-
-      final dismissibleKey = entry != null ? ValueKey(entry) : UniqueKey();
-
-      return Dismissible(
-        key: dismissibleKey,
-        direction: DismissDirection.horizontal,
-        onDismissed: (_) {
-          entry?.dismiss();
-        },
-        child: surface,
       );
     },
     duration: duration,
@@ -348,54 +341,6 @@ class _SystemNotificationSurface extends StatelessWidget {
           ),
         ),
       ),
-    );
-  }
-}
-
-class _NotificationMessage extends StatelessWidget {
-  final String message;
-
-  const _NotificationMessage({required this.message});
-
-  @override
-  Widget build(BuildContext context) {
-    final lines = message
-        .split(RegExp(r'\r?\n'))
-        .map((line) => line.trim())
-        .where((line) => line.isNotEmpty)
-        .toList(growable: false);
-
-    if (lines.length <= 1) {
-      final text = lines.isEmpty ? '' : lines.first;
-      return Text(
-        text,
-        maxLines: 4,
-        overflow: TextOverflow.ellipsis,
-      );
-    }
-
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        for (var i = 0; i < lines.length; i++)
-          Padding(
-            padding: EdgeInsets.only(bottom: i == lines.length - 1 ? 0 : 4),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Padding(
-                  padding: EdgeInsets.only(top: 2),
-                  child: Text('•'),
-                ),
-                const SizedBox(width: 6),
-                Expanded(
-                  child: Text(lines[i]),
-                ),
-              ],
-            ),
-          ),
-      ],
     );
   }
 }
