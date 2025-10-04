@@ -800,36 +800,68 @@ class _AddContactScreenState extends State<AddContactScreen> {
       addMissing('Дата добавления', _addedKey, focusNode: _focusAdded);
     }
 
+    Contact? duplicateContact;
+    if (_phoneValid) {
+      duplicateContact = await ContactDatabase.instance.contactByPhone(phoneDigits);
+      if (!mounted) return;
+    } else if (_duplicatePhone && mounted) {
+      setState(() => _duplicatePhone = false);
+    }
+
+    final issueMessages = <String>[];
+    GlobalKey? issueKey;
+    FocusNode? issueFocus;
+    var issueExpand = false;
+
     if (missingLabels.isNotEmpty) {
       final message = missingLabels.length == 1
           ? 'Заполните поле «${missingLabels.first}»'
           : 'Заполните поля: ${missingLabels.join(', ')}';
-      await _showFieldIssue(
-        message: message,
-        targetKey: firstMissingKey,
-        focusNode: firstMissingFocus,
-        expandExtra: firstMissingExpand,
-      );
-      return;
+      issueMessages.add(message);
+      issueKey = firstMissingKey;
+      issueFocus = firstMissingFocus;
+      issueExpand = firstMissingExpand;
     }
 
-    if (!_phoneValid) {
-      await _showFieldIssue(
-        message: 'Введите номер телефона',
-        targetKey: _phoneKey,
-      );
-      return;
+    if (mounted && _duplicatePhone != (duplicateContact != null)) {
+      setState(() => _duplicatePhone = duplicateContact != null);
+    }
+
+    if (duplicateContact != null) {
+      issueMessages.add('Контакт с таким телефоном уже существует');
+      issueKey ??= _phoneKey;
+      _formKey.currentState?.validate();
+    }
+
+    final bool incompletePhone = phoneDigits.isNotEmpty && !_phoneValid;
+    if (incompletePhone) {
+      issueMessages.add('Введите номер телефона');
+      issueKey ??= _phoneKey;
+      _formKey.currentState?.validate();
     }
 
     if (!_emailValid) {
       if (!_emailTouched) {
         setState(() => _emailTouched = true);
       }
+      final hadPrimaryIssue = issueKey != null;
+      issueMessages.add('Некорректный email');
+      if (!hadPrimaryIssue) {
+        issueKey = _emailFieldKey;
+        issueFocus = _focusEmail;
+      }
+      if (!hadPrimaryIssue || issueKey == _emailFieldKey) {
+        issueExpand = true;
+      }
+      _formKey.currentState?.validate();
+    }
+
+    if (issueMessages.isNotEmpty) {
       await _showFieldIssue(
-        message: 'Некорректный email',
-        targetKey: _emailFieldKey,
-        focusNode: _focusEmail,
-        expandExtra: true,
+        message: issueMessages.join('\n'),
+        targetKey: issueKey,
+        focusNode: issueFocus,
+        expandExtra: issueExpand,
       );
       return;
     }
