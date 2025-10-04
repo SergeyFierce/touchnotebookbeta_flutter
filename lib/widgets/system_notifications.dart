@@ -3,6 +3,23 @@ import 'package:overlay_support/overlay_support.dart';
 
 enum SystemNotificationStyle { info, success, warning, error }
 
+class SystemNotificationAction {
+  final String label;
+  final Future<void> Function() onPressed;
+
+  const SystemNotificationAction({
+    required this.label,
+    required this.onPressed,
+  });
+}
+
+class _SurfaceAction {
+  final String label;
+  final Future<void> Function() onPressed;
+
+  const _SurfaceAction({required this.label, required this.onPressed});
+}
+
 OverlaySupportEntry showSystemNotification(
   String message, {
   SystemNotificationStyle style = SystemNotificationStyle.info,
@@ -10,6 +27,7 @@ OverlaySupportEntry showSystemNotification(
   String? actionLabel,
   Future<void> Function()? onAction,
   IconData? iconOverride,
+  List<SystemNotificationAction> extraActions = const [],
 }) {
   return showOverlayNotification(
     (context) {
@@ -30,6 +48,18 @@ OverlaySupportEntry showSystemNotification(
             )
           : null;
 
+      final resolvedExtraActions = extraActions
+          .map(
+            (a) => _SurfaceAction(
+              label: a.label,
+              onPressed: () async {
+                entry?.dismiss();
+                await a.onPressed();
+              },
+            ),
+          )
+          .toList();
+
       return _SystemNotificationSurface(
         backgroundColor: colors.background,
         textColor: colors.foreground,
@@ -41,6 +71,7 @@ OverlaySupportEntry showSystemNotification(
           overflow: TextOverflow.ellipsis,
         ),
         action: action,
+        extraActions: resolvedExtraActions,
       );
     },
     duration: duration,
@@ -271,13 +302,14 @@ class _CircularCountdownIndicator extends StatelessWidget {
   }
 }
 
-class _SystemNotificationSurface extends StatelessWidget {
+class _SystemNotificationSurface extends StatefulWidget {
   final Widget content;
   final IconData? icon;
   final Color? iconColor;
   final Color backgroundColor;
   final Color textColor;
   final Widget? action;
+  final List<_SurfaceAction> extraActions;
 
   const _SystemNotificationSurface({
     required this.content,
@@ -286,25 +318,84 @@ class _SystemNotificationSurface extends StatelessWidget {
     this.icon,
     this.iconColor,
     this.action,
+    this.extraActions = const [],
   });
+
+  @override
+  State<_SystemNotificationSurface> createState() => _SystemNotificationSurfaceState();
+}
+
+class _SystemNotificationSurfaceState extends State<_SystemNotificationSurface>
+    with SingleTickerProviderStateMixin {
+  bool _expanded = false;
+
+  void _toggleExpanded() {
+    setState(() => _expanded = !_expanded);
+  }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final baseStyle = theme.textTheme.bodyMedium ?? const TextStyle(fontSize: 14);
-    final textStyle = baseStyle.copyWith(color: textColor);
+    final textStyle = baseStyle.copyWith(color: widget.textColor);
+    final hasExtraActions = widget.extraActions.isNotEmpty;
 
     final children = <Widget>[];
-    if (icon != null) {
+    if (widget.icon != null) {
       children
-        ..add(Icon(icon, color: iconColor ?? textColor))
+        ..add(Icon(widget.icon, color: widget.iconColor ?? widget.textColor))
         ..add(const SizedBox(width: 12));
     }
-    children.add(Expanded(child: content));
-    if (action != null) {
+    children.add(Expanded(child: widget.content));
+    if (widget.action != null) {
       children
         ..add(const SizedBox(width: 12))
-        ..add(action!);
+        ..add(widget.action!);
+    }
+    if (hasExtraActions) {
+      children
+        ..add(const SizedBox(width: 8))
+        ..add(IconButton(
+          splashRadius: 20,
+          tooltip: _expanded ? 'Скрыть действия' : 'Показать действия',
+          onPressed: _toggleExpanded,
+          icon: AnimatedRotation(
+            duration: const Duration(milliseconds: 200),
+            turns: _expanded ? 0.5 : 0.0,
+            child: const Icon(Icons.keyboard_arrow_down),
+          ),
+        ));
+    }
+
+    Widget extraSection = const SizedBox.shrink();
+    if (hasExtraActions) {
+      final buttons = Row(
+        children: [
+          for (var i = 0; i < widget.extraActions.length; i++) ...[
+            if (i > 0) const SizedBox(width: 12),
+            Expanded(
+              child: FilledButton.tonal(
+                onPressed: widget.extraActions[i].onPressed,
+                child: Text(widget.extraActions[i].label),
+              ),
+            ),
+          ],
+        ],
+      );
+
+      extraSection = ClipRect(
+        child: AnimatedSize(
+          duration: const Duration(milliseconds: 200),
+          curve: Curves.easeInOut,
+          vsync: this,
+          child: _expanded
+              ? Padding(
+                  padding: const EdgeInsets.only(top: 12),
+                  child: buttons,
+                )
+              : const SizedBox.shrink(),
+        ),
+      );
     }
 
     return SafeArea(
@@ -315,7 +406,7 @@ class _SystemNotificationSurface extends StatelessWidget {
           color: Colors.transparent,
           child: DecoratedBox(
             decoration: BoxDecoration(
-              color: backgroundColor,
+              color: widget.backgroundColor,
               borderRadius: BorderRadius.circular(18),
               boxShadow: [
                 BoxShadow(
@@ -330,10 +421,17 @@ class _SystemNotificationSurface extends StatelessWidget {
               child: DefaultTextStyle(
                 style: textStyle,
                 child: IconTheme.merge(
-                  data: IconThemeData(color: iconColor ?? textColor),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: children,
+                  data: IconThemeData(color: widget.iconColor ?? widget.textColor),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: children,
+                      ),
+                      if (hasExtraActions) extraSection,
+                    ],
                   ),
                 ),
               ),

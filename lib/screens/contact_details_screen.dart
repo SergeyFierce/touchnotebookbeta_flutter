@@ -1092,6 +1092,8 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> with RouteA
         whenLocal: saved.remindAt,
         title: 'Напоминание: ${_contact.name}',
         body: saved.text,
+        payload: PushNotifications.reminderPayload(saved.id!),
+        withReminderActions: true,
       );
 
       await _loadReminders();
@@ -1127,6 +1129,8 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> with RouteA
         whenLocal: updated.remindAt,
         title: 'Напоминание: ${_contact.name}',
         body: updated.text,
+        payload: PushNotifications.reminderPayload(updated.id!),
+        withReminderActions: true,
       );
 
       await _loadReminders();
@@ -1366,6 +1370,26 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> with RouteA
 
   void _defocus() => FocusScope.of(context).unfocus();
 
+  Widget? _buildSaveFab() {
+    if (!_isEditing) return null;
+
+    final savingLabel = _saving ? 'Сохранение…' : 'Сохранить';
+    final icon = _saving
+        ? const SizedBox(
+            width: 20,
+            height: 20,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          )
+        : const Icon(Icons.save_outlined);
+
+    return FloatingActionButton.extended(
+      heroTag: 'edit_contact_save_fab',
+      onPressed: (_isDirty && _canSave) ? _save : null,
+      icon: icon,
+      label: Text(savingLabel),
+    );
+  }
+
   DateTime _roundToMinute(DateTime value) => DateTime(
         value.year,
         value.month,
@@ -1485,6 +1509,9 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> with RouteA
     });
     return completer.future;
   }
+
+  String _formatIssues(List<String> messages) =>
+      messages.map((m) => '• $m').join('\n');
 
   Future<void> _showFieldIssue({
     required String message,
@@ -1943,7 +1970,7 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> with RouteA
 
     if (issueMessages.isNotEmpty) {
       await _showFieldIssue(
-        message: issueMessages.join('\n'),
+        message: _formatIssues(issueMessages),
         targetKey: issueKey,
         focusNode: issueFocus,
         expandExtra: issueExpand,
@@ -2036,6 +2063,8 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> with RouteA
               whenLocal: reminder.remindAt,
               title: 'Напоминание: ${c.name}',
               body: reminder.text,
+              payload: PushNotifications.reminderPayload(reminder.id!),
+              withReminderActions: true,
             );
           }
         }
@@ -2375,7 +2404,7 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> with RouteA
           child: ListView(
             controller: _scroll,
             physics: const BouncingScrollPhysics(),
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 120),
             children: [
               // ===== Блок: Заголовок (превью карточки) =====
               Column(
@@ -2402,7 +2431,7 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> with RouteA
                       controller: _nameController,
                       maxLines: 1,
                       textInputAction: TextInputAction.next,
-                      inputFormatters: [FilteringTextInputFormatter.deny(RegExp(r'[0-9]'))],
+                        inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r"[A-Za-zА-Яа-яЁё\s\-]"))],
                       decoration: _outlinedDec(
                         Theme.of(context),
                         label: 'ФИО*',
@@ -2851,22 +2880,26 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> with RouteA
                 ],
               ),
               const SizedBox(height: 12),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: _isEditing ? Theme.of(context).colorScheme.primary : Colors.red,
-                    foregroundColor: Colors.white,
+              if (!_isEditing) ...[
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.red,
+                      foregroundColor: Colors.white,
+                    ),
+                    onPressed: _delete,
+                    child: const Text('Удалить контакт'),
                   ),
-                  onPressed: _isEditing ? (_canSave ? _save : null) : _delete,
-                  child: Text(_isEditing ? 'Сохранить' : 'Удалить контакт'),
                 ),
-              ),
+              ],
               const SizedBox(height: 24),
             ],
           ),
         ),
       ),
+      floatingActionButton: _buildSaveFab(),
+      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
     );
   }
 

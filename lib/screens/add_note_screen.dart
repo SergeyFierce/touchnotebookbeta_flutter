@@ -149,6 +149,7 @@ class _AddNoteScreenState extends State<AddNoteScreen> {
               key: _formKey,
               autovalidateMode: AutovalidateMode.onUserInteraction,
               child: ListView(
+                padding: const EdgeInsets.fromLTRB(0, 0, 0, 120),
                 children: [
                   _sectionCard(
                     title: 'Текст',
@@ -190,20 +191,18 @@ class _AddNoteScreenState extends State<AddNoteScreen> {
           ),
         ),
       ),
-      bottomNavigationBar: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-        child: _canSave
-            ? FilledButton.icon(
-          onPressed: _save,
-          icon: const Icon(Icons.check),
-          label: const Text('Сохранить'),
-          style: FilledButton.styleFrom(
-            padding: const EdgeInsets.symmetric(vertical: 14),
-          ),
-        )
-            : const SizedBox.shrink(), // пустое место вместо кнопки
-      ),
+      floatingActionButton: _buildFloatingSaveButton(),
+      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
+    );
+  }
 
+  Widget? _buildFloatingSaveButton() {
+    final canSave = _canSave;
+    return FloatingActionButton.extended(
+      heroTag: 'add_note_save_fab',
+      onPressed: canSave ? _save : null,
+      icon: const Icon(Icons.save_outlined),
+      label: const Text('Сохранить'),
     );
   }
 }

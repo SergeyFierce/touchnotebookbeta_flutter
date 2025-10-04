@@ -192,6 +192,18 @@ class ContactDatabase {
     return Contact.fromMap(maps.first);
   }
 
+  Future<Contact?> contactById(int id) async {
+    final db = await database;
+    final maps = await db.query(
+      'contacts',
+      where: 'id = ?',
+      whereArgs: [id],
+      limit: 1,
+    );
+    if (maps.isEmpty) return null;
+    return Contact.fromMap(maps.first);
+  }
+
   Future<List<Contact>> contactsByCategory(String category) async {
     final db = await database;
     final now = DateTime.now().millisecondsSinceEpoch;
@@ -381,6 +393,18 @@ class ContactDatabase {
     );
     _bumpRevision();
     return rows;
+  }
+
+  Future<Reminder?> reminderById(int id) async {
+    final db = await database;
+    final maps = await db.query(
+      'reminders',
+      where: 'id = ?',
+      whereArgs: [id],
+      limit: 1,
+    );
+    if (maps.isEmpty) return null;
+    return Reminder.fromMap(maps.first);
   }
 
   Future<int> deleteReminder(int id) async {
