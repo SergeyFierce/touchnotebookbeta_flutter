@@ -65,19 +65,13 @@ OverlaySupportEntry showSystemNotification(
         textColor: colors.foreground,
         icon: icon,
         iconColor: colors.iconColor,
-        contentBuilder: (context, expanded) => AnimatedSize(
-          duration: const Duration(milliseconds: 200),
-          curve: Curves.easeInOut,
-          alignment: Alignment.topLeft,
-          child: Text(
-            message,
-            maxLines: expanded ? null : 3,
-            overflow: expanded ? TextOverflow.visible : TextOverflow.ellipsis,
-          ),
+        content: Text(
+          message,
+          maxLines: 3,
+          overflow: TextOverflow.ellipsis,
         ),
         action: action,
         extraActions: resolvedExtraActions,
-        allowContentExpansion: true,
       );
     },
     duration: duration,
@@ -142,7 +136,7 @@ OverlaySupportEntry showUndoBanner({
         textColor: colors.foreground,
         icon: icon,
         iconColor: colors.iconColor,
-        contentBuilder: (context, expanded) => UndoCountdownContent(
+        content: UndoCountdownContent(
           message: message,
           endTime: endTime,
           duration: duration,
@@ -160,7 +154,6 @@ OverlaySupportEntry showUndoBanner({
           ),
           child: Text(actionLabel),
         ),
-        allowContentExpansion: false,
       );
     },
     duration: duration,
@@ -310,24 +303,22 @@ class _CircularCountdownIndicator extends StatelessWidget {
 }
 
 class _SystemNotificationSurface extends StatefulWidget {
-  final Widget Function(BuildContext context, bool expanded) contentBuilder;
+  final Widget content;
   final IconData? icon;
   final Color? iconColor;
   final Color backgroundColor;
   final Color textColor;
   final Widget? action;
   final List<_SurfaceAction> extraActions;
-  final bool allowContentExpansion;
 
   const _SystemNotificationSurface({
-    required this.contentBuilder,
+    required this.content,
     required this.backgroundColor,
     required this.textColor,
     this.icon,
     this.iconColor,
     this.action,
     this.extraActions = const [],
-    this.allowContentExpansion = false,
   });
 
   @override
@@ -348,9 +339,6 @@ class _SystemNotificationSurfaceState extends State<_SystemNotificationSurface>
     final baseStyle = theme.textTheme.bodyMedium ?? const TextStyle(fontSize: 14);
     final textStyle = baseStyle.copyWith(color: widget.textColor);
     final hasExtraActions = widget.extraActions.isNotEmpty;
-    final canExpand = hasExtraActions || widget.allowContentExpansion;
-
-    final content = widget.contentBuilder(context, _expanded);
 
     final children = <Widget>[];
     if (widget.icon != null) {
@@ -358,18 +346,18 @@ class _SystemNotificationSurfaceState extends State<_SystemNotificationSurface>
         ..add(Icon(widget.icon, color: widget.iconColor ?? widget.textColor))
         ..add(const SizedBox(width: 12));
     }
-    children.add(Expanded(child: content));
+    children.add(Expanded(child: widget.content));
     if (widget.action != null) {
       children
         ..add(const SizedBox(width: 12))
         ..add(widget.action!);
     }
-    if (canExpand) {
+    if (hasExtraActions) {
       children
         ..add(const SizedBox(width: 8))
         ..add(IconButton(
           splashRadius: 20,
-          tooltip: _expanded ? 'Свернуть уведомление' : 'Развернуть уведомление',
+          tooltip: _expanded ? 'Скрыть действия' : 'Показать действия',
           onPressed: _toggleExpanded,
           icon: AnimatedRotation(
             duration: const Duration(milliseconds: 200),
