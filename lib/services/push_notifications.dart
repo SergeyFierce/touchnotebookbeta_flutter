@@ -41,27 +41,13 @@ class PushNotifications {
   static const DarwinNotificationDetails _darwinDetails =
   DarwinNotificationDetails();
 
-  static NotificationDetails _buildDetails({
-    bool withReminderActions = false,
-    String? title,
-    String? body,
-  }) {
-    final styleInformation = (body != null && body.isNotEmpty)
-        ? BigTextStyleInformation(
-            body,
-            contentTitle: title,
-            htmlFormatBigText: true,
-            htmlFormatContentTitle: true,
-          )
-        : null;
-
+  static NotificationDetails _buildDetails({bool withReminderActions = false}) {
     final androidDetails = AndroidNotificationDetails(
       'demo_push_channel',
       'Демо уведомления',
       channelDescription: 'Канал для тестовых push-уведомлений',
       importance: Importance.max,
       priority: Priority.high,
-      styleInformation: styleInformation,
       actions: withReminderActions
           ? const [
               AndroidNotificationAction(
@@ -156,12 +142,7 @@ class PushNotifications {
     if (!_enabled) return;
     await ensureInitialized();
     try {
-      await _plugin.show(
-        id,
-        title,
-        body,
-        _buildDetails(title: title, body: body),
-      );
+      await _plugin.show(id, title, body, _buildDetails());
     } catch (e, s) {
       if (kDebugMode) print('Failed to show notification: $e\n$s');
     }
@@ -188,11 +169,7 @@ class PushNotifications {
       title,
       body,
       scheduled,
-      _buildDetails(
-        withReminderActions: withReminderActions,
-        title: title,
-        body: body,
-      ),
+      _buildDetails(withReminderActions: withReminderActions),
       androidScheduleMode: exact
           ? AndroidScheduleMode.exactAllowWhileIdle
           : AndroidScheduleMode.inexact,
@@ -233,7 +210,7 @@ class PushNotifications {
       title,
       body,
       first,
-      _buildDetails(title: title, body: body),
+      _buildDetails(),
       androidScheduleMode:
       exact ? AndroidScheduleMode.exactAllowWhileIdle : AndroidScheduleMode.inexact,
       matchDateTimeComponents: DateTimeComponents.time,
@@ -274,7 +251,7 @@ class PushNotifications {
       title,
       body,
       first,
-      _buildDetails(title: title, body: body),
+      _buildDetails(),
       androidScheduleMode:
       exact ? AndroidScheduleMode.exactAllowWhileIdle : AndroidScheduleMode.inexact,
       matchDateTimeComponents: DateTimeComponents.dayOfWeekAndTime,
