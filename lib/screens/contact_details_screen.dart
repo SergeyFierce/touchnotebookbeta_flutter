@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:io';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -33,8 +32,6 @@ class ContactDetailsScreen extends StatefulWidget {
 enum _ReminderAction { complete, edit, delete }
 
 class _ContactDetailsScreenState extends State<ContactDetailsScreen> with RouteAware {
-  static const MethodChannel _phonePermissionChannel =
-      MethodChannel('com.touchnotebookbeta/phone_permission');
   bool _isEditing = false;          // режим редактирования
   late Contact _contact;            // последний сохранённый снимок
 
@@ -750,26 +747,12 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> with RouteA
   }
 
   Future<void> _callContact() async {
-    final rawNumber = _phoneController.text.trim();
-    final digits = rawNumber.replaceAll(RegExp(r'\D'), '');
+    final digits = _phoneController.text.replaceAll(RegExp(r'\D'), '');
     if (digits.length < 11) {
       showErrorBanner('Введите корректный номер телефона');
       return;
     }
-    var normalizedDigits = digits;
-    if (normalizedDigits.length == 11 && normalizedDigits.startsWith('8')) {
-      normalizedDigits = '7${normalizedDigits.substring(1)}';
-    }
-    final dialNumber = '+$normalizedDigits';
-
-    await Clipboard.setData(ClipboardData(text: dialNumber));
-    showSuccessBanner('Номер скопирован в буфер обмена');
-
-    if (!await _ensurePhonePermission()) {
-      return;
-    }
-
-    final uri = Uri(scheme: 'tel', path: dialNumber);
+    final uri = Uri(scheme: 'tel', path: digits);
     try {
       if (!await canLaunchUrl(uri)) {
         showErrorBanner('Не удалось начать звонок');
@@ -778,25 +761,6 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> with RouteA
       await launchUrl(uri, mode: LaunchMode.externalApplication);
     } catch (_) {
       showErrorBanner('Не удалось начать звонок');
-    }
-  }
-
-  Future<bool> _ensurePhonePermission() async {
-    if (!Platform.isAndroid) {
-      return true;
-    }
-
-    try {
-      final granted = await _phonePermissionChannel
-              .invokeMethod<bool>('requestPermission') ??
-          false;
-      if (!granted) {
-        showErrorBanner('Для звонка требуется разрешение на использование телефона');
-      }
-      return granted;
-    } on PlatformException {
-      showErrorBanner('Не удалось запросить разрешение на использование телефона');
-      return false;
     }
   }
 
