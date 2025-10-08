@@ -16,6 +16,7 @@ import 'privacy_policy_screen.dart';
 import 'user_agreement_screen.dart';
 import '../services/app_settings.dart';
 import '../services/contact_database.dart';
+import '../widgets/circular_reveal_route.dart';
 
 
 /// ---------------------
@@ -23,7 +24,7 @@ import '../services/contact_database.dart';
 /// ---------------------
 abstract class R {
   static const appTitle = 'Touch NoteBook';
-  static const homeTitle = 'Главный экран';
+  static const homeTitle = 'Touch NoteBook';
   static const settings = 'Настройки';
   static const support = 'Поддержка';
   static const addContact = 'Добавить контакт';
@@ -355,11 +356,14 @@ class _HomeScreenState extends State<HomeScreen> with RestorationMixin {
     }
   }
 
-  Future<void> _openAddContact(BuildContext context) async {
+  Future<void> _openAddContact(BuildContext triggerContext) async {
     if (!kIsWeb) HapticFeedback.selectionClick();
-    final saved = await Navigator.push(
-      context,
-      MaterialPageRoute(builder: (_) => const AddContactScreen()),
+    final origin = CircularRevealPageRoute.originFromContext(triggerContext);
+    final saved = await Navigator.of(triggerContext).push<bool>(
+      CircularRevealPageRoute<bool>(
+        builder: (_) => const AddContactScreen(),
+        center: origin,
+      ),
     );
     if (saved == true && mounted) {
     }
@@ -547,14 +551,14 @@ class _HomeScreenState extends State<HomeScreen> with RestorationMixin {
                     ? '${R.remindersOverview} ($totalReminders)'
                     : R.remindersOverview,
                 icon: _buildRemindersActionIcon(context, totalReminders),
-                onPressed: _openAllReminders,
+                onPressed: () => _openAllReminders(context),
               );
             },
           ),
         ],
       ),
       drawer: NavigationDrawer(
-        selectedIndex: 0, // всегда подсвечен "Главный экран"
+        selectedIndex: 0, // всегда подсвечен «Touch NoteBook»
         onDestinationSelected: (index) {
           Navigator.pop(context); // закрыли меню
           switch (index) {
@@ -765,11 +769,13 @@ class _HomeScreenState extends State<HomeScreen> with RestorationMixin {
           ),
         ),
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        tooltip: R.addContact,
-        onPressed: () => _openAddContact(context),
-        label: const Text(R.addContact),
-        icon: const Icon(Icons.person_add),
+      floatingActionButton: Builder(
+        builder: (fabContext) => FloatingActionButton.extended(
+          tooltip: R.addContact,
+          onPressed: () => _openAddContact(fabContext),
+          label: const Text(R.addContact),
+          icon: const Icon(Icons.person_add),
+        ),
       ),
     );
   }
@@ -824,10 +830,13 @@ class _HomeScreenState extends State<HomeScreen> with RestorationMixin {
     );
   }
 
-  void _openAllReminders() {
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (_) => const AllRemindersScreen()),
+  void _openAllReminders(BuildContext triggerContext) {
+    final origin = CircularRevealPageRoute.originFromContext(triggerContext);
+    Navigator.of(triggerContext).push(
+      CircularRevealPageRoute<void>(
+        builder: (_) => const AllRemindersScreen(),
+        center: origin,
+      ),
     );
   }
 }

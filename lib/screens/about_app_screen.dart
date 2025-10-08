@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:share_plus/share_plus.dart';
 
+import '../widgets/app_version_list_tile.dart';
+
 class AboutAppScreen extends StatelessWidget {
   const AboutAppScreen({super.key});
 
@@ -36,10 +38,14 @@ class AboutAppScreen extends StatelessWidget {
                     'Touch NoteBook помогает управлять контактами, '
                     'заметками и напоминаниями в едином приложении.',
                   ),
+                  const SizedBox(height: 16),
+                  const Divider(height: 32),
+                  const AppVersionListTile(),
                 ],
               ),
             ),
           ),
+          const SizedBox(height: 12),
           Card(
             child: ListTile(
               leading: const Icon(Icons.share_outlined),

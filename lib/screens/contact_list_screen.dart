@@ -8,6 +8,7 @@ import '../models/contact.dart';
 import '../models/reminder.dart';
 import '../services/contact_database.dart';
 import '../services/push_notifications.dart';
+import '../widgets/circular_reveal_route.dart';
 import '../widgets/system_notifications.dart';
 import 'add_contact_screen.dart';
 import 'contact_details_screen.dart';
@@ -742,29 +743,26 @@ class _ContactListScreenState extends State<ContactListScreen> {
           ],
         ),
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () async {
-          final saved = await Navigator.push(
-            context,
-            PageRouteBuilder(
-              pageBuilder: (_, __, ___) => AddContactScreen(category: widget.category),
-              transitionsBuilder: (_, animation, __, child) {
-                const begin = Offset(0.0, 1.0);
-                const end = Offset.zero;
-                final tween = Tween(begin: begin, end: end).chain(CurveTween(curve: Curves.ease));
-                return SlideTransition(position: animation.drive(tween), child: child);
-              },
-            ),
-          );
-          if (saved == true) {
-            await _loadContacts(reset: true);
-            if (mounted) {
-              showSuccessBanner('Контакт сохранён');
+      floatingActionButton: Builder(
+        builder: (fabContext) => FloatingActionButton.extended(
+          onPressed: () async {
+            final origin = CircularRevealPageRoute.originFromContext(fabContext);
+            final saved = await Navigator.of(fabContext).push<bool>(
+              CircularRevealPageRoute<bool>(
+                builder: (_) => AddContactScreen(category: widget.category),
+                center: origin,
+              ),
+            );
+            if (saved == true) {
+              await _loadContacts(reset: true);
+              if (mounted) {
+                showSuccessBanner('Контакт сохранён');
+              }
             }
-          }
-        },
-        icon: const Icon(Icons.person_add),
-        label: const Text('Добавить контакт'),
+          },
+          icon: const Icon(Icons.person_add),
+          label: const Text('Добавить контакт'),
+        ),
       ),
     );
   }

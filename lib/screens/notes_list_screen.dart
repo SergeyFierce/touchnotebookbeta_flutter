@@ -9,6 +9,7 @@ import 'package:overlay_support/overlay_support.dart';
 import '../models/contact.dart';
 import '../models/note.dart';
 import '../services/contact_database.dart';
+import '../widgets/circular_reveal_route.dart';
 import 'add_note_screen.dart';
 import 'note_details_screen.dart';
 import '../widgets/system_notifications.dart';
@@ -206,19 +207,13 @@ class _NotesListScreenState extends State<NotesListScreen> {
     });
   }
 
-  Future<void> _addNote() async {
+  Future<void> _addNote(BuildContext triggerContext) async {
     if (widget.contact.id == null) return;
-    final note = await Navigator.push<Note>(
-      context,
-      PageRouteBuilder(
-        pageBuilder: (_, __, ___) => AddNoteScreen(contactId: widget.contact.id!),
-        transitionsBuilder: (_, animation, __, child) {
-          const begin = Offset(0.0, 1.0);
-          const end = Offset.zero;
-          final tween =
-          Tween(begin: begin, end: end).chain(CurveTween(curve: Curves.ease));
-          return SlideTransition(position: animation.drive(tween), child: child);
-        },
+    final origin = CircularRevealPageRoute.originFromContext(triggerContext);
+    final note = await Navigator.of(triggerContext).push<Note>(
+      CircularRevealPageRoute<Note>(
+        builder: (_) => AddNoteScreen(contactId: widget.contact.id!),
+        center: origin,
       ),
     );
     if (note != null) {
@@ -427,9 +422,11 @@ class _NotesListScreenState extends State<NotesListScreen> {
         ],
       ),
       body: _buildList(data),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: _addNote,
-        label: const Text('Добавить заметку'),
+      floatingActionButton: Builder(
+        builder: (fabContext) => FloatingActionButton.extended(
+          onPressed: () => _addNote(fabContext),
+          label: const Text('Добавить заметку'),
+        ),
       ),
     );
   }
