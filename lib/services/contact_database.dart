@@ -6,6 +6,7 @@ import '../models/contact.dart';
 import '../models/note.dart';
 import '../models/reminder.dart';
 import '../models/reminder_with_contact_info.dart';
+import 'encryption_service.dart';
 
 class ContactDatabase {
   ContactDatabase._();
@@ -17,6 +18,103 @@ class ContactDatabase {
   final ValueNotifier<int> revision = ValueNotifier<int>(0);
   void _bumpRevision() => revision.value++;
 
+  static const Set<String> _contactEncryptedFields = <String>{
+    'name',
+    'profession',
+    'city',
+    'email',
+    'social',
+    'tags',
+    'comment',
+  };
+
+  Map<String, Object?> _encryptContactData(
+    Map<String, Object?> source,
+    EncryptionService encryption,
+  ) {
+    final map = Map<String, Object?>.from(source);
+    final phone = map['phone'];
+    if (phone is String && phone.isNotEmpty) {
+      final plainPhone = encryption.ensureDecrypted(phone);
+      map['phone'] = encryption.ensureEncrypted(plainPhone);
+      map['phoneHash'] = encryption.hash(plainPhone);
+    }
+    for (final field in _contactEncryptedFields) {
+      final value = map[field];
+      if (value is String && value.isNotEmpty) {
+        map[field] = encryption.ensureEncrypted(value);
+      }
+    }
+    return map;
+  }
+
+  Map<String, Object?> _decryptContactData(
+    Map<String, Object?> source,
+    EncryptionService encryption,
+  ) {
+    final map = Map<String, Object?>.from(source);
+    final phone = map['phone'];
+    if (phone is String && phone.isNotEmpty) {
+      map['phone'] = encryption.ensureDecrypted(phone);
+    }
+    for (final field in _contactEncryptedFields) {
+      final value = map[field];
+      if (value is String && value.isNotEmpty) {
+        map[field] = encryption.ensureDecrypted(value);
+      }
+    }
+    map.remove('phoneHash');
+    return map;
+  }
+
+  Map<String, Object?> _encryptNoteData(
+    Map<String, Object?> source,
+    EncryptionService encryption,
+  ) {
+    final map = Map<String, Object?>.from(source);
+    final text = map['text'];
+    if (text is String && text.isNotEmpty) {
+      map['text'] = encryption.ensureEncrypted(text);
+    }
+    return map;
+  }
+
+  Map<String, Object?> _decryptNoteData(
+    Map<String, Object?> source,
+    EncryptionService encryption,
+  ) {
+    final map = Map<String, Object?>.from(source);
+    final text = map['text'];
+    if (text is String && text.isNotEmpty) {
+      map['text'] = encryption.ensureDecrypted(text);
+    }
+    return map;
+  }
+
+  Map<String, Object?> _encryptReminderData(
+    Map<String, Object?> source,
+    EncryptionService encryption,
+  ) {
+    final map = Map<String, Object?>.from(source);
+    final text = map['text'];
+    if (text is String && text.isNotEmpty) {
+      map['text'] = encryption.ensureEncrypted(text);
+    }
+    return map;
+  }
+
+  Map<String, Object?> _decryptReminderData(
+    Map<String, Object?> source,
+    EncryptionService encryption,
+  ) {
+    final map = Map<String, Object?>.from(source);
+    final text = map['text'];
+    if (text is String && text.isNotEmpty) {
+      map['text'] = encryption.ensureDecrypted(text);
+    }
+    return map;
+  }
+
   Future<Database> get database async {
     if (_db != null) return _db!;
     final dbPath = await getDatabasesPath();
@@ -24,8 +122,8 @@ class ContactDatabase {
 
     _db = await openDatabase(
       path,
-      // ВАЖНО: поднимаем версию до 4, чтобы сработала миграция с FK + CASCADE и напоминаниями
-      version: 4,
+      // ВАЖНО: поднимаем версию до 5, чтобы сработала миграция с шифрованием и phoneHash
+      version: 5,
 
       // Включаем поддержку внешних ключей (иначе SQLite их игнорирует)
       onConfigure: (db) async {
@@ -42,6 +140,7 @@ class ContactDatabase {
             profession TEXT,
             city TEXT,
             phone TEXT NOT NULL,
+            phoneHash TEXT NOT NULL,
             email TEXT,
             social TEXT,
             category TEXT NOT NULL,
@@ -51,6 +150,9 @@ class ContactDatabase {
             createdAt INTEGER NOT NULL
           )
         ''');
+
+        await db.execute(
+            'CREATE INDEX IF NOT EXISTS idx_contacts_phoneHash ON contacts(phoneHash)');
 
         // ВАЖНО: тут была пропущена запятая перед FOREIGN KEY — добавили
         await db.execute('''
@@ -144,6 +246,67 @@ class ContactDatabase {
                 .execute('ALTER TABLE reminders ADD COLUMN completedAt INTEGER');
           }
         }
+
+        if (oldV < 5) {
+          final encryption = EncryptionService.instance;
+          await encryption.ensureInitialized();
+
+          final contactColumns = await db.rawQuery('PRAGMA table_info(contacts)');
+          final hasPhoneHash = contactColumns.any((column) {
+            final name = column['name'];
+            if (name is String) return name == 'phoneHash';
+            return false;
+          });
+          if (!hasPhoneHash) {
+            await db.execute('ALTER TABLE contacts ADD COLUMN phoneHash TEXT');
+          }
+          await db.execute(
+              'CREATE INDEX IF NOT EXISTS idx_contacts_phoneHash ON contacts(phoneHash)');
+
+          final contactRows = await db.query('contacts');
+          for (final row in contactRows) {
+            final id = row['id'];
+            if (id is! int) continue;
+            final updated = _encryptContactData(row, encryption)
+              ..remove('id');
+            await db.update(
+              'contacts',
+              updated,
+              where: 'id = ?',
+              whereArgs: [id],
+            );
+          }
+
+          final noteRows = await db.query('notes');
+          for (final row in noteRows) {
+            final id = row['id'];
+            if (id is! int) continue;
+            final text = row['text'];
+            if (text is String && !encryption.isEncrypted(text)) {
+              await db.update(
+                'notes',
+                {'text': encryption.ensureEncrypted(text)},
+                where: 'id = ?',
+                whereArgs: [id],
+              );
+            }
+          }
+
+          final reminderRows = await db.query('reminders');
+          for (final row in reminderRows) {
+            final id = row['id'];
+            if (id is! int) continue;
+            final text = row['text'];
+            if (text is String && !encryption.isEncrypted(text)) {
+              await db.update(
+                'reminders',
+                {'text': encryption.ensureEncrypted(text)},
+                where: 'id = ?',
+                whereArgs: [id],
+              );
+            }
+          }
+        }
       },
     );
 
@@ -173,15 +336,23 @@ class ContactDatabase {
 
   Future<int> insert(Contact contact) async {
     final db = await database;
-    final id = await db.insert('contacts', _mapForInsert(contact.toMap()));
+    final encryption = EncryptionService.instance;
+    await encryption.ensureInitialized();
+    final map = _mapForInsert(contact.toMap());
+    final encrypted = _encryptContactData(map, encryption);
+    final id = await db.insert('contacts', encrypted);
     _bumpRevision();
     return id;
   }
 
   Future<Contact?> contactByPhone(String phone, {int? excludeId}) async {
     final db = await database;
-    final args = excludeId != null ? [phone, excludeId] : [phone];
-    final where = excludeId != null ? 'phone = ? AND id != ?' : 'phone = ?';
+    final encryption = EncryptionService.instance;
+    await encryption.ensureInitialized();
+    final hash = encryption.hash(phone);
+    final args = excludeId != null ? [hash, excludeId] : [hash];
+    final where =
+        excludeId != null ? 'phoneHash = ? AND id != ?' : 'phoneHash = ?';
     final maps = await db.query(
       'contacts',
       where: where,
@@ -189,11 +360,14 @@ class ContactDatabase {
       limit: 1,
     );
     if (maps.isEmpty) return null;
-    return Contact.fromMap(maps.first);
+    final decrypted = _decryptContactData(maps.first, encryption);
+    return Contact.fromMap(decrypted);
   }
 
   Future<Contact?> contactById(int id) async {
     final db = await database;
+    final encryption = EncryptionService.instance;
+    await encryption.ensureInitialized();
     final maps = await db.query(
       'contacts',
       where: 'id = ?',
@@ -201,12 +375,15 @@ class ContactDatabase {
       limit: 1,
     );
     if (maps.isEmpty) return null;
-    return Contact.fromMap(maps.first);
+    final decrypted = _decryptContactData(maps.first, encryption);
+    return Contact.fromMap(decrypted);
   }
 
   Future<List<Contact>> contactsByCategory(String category) async {
     final db = await database;
     final now = DateTime.now().millisecondsSinceEpoch;
+    final encryption = EncryptionService.instance;
+    await encryption.ensureInitialized();
     final maps = await db.rawQuery(
       '''
       SELECT c.*,
@@ -218,11 +395,13 @@ class ContactDatabase {
         LEFT JOIN reminders r ON r.contactId = c.id
        WHERE c.category = ?
        GROUP BY c.id
-       ORDER BY c.createdAt DESC
+      ORDER BY c.createdAt DESC
       '''.trim(),
       [now, category],
     );
-    return maps.map(Contact.fromMap).toList();
+    return maps
+        .map((map) => Contact.fromMap(_decryptContactData(map, encryption)))
+        .toList();
   }
 
   Future<List<Contact>> contactsByCategoryPaged(
@@ -232,6 +411,8 @@ class ContactDatabase {
   }) async {
     final db = await database;
     final now = DateTime.now().millisecondsSinceEpoch;
+    final encryption = EncryptionService.instance;
+    await encryption.ensureInitialized();
     final maps = await db.rawQuery(
       '''
       SELECT c.*,
@@ -244,18 +425,25 @@ class ContactDatabase {
        WHERE c.category = ?
        GROUP BY c.id
        ORDER BY c.createdAt DESC
-       LIMIT ? OFFSET ?
+      LIMIT ? OFFSET ?
       '''.trim(),
       [now, category, limit, offset],
     );
-    return maps.map(Contact.fromMap).toList();
+    return maps
+        .map((map) => Contact.fromMap(_decryptContactData(map, encryption)))
+        .toList();
   }
 
   Future<int> update(Contact contact) async {
     final db = await database;
+    final encryption = EncryptionService.instance;
+    await encryption.ensureInitialized();
+    final map = Map<String, Object?>.from(contact.toMap())
+      ..remove('id');
+    final encrypted = _encryptContactData(map, encryption);
     final rows = await db.update(
       'contacts',
-      contact.toMap(),
+      encrypted,
       where: 'id = ?',
       whereArgs: [contact.id],
     );
@@ -352,16 +540,24 @@ class ContactDatabase {
 
   Future<int> insertNote(Note note) async {
     final db = await database;
-    final id = await db.insert('notes', _mapForInsert(note.toMap()));
+    final encryption = EncryptionService.instance;
+    await encryption.ensureInitialized();
+    final map = _mapForInsert(note.toMap());
+    final encrypted = _encryptNoteData(map, encryption);
+    final id = await db.insert('notes', encrypted);
     _bumpRevision();
     return id;
   }
 
   Future<int> updateNote(Note note) async {
     final db = await database;
+    final encryption = EncryptionService.instance;
+    await encryption.ensureInitialized();
+    final map = Map<String, Object?>.from(note.toMap())..remove('id');
+    final encrypted = _encryptNoteData(map, encryption);
     final rows = await db.update(
       'notes',
-      note.toMap(),
+      encrypted,
       where: 'id = ?',
       whereArgs: [note.id],
     );
@@ -384,7 +580,11 @@ class ContactDatabase {
       whereArgs: [contactId],
       orderBy: 'createdAt DESC',
     );
-    return maps.map(Note.fromMap).toList();
+    final encryption = EncryptionService.instance;
+    await encryption.ensureInitialized();
+    return maps
+        .map((map) => Note.fromMap(_decryptNoteData(map, encryption)))
+        .toList();
   }
 
   Future<List<Note>> notesByContactPaged(
@@ -401,7 +601,11 @@ class ContactDatabase {
       limit: limit,
       offset: offset,
     );
-    return maps.map(Note.fromMap).toList();
+    final encryption = EncryptionService.instance;
+    await encryption.ensureInitialized();
+    return maps
+        .map((map) => Note.fromMap(_decryptNoteData(map, encryption)))
+        .toList();
   }
 
   Future<List<Note>> lastNotesByContact(int contactId, {int limit = 3}) async {
@@ -413,23 +617,35 @@ class ContactDatabase {
       orderBy: 'createdAt DESC',
       limit: limit,
     );
-    return maps.map(Note.fromMap).toList();
+    final encryption = EncryptionService.instance;
+    await encryption.ensureInitialized();
+    return maps
+        .map((map) => Note.fromMap(_decryptNoteData(map, encryption)))
+        .toList();
   }
 
   // ================= Reminders =================
 
   Future<int> insertReminder(Reminder reminder) async {
     final db = await database;
-    final id = await db.insert('reminders', _mapForInsert(reminder.toMap()));
+    final encryption = EncryptionService.instance;
+    await encryption.ensureInitialized();
+    final map = _mapForInsert(reminder.toMap());
+    final encrypted = _encryptReminderData(map, encryption);
+    final id = await db.insert('reminders', encrypted);
     _bumpRevision();
     return id;
   }
 
   Future<int> updateReminder(Reminder reminder) async {
     final db = await database;
+    final encryption = EncryptionService.instance;
+    await encryption.ensureInitialized();
+    final map = Map<String, Object?>.from(reminder.toMap())..remove('id');
+    final encrypted = _encryptReminderData(map, encryption);
     final rows = await db.update(
       'reminders',
-      reminder.toMap(),
+      encrypted,
       where: 'id = ?',
       whereArgs: [reminder.id],
     );
@@ -439,6 +655,8 @@ class ContactDatabase {
 
   Future<Reminder?> reminderById(int id) async {
     final db = await database;
+    final encryption = EncryptionService.instance;
+    await encryption.ensureInitialized();
     final maps = await db.query(
       'reminders',
       where: 'id = ?',
@@ -446,7 +664,8 @@ class ContactDatabase {
       limit: 1,
     );
     if (maps.isEmpty) return null;
-    return Reminder.fromMap(maps.first);
+    final decrypted = _decryptReminderData(maps.first, encryption);
+    return Reminder.fromMap(decrypted);
   }
 
   Future<int> deleteReminder(int id) async {
@@ -472,6 +691,8 @@ class ContactDatabase {
   Future<List<Reminder>> completeDueRemindersForContact(int contactId) async {
     final db = await database;
     final nowEpoch = DateTime.now().millisecondsSinceEpoch;
+    final encryption = EncryptionService.instance;
+    await encryption.ensureInitialized();
     final dueMaps = await db.query(
       'reminders',
       where: 'contactId = ? AND completedAt IS NULL AND remindAt <= ?',
@@ -480,7 +701,9 @@ class ContactDatabase {
 
     if (dueMaps.isEmpty) return const [];
 
-    final dueReminders = dueMaps.map(Reminder.fromMap).toList();
+    final dueReminders = dueMaps
+        .map((map) => Reminder.fromMap(_decryptReminderData(map, encryption)))
+        .toList();
     final updatedReminders = <Reminder>[];
     final batch = db.batch();
     final completionMoment = DateTime.now();
@@ -490,7 +713,10 @@ class ContactDatabase {
       updatedReminders.add(updated);
       batch.update(
         'reminders',
-        updated.toMap(),
+        _encryptReminderData(
+          Map<String, Object?>.from(updated.toMap())..remove('id'),
+          encryption,
+        ),
         where: 'id = ?',
         whereArgs: [reminder.id],
       );
@@ -531,11 +757,17 @@ class ContactDatabase {
       whereArgs: whereArgs,
       orderBy: orderBy,
     );
-    return maps.map(Reminder.fromMap).toList();
+    final encryption = EncryptionService.instance;
+    await encryption.ensureInitialized();
+    return maps
+        .map((map) => Reminder.fromMap(_decryptReminderData(map, encryption)))
+        .toList();
   }
 
   Future<List<ReminderWithContactInfo>> remindersWithContactInfo() async {
     final db = await database;
+    final encryption = EncryptionService.instance;
+    await encryption.ensureInitialized();
     final rows = await db.rawQuery('''
       SELECT r.id AS reminder_id,
              r.contactId AS reminder_contactId,
@@ -551,10 +783,14 @@ class ContactDatabase {
     ''');
 
     return rows.map((row) {
+      final reminderText = row['reminder_text'];
+      final decryptedText = reminderText is String
+          ? encryption.ensureDecrypted(reminderText)
+          : reminderText as String?;
       final reminder = Reminder(
         id: row['reminder_id'] as int?,
         contactId: row['reminder_contactId'] as int,
-        text: row['reminder_text'] as String,
+        text: decryptedText ?? '',
         remindAt:
             DateTime.fromMillisecondsSinceEpoch(row['reminder_remindAt'] as int),
         createdAt: DateTime.fromMillisecondsSinceEpoch(
@@ -567,9 +803,13 @@ class ContactDatabase {
             : null,
       );
 
+      final rawName = row['contact_name'];
+      final contactName = rawName is String
+          ? encryption.ensureDecrypted(rawName)
+          : rawName as String? ?? '';
       return ReminderWithContactInfo(
         reminder: reminder,
-        contactName: row['contact_name'] as String,
+        contactName: contactName,
         contactCategory: row['contact_category'] as String,
       );
     }).toList();
@@ -586,6 +826,8 @@ class ContactDatabase {
     final db = await database;
     final notes = <Note>[];
     final reminders = <Reminder>[];
+    final encryption = EncryptionService.instance;
+    await encryption.ensureInitialized();
 
     await db.transaction((txn) async {
       final noteMaps = await txn.query(
@@ -594,7 +836,8 @@ class ContactDatabase {
         whereArgs: [contactId],
         orderBy: 'createdAt DESC',
       );
-      notes.addAll(noteMaps.map(Note.fromMap));
+      notes.addAll(noteMaps
+          .map((map) => Note.fromMap(_decryptNoteData(map, encryption))));
 
       final reminderMaps = await txn.query(
         'reminders',
@@ -602,7 +845,8 @@ class ContactDatabase {
         whereArgs: [contactId],
         orderBy: 'remindAt ASC',
       );
-      reminders.addAll(reminderMaps.map(Reminder.fromMap));
+      reminders.addAll(reminderMaps.map(
+          (map) => Reminder.fromMap(_decryptReminderData(map, encryption))));
 
       // Удаляем контакт — FK каскадно удалит связанные заметки и напоминания
       await txn.delete('contacts', where: 'id = ?', whereArgs: [contactId]);
@@ -615,7 +859,11 @@ class ContactDatabase {
   /// Восстанавливает контакт (получает НОВЫЙ id) и возвращает его.
   Future<int> restoreContact(Contact contact) async {
     final db = await database;
-    final newId = await db.insert('contacts', _mapForInsert(contact.toMap()));
+    final encryption = EncryptionService.instance;
+    await encryption.ensureInitialized();
+    final map = _mapForInsert(contact.toMap());
+    final encrypted = _encryptContactData(map, encryption);
+    final newId = await db.insert('contacts', encrypted);
     _bumpRevision();
     return newId;
   }
@@ -629,21 +877,36 @@ class ContactDatabase {
   ]) async {
     final db = await database;
     int newContactId = 0;
+    final encryption = EncryptionService.instance;
+    await encryption.ensureInitialized();
 
     await db.transaction((txn) async {
       // Вставляем контакт
-      newContactId = await txn.insert('contacts', _mapForInsert(contact.toMap()));
+      final contactMap = _encryptContactData(
+        _mapForInsert(contact.toMap()),
+        encryption,
+      );
+      newContactId = await txn.insert('contacts', contactMap);
 
       // Вставляем его заметки с новым contactId
       for (final n in notes) {
-        final noteMap = _mapForInsert(n.copyWith(contactId: newContactId, id: null).toMap());
+        final noteMap = _encryptNoteData(
+          _mapForInsert(
+            n.copyWith(contactId: newContactId, id: null).toMap(),
+          ),
+          encryption,
+        );
         await txn.insert('notes', noteMap);
       }
 
       // Вставляем напоминания с новым contactId
       for (final r in reminders) {
-        final reminderMap =
-            _mapForInsert(r.copyWith(contactId: newContactId, id: null).toMap());
+        final reminderMap = _encryptReminderData(
+          _mapForInsert(
+            r.copyWith(contactId: newContactId, id: null).toMap(),
+          ),
+          encryption,
+        );
         await txn.insert('reminders', reminderMap);
       }
     });
