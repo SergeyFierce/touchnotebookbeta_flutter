@@ -19,8 +19,8 @@ Future<void> notificationTapBackground(NotificationResponse response) async {
 class PushNotifications {
   PushNotifications._();
 
-  static final FlutterLocalNotificationsPlugin _plugin =
-  FlutterLocalNotificationsPlugin();
+  static FlutterLocalNotificationsPlugin _plugin =
+      FlutterLocalNotificationsPlugin();
 
   static const String _payloadTypeKey = 'type';
   static const String _payloadReminderType = 'reminder';
@@ -31,6 +31,7 @@ class PushNotifications {
   static bool _initialized = false;
   static bool _tzReady = false;
   static bool _enabled = true;
+  static Future<String> Function()? _timeZoneResolver;
 
   static void setEnabled(bool value) {
     _enabled = value;
@@ -123,7 +124,9 @@ class PushNotifications {
     if (_tzReady) return;
     // Загружаем базу тайзон и выставляем локальную тайзону
     tz.initializeTimeZones();
-    final name = await FlutterTimezone.getLocalTimezone();
+    final name = _timeZoneResolver != null
+        ? await _timeZoneResolver!.call()
+        : await FlutterTimezone.getLocalTimezone();
     tz.setLocalLocation(tz.getLocation(name));
     _tzReady = true;
   }
@@ -146,6 +149,23 @@ class PushNotifications {
     } catch (e, s) {
       if (kDebugMode) print('Failed to show notification: $e\n$s');
     }
+  }
+
+  @visibleForTesting
+  static void resetForTests({FlutterLocalNotificationsPlugin? plugin}) {
+    _plugin = plugin ?? FlutterLocalNotificationsPlugin();
+    _initialized = false;
+    _tzReady = false;
+    _enabled = true;
+    _timeZoneResolver = null;
+  }
+
+  @visibleForTesting
+  static void debugOverrideTimezoneResolver(
+    Future<String> Function() resolver,
+  ) {
+    _timeZoneResolver = resolver;
+    _tzReady = false;
   }
 
   /// ОДИНОЧНОЕ напоминание на конкретную локальную дату/время
