@@ -88,6 +88,8 @@ class _NotificationsSettingsScreenState extends State<NotificationsSettingsScree
             padding: const EdgeInsets.all(16),
             children: [
               Card(
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                clipBehavior: Clip.antiAlias,
                 child: SwitchListTile.adaptive(
                   value: enabled,
                   onChanged: _updating ? null : _toggleNotifications,
@@ -114,6 +116,8 @@ class _NotificationsSettingsScreenState extends State<NotificationsSettingsScree
                   color: !enabled && count > 0
                       ? colorScheme.errorContainer
                       : colorScheme.surface,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  clipBehavior: Clip.antiAlias,
                   child: Padding(
                     padding: const EdgeInsets.all(16),
                     child: Column(

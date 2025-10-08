@@ -45,6 +45,9 @@ class _NotesListScreenState extends State<NotesListScreen> {
   // Кэш отсортированного списка, чтобы не пересортировывать на каждый build
   List<Note> _sortedNotes = const [];
 
+  bool _selectionMode = false;
+  final Set<int> _selectedNoteIds = <int>{};
+
   // --- подсветка и автоскролл ---
   final LinkedHashMap<int, GlobalKey> _itemKeys = LinkedHashMap<int, GlobalKey>();
   static const int _maxKeys = 300;
@@ -76,6 +79,8 @@ class _NotesListScreenState extends State<NotesListScreen> {
       _page = 0;
       _hasMore = true;
       _itemKeys.clear();
+      _selectionMode = false;
+      _selectedNoteIds.clear();
     }
     await _loadMoreNotes(reset: reset);
   }
@@ -115,13 +120,14 @@ class _NotesListScreenState extends State<NotesListScreen> {
         final unique =
             pageNotes.where((n) => !existingIds.contains(n.id)).toList();
 
-        _notes.addAll(unique);
-        _page++;
-        if (pageNotes.length < _pageSize) _hasMore = false;
+      _notes.addAll(unique);
+      _page++;
+      if (pageNotes.length < _pageSize) _hasMore = false;
       }
       _isLoading = false;
 
       _rebuildSorted();
+      _pruneNoteSelection();
     });
   }
 
@@ -137,6 +143,15 @@ class _NotesListScreenState extends State<NotesListScreen> {
         break;
     }
     _sortedNotes = list;
+  }
+
+  void _pruneNoteSelection() {
+    _selectedNoteIds.removeWhere(
+      (id) => !_notes.any((note) => note.id == id),
+    );
+    if (_selectedNoteIds.isEmpty) {
+      _selectionMode = false;
+    }
   }
 
   Future<void> _openSort() async {
@@ -168,8 +183,117 @@ class _NotesListScreenState extends State<NotesListScreen> {
       setState(() {
         _sort = result;
         _rebuildSorted();
+        if (_selectionMode) {
+          _selectionMode = false;
+          _selectedNoteIds.clear();
+        }
       });
     }
+  }
+
+  void _startNoteSelection(Note note) {
+    final id = note.id;
+    if (id == null) return;
+    HapticFeedback.selectionClick();
+    setState(() {
+      _selectionMode = true;
+      _selectedNoteIds
+        ..clear()
+        ..add(id);
+    });
+  }
+
+  void _toggleNoteSelection(Note note) {
+    final id = note.id;
+    if (id == null) return;
+    HapticFeedback.selectionClick();
+    setState(() {
+      if (_selectedNoteIds.contains(id)) {
+        _selectedNoteIds.remove(id);
+      } else {
+        _selectedNoteIds.add(id);
+      }
+      if (_selectedNoteIds.isEmpty) {
+        _selectionMode = false;
+      }
+    });
+  }
+
+  void _clearNoteSelection() {
+    if (!_selectionMode) return;
+    setState(() {
+      _selectionMode = false;
+      _selectedNoteIds.clear();
+    });
+  }
+
+  void _selectAllVisibleNotes() {
+    final ids = _sortedNotes.map((n) => n.id).whereType<int>().toSet();
+    if (ids.isEmpty) return;
+    setState(() {
+      _selectionMode = true;
+      _selectedNoteIds
+        ..clear()
+        ..addAll(ids);
+    });
+  }
+
+  Future<void> _deleteSelectedNotes() async {
+    final ids = _selectedNoteIds.toList(growable: false);
+    if (ids.isEmpty) return;
+    final notesToDelete =
+        _notes.where((note) => note.id != null && ids.contains(note.id)).toList();
+    if (notesToDelete.isEmpty) return;
+
+    final count = notesToDelete.length;
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(count == 1
+            ? 'Удалить заметку?'
+            : 'Удалить выбранные заметки ($count)?'),
+        content: const Text('Это действие нельзя отменить.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Отмена'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Удалить'),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true) return;
+
+    final snapshots = <Note>[];
+    try {
+      for (final note in notesToDelete) {
+        final id = note.id;
+        if (id == null) continue;
+        await _db.deleteNote(id);
+        snapshots.add(note);
+      }
+    } catch (_) {
+      _showErrorBanner('Не удалось удалить заметку');
+      await _loadNotes(reset: true);
+      return;
+    }
+
+    if (!mounted) return;
+
+    setState(() {
+      _notes.removeWhere(
+        (note) => note.id != null && _selectedNoteIds.contains(note.id),
+      );
+      _rebuildSorted();
+      _selectionMode = false;
+      _selectedNoteIds.clear();
+    });
+
+    HapticFeedback.mediumImpact();
+    _showUndoBannerForDeleted(snapshots);
   }
 
   GlobalKey _keyFor(Note n) {
@@ -247,7 +371,7 @@ class _NotesListScreenState extends State<NotesListScreen> {
       final deleted = result['deleted'] as Note;
       await _loadNotes(reset: true);
       if (!mounted) return;
-      _showUndoBannerForDeleted(deleted);
+      _showUndoBannerForDeleted([deleted]);
     } else if (result['restored'] is Note) {
       final restored = result['restored'] as Note;
       await _loadNotes(reset: true);
@@ -277,75 +401,66 @@ class _NotesListScreenState extends State<NotesListScreen> {
     setState(() {
       _notes.removeWhere((e) => e.id == n.id);
       _rebuildSorted();
+      final id = n.id;
+      if (id != null) {
+        _selectedNoteIds.remove(id);
+        if (_selectedNoteIds.isEmpty) {
+          _selectionMode = false;
+        }
+      }
     });
 
     if (!mounted) return;
-    _showUndoBannerForDeleted(n);
+    _showUndoBannerForDeleted([n]);
     HapticFeedback.mediumImpact();
   }
 
-  void _showUndoBannerForDeleted(Note snapshot) {
+  void _showUndoBannerForDeleted(List<Note> snapshots) {
+    if (snapshots.isEmpty) return;
     const duration = Duration(seconds: 4);
 
     _undoBanner?.dismiss();
 
     _undoBanner = showUndoBanner(
-      message: 'Заметка удалена',
+      message: snapshots.length == 1
+          ? 'Заметка удалена'
+          : 'Удалено заметок: ${snapshots.length}',
       duration: duration,
       icon: Icons.delete_outline,
       onUndo: () async {
         _undoBanner = null;
         try {
-          final id = await _db.insertNote(snapshot.copyWith(id: null));
-          final restored = snapshot.copyWith(id: id);
+          final restoredNotes = <Note>[];
+          for (final snapshot in snapshots) {
+            final id = await _db.insertNote(snapshot.copyWith(id: null));
+            restoredNotes.add(snapshot.copyWith(id: id));
+          }
           if (!mounted) {
-            widget.onNoteRestored?.call(restored);
+            for (final restored in restoredNotes) {
+              widget.onNoteRestored?.call(restored);
+            }
             return;
           }
           await _loadNotes(reset: true);
           if (!mounted) {
-            widget.onNoteRestored?.call(restored);
+            for (final restored in restoredNotes) {
+              widget.onNoteRestored?.call(restored);
+            }
             return;
           }
-          await _maybeScrollTo(id);
-          _flashHighlight(id);
-          widget.onNoteRestored?.call(restored);
+          if (restoredNotes.isNotEmpty && restoredNotes.first.id != null) {
+            final highlightId = restoredNotes.first.id!;
+            await _maybeScrollTo(highlightId);
+            _flashHighlight(highlightId);
+          }
+          for (final restored in restoredNotes) {
+            widget.onNoteRestored?.call(restored);
+          }
         } catch (_) {
           _showErrorBanner('Не удалось восстановить заметку');
         }
       },
     );
-  }
-
-  Future<void> _showNoteMenu(Note n) async {
-    final action = await showModalBottomSheet<String>(
-      context: context,
-      builder: (context) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // Оставляем только «Детали заметки» и «Удалить»
-            ListTile(
-              leading: const Icon(Icons.info_outline),
-              title: const Text('Детали заметки'),
-              onTap: () => Navigator.pop(context, 'details'),
-            ),
-            ListTile(
-              leading: const Icon(Icons.delete),
-              title: const Text('Удалить'),
-              onTap: () => Navigator.pop(context, 'delete'),
-            ),
-          ],
-        ),
-      ),
-    );
-
-    if (action == 'details') {
-      await _openDetails(n);
-    } else if (action == 'delete') {
-      HapticFeedback.selectionClick();
-      await _deleteNoteWithUndo(n);
-    }
   }
 
   Widget _buildList(List<Note> data) {
@@ -381,16 +496,18 @@ class _NotesListScreenState extends State<NotesListScreen> {
         final n = data[i];
         final k = (n.id != null) ? _keyFor(n) : null;
         final isHighlighted = (n.id != null && n.id == _highlightId);
+        final isSelected =
+            _selectionMode && n.id != null && _selectedNoteIds.contains(n.id);
         return KeyedSubtree(
           key: k,
           child: _NoteOpenContainer(
             note: n,
             pulse: isHighlighted,
             pulseSeed: _pulseSeed,
-            onLongPress: () {
-              HapticFeedback.selectionClick();
-              _showNoteMenu(n);
-            },
+            selectionMode: _selectionMode,
+            isSelected: isSelected,
+            onToggleSelection: () => _toggleNoteSelection(n),
+            onLongPress: () => _startNoteSelection(n),
             onClosed: _handleNoteDetailsResult,
           ),
         );
@@ -406,27 +523,69 @@ class _NotesListScreenState extends State<NotesListScreen> {
   @override
   Widget build(BuildContext context) {
     final data = _sortedNotes;
+    final selectionCount = _selectedNoteIds.length;
+    final totalSelectable = data.where((note) => note.id != null).length;
+    final hasSelection = _selectionMode && selectionCount > 0;
+    final allSelected = hasSelection &&
+        selectionCount >= totalSelectable &&
+        totalSelectable > 0;
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Заметки'),
-        backgroundColor: Theme.of(context).colorScheme.surface,
-        surfaceTintColor: Colors.transparent,
-        scrolledUnderElevation: 0,
-        actions: [
-          IconButton(
-            tooltip: 'Сортировка',
-            icon: const Icon(Icons.sort),
-            onPressed: _openSort,
+    return WillPopScope(
+      onWillPop: () async {
+        if (_selectionMode) {
+          _clearNoteSelection();
+          return false;
+        }
+        return true;
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          leading: _selectionMode
+              ? IconButton(
+                  tooltip: 'Отмена',
+                  icon: const Icon(Icons.close),
+                  onPressed: _clearNoteSelection,
+                )
+              : null,
+          title: Text(
+            _selectionMode ? 'Выбрано: $selectionCount' : 'Заметки',
           ),
-        ],
-      ),
-      body: _buildList(data),
-      floatingActionButton: Builder(
-        builder: (fabContext) => FloatingActionButton.extended(
-          onPressed: () => _addNote(fabContext),
-          label: const Text('Добавить заметку'),
+          backgroundColor: Theme.of(context).colorScheme.surface,
+          surfaceTintColor: Colors.transparent,
+          scrolledUnderElevation: 0,
+          actions: _selectionMode
+              ? [
+                  IconButton(
+                    tooltip: 'Выбрать всё',
+                    icon: const Icon(Icons.done_all),
+                    onPressed: (!allSelected && totalSelectable > 0)
+                        ? _selectAllVisibleNotes
+                        : null,
+                  ),
+                  IconButton(
+                    tooltip: 'Удалить',
+                    icon: const Icon(Icons.delete_outline),
+                    onPressed:
+                        hasSelection ? () => _deleteSelectedNotes() : null,
+                  ),
+                ]
+              : [
+                  IconButton(
+                    tooltip: 'Сортировка',
+                    icon: const Icon(Icons.sort),
+                    onPressed: _openSort,
+                  ),
+                ],
         ),
+        body: _buildList(data),
+        floatingActionButton: _selectionMode
+            ? null
+            : Builder(
+                builder: (fabContext) => FloatingActionButton.extended(
+                  onPressed: () => _addNote(fabContext),
+                  label: const Text('Добавить заметку'),
+                ),
+              ),
       ),
     );
   }
@@ -449,6 +608,9 @@ class _NoteOpenContainer extends StatelessWidget {
   final Note note;
   final bool pulse;
   final int pulseSeed;
+  final bool selectionMode;
+  final bool isSelected;
+  final VoidCallback? onToggleSelection;
   final VoidCallback? onLongPress;
   final Future<void> Function(Object?)? onClosed;
 
@@ -456,6 +618,9 @@ class _NoteOpenContainer extends StatelessWidget {
     required this.note,
     required this.pulse,
     required this.pulseSeed,
+    required this.selectionMode,
+    required this.isSelected,
+    this.onToggleSelection,
     this.onLongPress,
     this.onClosed,
   });
@@ -476,10 +641,16 @@ class _NoteOpenContainer extends StatelessWidget {
       },
       tappable: false,
       closedBuilder: (context, openContainer) {
+        final VoidCallback? handleTap =
+            selectionMode ? onToggleSelection : openContainer;
+        final VoidCallback? handleLongPress =
+            selectionMode ? onToggleSelection : onLongPress;
         return _NoteCard(
           note: note,
-          onTap: openContainer,
-          onLongPress: onLongPress,
+          onTap: handleTap,
+          onLongPress: handleLongPress,
+          selectionMode: selectionMode,
+          isSelected: isSelected,
           pulse: pulse,
           pulseSeed: pulseSeed,
         );
@@ -496,6 +667,8 @@ class _NoteCard extends StatefulWidget {
   final VoidCallback? onLongPress;
   final bool pulse;
   final int pulseSeed;
+  final bool selectionMode;
+  final bool isSelected;
 
   const _NoteCard({
     required this.note,
@@ -503,6 +676,8 @@ class _NoteCard extends StatefulWidget {
     this.onLongPress,
     required this.pulse,
     required this.pulseSeed,
+    required this.selectionMode,
+    required this.isSelected,
   });
 
   @override
@@ -574,9 +749,16 @@ class _NoteCardState extends State<_NoteCard> with TickerProviderStateMixin {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final baseColor = scheme.surface;
+    final cardColor = widget.isSelected
+        ? Color.alphaBlend(scheme.primary.withOpacity(0.12), baseColor)
+        : baseColor;
+    final borderColor = widget.isSelected
+        ? scheme.primary
+        : Theme.of(context).dividerColor;
     final border = RoundedRectangleBorder(
       borderRadius: BorderRadius.circular(12),
-      side: BorderSide(color: Theme.of(context).dividerColor),
+      side: BorderSide(color: borderColor),
     );
 
     // Русская локаль + время
@@ -608,6 +790,7 @@ class _NoteCardState extends State<_NoteCard> with TickerProviderStateMixin {
               margin: const EdgeInsets.only(bottom: 4),
               shape: border,
               clipBehavior: Clip.antiAlias,
+              color: cardColor,
               child: InkWell(
                 onTap: widget.onTap,
                 onLongPress: widget.onLongPress,
@@ -645,7 +828,25 @@ class _NoteCardState extends State<_NoteCard> with TickerProviderStateMixin {
                           ],
                         ),
                       ),
-                      const Icon(Icons.chevron_right),
+                      AnimatedSwitcher(
+                        duration: const Duration(milliseconds: 200),
+                        transitionBuilder: (child, animation) =>
+                            ScaleTransition(scale: animation, child: child),
+                        child: widget.selectionMode
+                            ? Icon(
+                                widget.isSelected
+                                    ? Icons.check_circle
+                                    : Icons.radio_button_unchecked,
+                                key: ValueKey<bool>(widget.isSelected),
+                                color: widget.isSelected
+                                    ? scheme.primary
+                                    : scheme.outline,
+                              )
+                            : const Icon(
+                                Icons.chevron_right,
+                                key: ValueKey('arrow'),
+                              ),
+                      ),
                     ],
                   ),
                 ),

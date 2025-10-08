@@ -7,6 +7,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:characters/characters.dart';
 import 'package:overlay_support/overlay_support.dart';
 import 'package:flutter/services.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../app.dart';
 import '../models/contact.dart';
@@ -743,6 +744,24 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> with RouteA
     final path = _brandAssetPath(value);
     if (path.isEmpty) return const Icon(Icons.public);
     return SvgPicture.asset(path, width: size, height: size, semanticsLabel: value);
+  }
+
+  Future<void> _callContact() async {
+    final digits = _phoneController.text.replaceAll(RegExp(r'\D'), '');
+    if (digits.length < 11) {
+      showErrorBanner('Введите корректный номер телефона');
+      return;
+    }
+    final uri = Uri(scheme: 'tel', path: digits);
+    try {
+      if (!await canLaunchUrl(uri)) {
+        showErrorBanner('Не удалось начать звонок');
+        return;
+      }
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } catch (_) {
+      showErrorBanner('Не удалось начать звонок');
+    }
   }
 
   @override
@@ -2394,6 +2413,13 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> with RouteA
               tooltip: 'Удалить',
               icon: const Icon(Icons.delete_outline),
               onPressed: hasSelection ? _deleteSelectedReminders : null,
+            ),
+          ]
+          else ...[
+            IconButton(
+              tooltip: 'Позвонить',
+              icon: const Icon(Icons.phone),
+              onPressed: _callContact,
             ),
           ],
         ],
