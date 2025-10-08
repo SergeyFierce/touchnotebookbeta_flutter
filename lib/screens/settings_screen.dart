@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'about_app_screen.dart';
 import 'notifications_settings_screen.dart';
 import 'privacy_policy_screen.dart';
 import 'theme_settings_screen.dart';
@@ -34,6 +35,11 @@ class SettingsScreen extends StatelessWidget {
             title: 'Пользовательское соглашение',
             icon: Icons.receipt_long_outlined,
             destination: UserAgreementScreen(),
+          ),
+          _SettingsCard(
+            title: 'О приложении',
+            icon: Icons.info_outline,
+            destination: AboutAppScreen(),
           ),
         ],
       ),

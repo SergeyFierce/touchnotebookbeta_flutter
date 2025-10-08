@@ -26,6 +26,7 @@ dependencies:
   flutter_timezone: ^3.0.0
   shared_preferences: ^2.2.3
   webview_flutter: ^4.7.0
+  share_plus: ^10.1.2
 
 dev_dependencies:
   flutter_test:
