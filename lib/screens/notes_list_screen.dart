@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:collection';
+import 'package:animations/animations.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
@@ -241,27 +242,31 @@ class _NotesListScreenState extends State<NotesListScreen> {
       ),
     );
 
-    if (result is Map && result.isNotEmpty) {
-      if (result['deleted'] is Note) {
-        final deleted = result['deleted'] as Note;
-        await _loadNotes(reset: true);
-        if (!mounted) return;
-        _showUndoBannerForDeleted(deleted);
-      } else if (result['restored'] is Note) {
-        final restored = result['restored'] as Note;
-        await _loadNotes(reset: true);
-        if (!mounted) {
-          widget.onNoteRestored?.call(restored);
-          return;
-        }
-        if (restored.id != null) {
-          await _maybeScrollTo(restored.id!);
-          _flashHighlight(restored.id!);
-        }
+    await _handleNoteDetailsResult(result);
+  }
+
+  Future<void> _handleNoteDetailsResult(Object? result) async {
+    if (result is! Map || result.isEmpty) return;
+
+    if (result['deleted'] is Note) {
+      final deleted = result['deleted'] as Note;
+      await _loadNotes(reset: true);
+      if (!mounted) return;
+      _showUndoBannerForDeleted(deleted);
+    } else if (result['restored'] is Note) {
+      final restored = result['restored'] as Note;
+      await _loadNotes(reset: true);
+      if (!mounted) {
         widget.onNoteRestored?.call(restored);
-      } else if (result['updated'] == true) {
-        await _loadNotes(reset: true);
+        return;
       }
+      if (restored.id != null) {
+        await _maybeScrollTo(restored.id!);
+        _flashHighlight(restored.id!);
+      }
+      widget.onNoteRestored?.call(restored);
+    } else if (result['updated'] == true) {
+      await _loadNotes(reset: true);
     }
   }
 
@@ -383,15 +388,15 @@ class _NotesListScreenState extends State<NotesListScreen> {
         final isHighlighted = (n.id != null && n.id == _highlightId);
         return KeyedSubtree(
           key: k,
-          child: _NoteCard(
+          child: _NoteOpenContainer(
             note: n,
             pulse: isHighlighted,
             pulseSeed: _pulseSeed,
-            onTap: () => _openDetails(n),
             onLongPress: () {
               HapticFeedback.selectionClick();
               _showNoteMenu(n);
             },
+            onClosed: _handleNoteDetailsResult,
           ),
         );
       },
@@ -439,6 +444,49 @@ class _NotesListScreenState extends State<NotesListScreen> {
       elevation: 2,
       autoDismiss: true,
       slideDismissDirection: DismissDirection.up,
+    );
+  }
+}
+
+class _NoteOpenContainer extends StatelessWidget {
+  final Note note;
+  final bool pulse;
+  final int pulseSeed;
+  final VoidCallback? onLongPress;
+  final Future<void> Function(Object?)? onClosed;
+
+  const _NoteOpenContainer({
+    required this.note,
+    required this.pulse,
+    required this.pulseSeed,
+    this.onLongPress,
+    this.onClosed,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final border = BorderRadius.circular(12);
+    return OpenContainer<Object?>(
+      transitionDuration: const Duration(milliseconds: 450),
+      closedElevation: 0,
+      openElevation: 0,
+      closedColor: Colors.transparent,
+      openColor: Theme.of(context).colorScheme.surface,
+      closedShape: RoundedRectangleBorder(borderRadius: border),
+      openBuilder: (context, _) => NoteDetailsScreen(note: note),
+      onClosed: (result) {
+        onClosed?.call(result);
+      },
+      tappable: false,
+      closedBuilder: (context, openContainer) {
+        return _NoteCard(
+          note: note,
+          onTap: openContainer,
+          onLongPress: onLongPress,
+          pulse: pulse,
+          pulseSeed: pulseSeed,
+        );
+      },
     );
   }
 }

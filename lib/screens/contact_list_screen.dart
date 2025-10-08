@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:animations/animations.dart';
 import 'package:flutter/material.dart';
 import 'package:overlay_support/overlay_support.dart';
 
@@ -267,6 +268,24 @@ class _ContactListScreenState extends State<ContactListScreen> {
         setState(() => _highlightId = null);
       }
     });
+  }
+
+  void _handleContactDetailsResult(Object? result) {
+    if (!mounted) return;
+
+    if (result is Contact) {
+      setState(() {
+        final i = _all.indexWhere((e) => e.id == result.id);
+        if (i >= 0) _all[i] = result;
+        _cleanupKeys();
+      });
+    } else if (result is Map && result['deletedId'] is int) {
+      final deletedId = result['deletedId'] as int;
+      setState(() {
+        _all.removeWhere((e) => e.id == deletedId);
+        _cleanupKeys();
+      });
+    }
   }
 
   void _onScroll() {
@@ -798,43 +817,57 @@ class _ContactListScreenState extends State<ContactListScreen> {
         return RepaintBoundary(
           // изолируем перерисовку эффекта
           key: wrapperKey, // для ensureVisible
-          child: _ContactCard(
+          child: _ContactOpenContainer(
             contact: c,
-            onTap: () async {
-              final result = await Navigator.push(
-                context,
-                PageRouteBuilder(
-                  pageBuilder: (_, __, ___) => ContactDetailsScreen(contact: c),
-                  transitionsBuilder: (_, animation, __, child) {
-                    const begin = Offset(1.0, 0.0);
-                    const end = Offset.zero;
-                    final tween = Tween(begin: begin, end: end).chain(CurveTween(curve: Curves.ease));
-                    return SlideTransition(position: animation.drive(tween), child: child);
-                  },
-                ),
-              );
-              if (!mounted) return;
-              // адресное обновление
-              if (result is Contact) {
-                setState(() {
-                  final i = _all.indexWhere((e) => e.id == result.id);
-                  if (i >= 0) _all[i] = result;
-                  _cleanupKeys();
-                });
-              } else if (result is Map && result['deletedId'] is int) {
-                setState(() {
-                  _all.removeWhere((e) => e.id == result['deletedId']);
-                  _cleanupKeys();
-                });
-              }
-            },
             pulse: isHighlighted,
             pulseSeed: _pulseSeed, // эффект «нажатия без нажатия»
             onLongPress: () => _showContactMenu(c),
+            onClosed: _handleContactDetailsResult,
           ),
         );
       },
       separatorBuilder: (_, __) => const SizedBox(height: 8),
+    );
+  }
+}
+
+class _ContactOpenContainer extends StatelessWidget {
+  final Contact contact;
+  final bool pulse;
+  final int pulseSeed;
+  final VoidCallback? onLongPress;
+  final ValueChanged<Object?>? onClosed;
+
+  const _ContactOpenContainer({
+    required this.contact,
+    required this.pulse,
+    required this.pulseSeed,
+    this.onLongPress,
+    this.onClosed,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final border = BorderRadius.circular(12);
+    return OpenContainer<Object?>(
+      transitionDuration: const Duration(milliseconds: 450),
+      closedElevation: 0,
+      openElevation: 0,
+      openColor: Theme.of(context).colorScheme.surface,
+      closedColor: Colors.transparent,
+      closedShape: RoundedRectangleBorder(borderRadius: border),
+      openBuilder: (context, _) => ContactDetailsScreen(contact: contact),
+      onClosed: onClosed,
+      tappable: false,
+      closedBuilder: (context, openContainer) {
+        return _ContactCard(
+          contact: contact,
+          onTap: openContainer,
+          onLongPress: onLongPress,
+          pulse: pulse,
+          pulseSeed: pulseSeed,
+        );
+      },
     );
   }
 }
