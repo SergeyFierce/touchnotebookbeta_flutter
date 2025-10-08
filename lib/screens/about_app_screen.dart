@@ -47,12 +47,16 @@ class AboutAppScreen extends StatelessWidget {
           ),
           const SizedBox(height: 12),
           Card(
-            child: ListTile(
-              leading: const Icon(Icons.share_outlined),
-              title: const Text('Поделиться приложением'),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            clipBehavior: Clip.antiAlias,
+            child: InkWell(
               onTap: () {
                 Share.share(_shareMessage);
               },
+              child: const ListTile(
+                leading: Icon(Icons.share_outlined),
+                title: Text('Поделиться приложением'),
+              ),
             ),
           ),
         ],
