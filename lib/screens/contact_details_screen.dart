@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'dart:io';
+import 'package:android_intent_plus/android_intent.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -7,6 +9,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:characters/characters.dart';
 import 'package:overlay_support/overlay_support.dart';
 import 'package:flutter/services.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../app.dart';
@@ -747,20 +750,42 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> with RouteA
   }
 
   Future<void> _callContact() async {
-    final digits = _phoneController.text.replaceAll(RegExp(r'\D'), '');
-    if (digits.length < 11) {
+    final ten = _phoneMask.getUnmaskedText(); // 10 цифр из +7 (###) ###-##-##
+    if (ten.length != 10) {
       showErrorBanner('Введите корректный номер телефона');
       return;
     }
-    final uri = Uri(scheme: 'tel', path: digits);
+
+    final e164 = '+7$ten';                // например +79311234567
+    await Clipboard.setData(ClipboardData(text: e164));
+    HapticFeedback.selectionClick();
+
+    final tel = 'tel:$e164';
+
     try {
-      if (!await canLaunchUrl(uri)) {
-        showErrorBanner('Не удалось начать звонок');
+      if (Platform.isAndroid) {
+        // Это откроет Звонилку по умолчанию (если она настроена в системе).
+        final intent = AndroidIntent(
+          action: 'android.intent.action.DIAL', // ACTION_DIAL
+          data: tel,
+        );
+        final can = await intent.canResolveActivity() ?? false;
+        if (can) {
+          await intent.launch();
+          showSuccessBanner('Номер скопирован');
+          return;
+        }
+        // Фоллбек: обычный tel:
+        final ok = await launchUrl(Uri.parse(tel), mode: LaunchMode.externalApplication);
+        ok ? showSuccessBanner('Номер скопирован') : showErrorBanner('Не удалось открыть звонилку');
         return;
       }
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
+
+      // iOS и прочие — стандартный путь
+      final ok = await launchUrl(Uri.parse(tel), mode: LaunchMode.externalApplication);
+      ok ? showSuccessBanner('Номер скопирован') : showErrorBanner('Не удалось открыть звонилку');
     } catch (_) {
-      showErrorBanner('Не удалось начать звонок');
+      showErrorBanner('Не удалось открыть звонилку');
     }
   }
 
