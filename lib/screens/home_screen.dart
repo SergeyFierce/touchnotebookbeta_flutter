@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:math' as math;
 
+import 'package:animations/animations.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -658,6 +659,16 @@ class _HomeScreenState extends State<HomeScreen> with RestorationMixin {
                     final reminders = counts.remindersOf(cat);
                     final subtitle = (c < 0) ? R.unknown : cat.russianCount(c);
                     final chip = (c < 0) ? '—' : _nfRu.format(c);
+
+                    if (cat == ContactCategory.client) {
+                      return _CategoryOpenContainer(
+                        category: cat,
+                        subtitle: subtitle,
+                        trailingCount: chip,
+                        reminderCount: reminders,
+                      );
+                    }
+
                     return _CategoryCard(
                       category: cat,
                       subtitle: subtitle,
@@ -665,7 +676,6 @@ class _HomeScreenState extends State<HomeScreen> with RestorationMixin {
                       reminderCount: reminders,
                       isLoading: false, // НЕ скрываем карточки при refresh
                       onTap: () {
-                        if (!kIsWeb) HapticFeedback.selectionClick();
                         Navigator.push(
                           context,
                           MaterialPageRoute(
@@ -1009,6 +1019,47 @@ class _ErrorCardState extends State<_ErrorCard> {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _CategoryOpenContainer extends StatelessWidget {
+  final ContactCategory category;
+  final String subtitle;
+  final String? trailingCount;
+  final int reminderCount;
+
+  const _CategoryOpenContainer({
+    required this.category,
+    required this.subtitle,
+    required this.trailingCount,
+    required this.reminderCount,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return OpenContainer<void>(
+      transitionDuration: const Duration(milliseconds: 450),
+      closedElevation: 0,
+      openElevation: 0,
+      closedColor: Colors.transparent,
+      closedShape: const RoundedRectangleBorder(borderRadius: kBr16),
+      openColor: Theme.of(context).colorScheme.surface,
+      tappable: false,
+      closedBuilder: (context, openContainer) {
+        return _CategoryCard(
+          category: category,
+          subtitle: subtitle,
+          trailingCount: trailingCount,
+          reminderCount: reminderCount,
+          isLoading: false,
+          onTap: openContainer,
+        );
+      },
+      openBuilder: (context, _) => ContactListScreen(
+        category: category.dbKey,
+        title: category.titlePlural,
       ),
     );
   }
