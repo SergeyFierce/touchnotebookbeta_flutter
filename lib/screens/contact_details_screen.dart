@@ -747,15 +747,13 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> with RouteA
   }
 
   Future<void> _callContact() async {
-    final rawNumber = _phoneController.text.trim();
-    final digits = rawNumber.replaceAll(RegExp(r'\D'), '');
+    final digits = _phoneController.text.replaceAll(RegExp(r'\D'), '');
     if (digits.length < 11) {
       showErrorBanner('Введите корректный номер телефона');
       return;
     }
     final uri = Uri(scheme: 'tel', path: digits);
     try {
-      await Clipboard.setData(ClipboardData(text: rawNumber.isEmpty ? digits : rawNumber));
       if (!await canLaunchUrl(uri)) {
         showErrorBanner('Не удалось начать звонок');
         return;
