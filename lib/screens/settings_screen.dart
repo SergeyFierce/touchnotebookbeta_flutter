@@ -5,6 +5,7 @@ import 'notifications_settings_screen.dart';
 import 'privacy_policy_screen.dart';
 import 'theme_settings_screen.dart';
 import 'user_agreement_screen.dart';
+import '../widgets/app_version_list_tile.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
@@ -40,6 +41,10 @@ class SettingsScreen extends StatelessWidget {
             title: 'О приложении',
             icon: Icons.info_outline,
             destination: AboutAppScreen(),
+          ),
+          SizedBox(height: 12),
+          Card(
+            child: AppVersionListTile(icon: Icons.tag_outlined),
           ),
         ],
       ),

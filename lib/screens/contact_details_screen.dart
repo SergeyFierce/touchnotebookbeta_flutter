@@ -14,6 +14,7 @@ import '../models/note.dart';
 import '../models/reminder.dart';
 import '../services/contact_database.dart';
 import '../services/push_notifications.dart';
+import '../widgets/circular_reveal_route.dart';
 import '../widgets/system_notifications.dart';
 import 'notes_list_screen.dart';
 import 'add_note_screen.dart';
@@ -1045,12 +1046,13 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> with RouteA
     if (mounted) setState(() => _notes = notes);
   }
 
-  Future<void> _addNote() async {
+  Future<void> _addNote(BuildContext triggerContext) async {
     if (_contact.id == null) return;
-    final note = await Navigator.push<Note>(
-      context,
-      MaterialPageRoute(
+    final origin = CircularRevealPageRoute.originFromContext(triggerContext);
+    final note = await Navigator.of(triggerContext).push<Note>(
+      CircularRevealPageRoute<Note>(
         builder: (_) => AddNoteScreen(contactId: _contact.id!),
+        center: origin,
       ),
     );
     if (note != null) {
@@ -2816,10 +2818,14 @@ class _ContactDetailsScreenState extends State<ContactDetailsScreen> with RouteA
                               textAlign: TextAlign.center,
                             ),
                             const SizedBox(height: 24),
-                            FilledButton.icon(
-                              onPressed: _contact.id == null ? null : _addNote,
-                              icon: const Icon(Icons.add),
-                              label: const Text('Добавить заметку'),
+                            Builder(
+                              builder: (buttonContext) => FilledButton.icon(
+                                onPressed: _contact.id == null
+                                    ? null
+                                    : () => _addNote(buttonContext),
+                                icon: const Icon(Icons.add),
+                                label: const Text('Добавить заметку'),
+                              ),
                             ),
                           ],
                         ),
